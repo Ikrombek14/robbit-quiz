@@ -1,0 +1,76 @@
+// Robbit Akademiyasi quiz platformasi — DB sxemasi
+// SQLite (dev). Production'da provider'ni "postgresql" ga o'zgartirish kifoya.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Teacher {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String? // Google orqali kirganlarda bo'lmaydi
+  name      String
+  picture   String? // Google avatar
+  createdAt DateTime @default(now())
+  quizzes   Quiz[]
+}
+
+model Quiz {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  shuffle     Boolean  @default(false) // savollar tartibini aralashtirish
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  slides      Slide[]
+}
+
+// Universal "slayd" — ham kontent slayd, ham savol bo'lishi mumkin.
+// kind: "CONTENT" | "QUESTION"
+// type (faqat QUESTION uchun): SINGLE | MULTIPLE | TRUE_FALSE | DROPDOWN |
+//                              POLL | OPEN | FILL_BLANK | MATCH | REORDER
+// data: turga qarab JSON (matn, variantlar, javoblar, juftliklar va h.k.)
+model Slide {
+  id        String  @id @default(cuid())
+  quizId    String
+  quiz      Quiz    @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  order     Int     @default(0)
+  kind      String  @default("QUESTION")
+  type      String?
+  data      String  @default("{}")
+  notes     String?
+  timeLimit Int     @default(20)
+  points    Int     @default(1000)
+}
+
+// O'ynalgan o'yin natijasi (hisobot uchun)
+model GameRecord {
+  id            String             @id @default(cuid())
+  teacherId     String
+  quizId        String
+  title         String
+  pin           String
+  mode          String             @default("LIVE") // LIVE | HOMEWORK
+  totalSlides   Int                @default(0)
+  questionStats String             @default("[]") // JSON: [{index,text,correct,total}]
+  playedAt      DateTime           @default(now())
+  players       GamePlayerRecord[]
+}
+
+model GamePlayerRecord {
+  id            String     @id @default(cuid())
+  gameId        String
+  game          GameRecord @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  nickname      String
+  score         Int        @default(0)
+  correctCount  Int        @default(0)
+  totalAnswered Int        @default(0)
+  details       String     @default("[]") // TEST rejimi: har savol bo'yicha JSON [{index,text,answer,correct,timeMs,correctAns}]
+}

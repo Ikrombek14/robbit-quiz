@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+public/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Database (dev SQLite)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Runtime uploads (foydalanuvchi yuklagan PDF/rasmlar)
+backend/uploads/
+
+# OS / editor
+.DS_Store
+Thumbs.db

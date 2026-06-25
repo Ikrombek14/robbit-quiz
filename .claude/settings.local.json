@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__figma__create_new_file",
+      "mcp__figma__use_figma"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "figma"
+  ]
+}

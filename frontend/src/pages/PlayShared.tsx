@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { checkAnswer } from "../slides";
-import SlideCanvas from "../components/SlideCanvas";
+import SlideScene from "../components/SlideScene";
 import type { QType, Quiz } from "../types";
 
 function shuffle<T>(a: T[]): T[] {
@@ -175,7 +175,7 @@ export default function PlayShared() {
   if (slide.kind === "CONTENT")
     return (
       <div className="present-stage">
-        <SlideCanvas title={slide.data.title} body={slide.data.body} imageUrl={slide.data.imageUrl} />
+        <div className="stu-slide-wrap"><SlideScene data={slide.data} /></div>
         <div className="center" style={{ marginTop: 12 }}>
           <button className="btn btn-lg" onClick={next}>
             {index + 1 >= quiz.slides.length ? "Yakunlash" : "Keyingi →"}

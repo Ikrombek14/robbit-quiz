@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, uploadBlob } from "../api";
 import type { ChoiceOption, QType, Quiz, Slide, SlideData } from "../types";
-import { QUESTION_TYPES, newContentSlide, newQuestionSlide, slideTitle, TYPE_LABELS } from "../slides";
+import { QUESTION_TYPES, newQuestionSlide, slideTitle, TYPE_LABELS } from "../slides";
+import { SLIDE_TEMPLATES, newContentSlideFromTemplate } from "../templates";
 import { pdfToPngBlobs } from "../pdf";
-import SlideCanvas from "../components/SlideCanvas";
+import SlideScene from "../components/SlideScene";
+import SlideCanvasEditor from "../components/SlideCanvasEditor";
 import Preview from "./Preview";
 
 // Fayl tanlab serverga yuklaydi, URL qaytaradi
@@ -41,6 +43,7 @@ export default function QuizEditor() {
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addQuestion, setAddQuestion] = useState(false);
+  const [addTemplate, setAddTemplate] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -71,6 +74,7 @@ export default function QuizEditor() {
     });
     setAddOpen(false);
     setAddQuestion(false);
+    setAddTemplate(false);
   }
   function removeSlide(i: number) {
     setSlides((arr) => arr.filter((_, idx) => idx !== i));
@@ -222,15 +226,38 @@ export default function QuizEditor() {
           />
           {progress && <div className="import-progress">{importing ? "⏳ " : ""}{progress}</div>}
           <div style={{ position: "relative" }}>
-            <button className="btn btn-block" disabled={importing} onClick={() => { setAddOpen((o) => !o); setAddQuestion(false); }}>
+            <button className="btn btn-block" disabled={importing} onClick={() => { setAddOpen((o) => !o); setAddQuestion(false); setAddTemplate(false); }}>
               + Add
             </button>
             {addOpen && (
               <div className="add-menu">
-                {!addQuestion ? (
+                {addTemplate ? (
                   <>
-                    <button className="add-item" onClick={() => addSlide(newContentSlide())}>
-                      🖼️ Slide (kontent)
+                    <button className="add-item muted" onClick={() => setAddTemplate(false)}>
+                      ← orqaga
+                    </button>
+                    {SLIDE_TEMPLATES.map((t) => (
+                      <button key={t.key} className="add-item tpl-item" onClick={() => addSlide(newContentSlideFromTemplate(t.key))}>
+                        <SlideScene data={t.build()} width={120} rounded={6} />
+                        <span>{t.label}</span>
+                      </button>
+                    ))}
+                  </>
+                ) : addQuestion ? (
+                  <>
+                    <button className="add-item muted" onClick={() => setAddQuestion(false)}>
+                      ← orqaga
+                    </button>
+                    {QUESTION_TYPES.map((q) => (
+                      <button key={q.type} className="add-item" onClick={() => addSlide(newQuestionSlide(q.type))}>
+                        {q.icon} {q.label}
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <button className="add-item" onClick={() => setAddTemplate(true)}>
+                      🖼️ Slide (taqdimot) →
                     </button>
                     <button className="add-item" onClick={() => setAddQuestion(true)}>
                       ❓ Question →
@@ -241,17 +268,6 @@ export default function QuizEditor() {
                     <button className="add-item" onClick={() => excelRef.current?.click()}>
                       📊 Excel import (savollar shabloni)
                     </button>
-                  </>
-                ) : (
-                  <>
-                    <button className="add-item muted" onClick={() => setAddQuestion(false)}>
-                      ← orqaga
-                    </button>
-                    {QUESTION_TYPES.map((q) => (
-                      <button key={q.type} className="add-item" onClick={() => addSlide(newQuestionSlide(q.type))}>
-                        {q.icon} {q.label}
-                      </button>
-                    ))}
                   </>
                 )}
               </div>
@@ -273,13 +289,11 @@ export default function QuizEditor() {
               >
                 <span className="thumb-num">{i + 1}</span>
                 <div className="thumb-preview">
-                  {s.kind === "CONTENT" && s.data.imageUrl ? (
-                    <img src={s.data.imageUrl} alt="" draggable={false} />
+                  {s.kind === "CONTENT" ? (
+                    <SlideScene data={s.data} rounded={0} />
                   ) : (
                     <div className="thumb-mini">
-                      {s.kind === "QUESTION" && (
-                        <span className="badge-mini">{TYPE_LABELS[(s.type ?? "SINGLE") as QType]}</span>
-                      )}
+                      <span className="badge-mini">{TYPE_LABELS[(s.type ?? "SINGLE") as QType]}</span>
                       <span className="thumb-mini-text">{slideTitle(s)}</span>
                     </div>
                   )}
@@ -381,29 +395,11 @@ function SlideEditor({ slide, onChange }: { slide: Slide; onChange: (s: Slide) =
   const setData = (patch: Partial<SlideData>) => onChange({ ...slide, data: { ...slide.data, ...patch } });
 
   if (slide.kind === "CONTENT") {
-    const isImageSlide = !!slide.data.imageUrl;
     return (
-      <div className="card">
-        <span className="badge">🖼️ Kontent slayd</span>
-        <div style={{ margin: "12px 0" }}>
-          <SlideCanvas title={slide.data.title} body={slide.data.body} imageUrl={slide.data.imageUrl} />
-        </div>
-        {/* PDF/rasm sahifasi bo'lsa, tahrirlash maydonlari kerak emas */}
-        {!isImageSlide && (
-          <>
-            <label>Sarlavha</label>
-            <input value={slide.data.title ?? ""} onChange={(e) => setData({ title: e.target.value })} />
-            <label>Matn</label>
-            <textarea rows={4} value={slide.data.body ?? ""} onChange={(e) => setData({ body: e.target.value })} />
-            <label>Rasm (URL, ixtiyoriy)</label>
-            <input
-              value={slide.data.imageUrl ?? ""}
-              onChange={(e) => setData({ imageUrl: e.target.value })}
-              placeholder="https://…"
-            />
-          </>
-        )}
-      </div>
+      <SlideCanvasEditor
+        value={slide.data}
+        onChange={(data) => onChange({ ...slide, data })}
+      />
     );
   }
 

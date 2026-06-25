@@ -1,26 +1,21 @@
-// Wayground uslubidagi yashil ramkali slayd kanvasi
+import SlideScene from "./SlideScene";
+import type { SlideData } from "../types";
+
+// Eski API'ni saqlab qolish uchun ingichka o'ram — endi SlideScene'ga delegatsiya qiladi.
+// Yangi kod to'g'ridan-to'g'ri <SlideScene data={...} /> ishlatishi kerak.
 export default function SlideCanvas({
   title,
   body,
   imageUrl,
+  data,
+  className,
 }: {
   title?: string;
   body?: string;
   imageUrl?: string;
+  data?: SlideData;
+  className?: string;
 }) {
-  return (
-    <div className="slide-canvas">
-      <div className="slide-inner">
-        {imageUrl ? (
-          <img src={imageUrl} alt="" className="slide-img" />
-        ) : (
-          <div className="center">
-            {title && <h1 style={{ marginTop: 0 }}>{title}</h1>}
-            {body && <p style={{ fontSize: 20, whiteSpace: "pre-wrap" }}>{body}</p>}
-            {!title && !body && <p className="muted">Bo'sh slayd</p>}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const d: SlideData = data ?? { title, body, imageUrl };
+  return <SlideScene data={d} className={className} />;
 }

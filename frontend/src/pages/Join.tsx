@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getSocket } from "../socket";
-import type { LeaderRow } from "../types";
-import SlideCanvas from "../components/SlideCanvas";
+import type { LeaderRow, SlideData } from "../types";
+import SlideScene from "../components/SlideScene";
 import TestRunner from "../components/TestRunner";
 
 type Phase = "form" | "lobby" | "content" | "question" | "answered" | "reveal" | "ended" | "test";
@@ -15,7 +15,7 @@ interface PublicSlide {
   type: string | null;
   timeLimit?: number;
   endsAt?: number;
-  content?: { title: string; body: string; imageUrl: string };
+  content?: SlideData;
   text?: string;
   imageUrl?: string;
   options?: { id: string; text: string; imageUrl?: string }[];
@@ -274,11 +274,7 @@ export default function Join() {
 
         <div className="stu-stage">
           <div className="stu-slide">
-            <SlideCanvas
-              title={slide.content?.title}
-              body={slide.content?.body}
-              imageUrl={slide.content?.imageUrl}
-            />
+            <SlideScene data={slide.content ?? {}} rounded={14} />
           </div>
         </div>
 

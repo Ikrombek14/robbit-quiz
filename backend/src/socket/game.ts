@@ -163,7 +163,8 @@ function buildSlide(game: GameState, idx: number, total?: number) {
   };
   const d = s.data ?? {};
   if (s.kind === "CONTENT") {
-    return { ...base, content: { title: d.title ?? "", body: d.body ?? "", imageUrl: d.imageUrl ?? "" } };
+    // Butun slayd data'sini yuboramiz (kanvas yoki eski format) — klient SlideScene bilan chizadi
+    return { ...base, content: d };
   }
   const common = { text: d.text ?? "", imageUrl: d.imageUrl ?? "" };
   switch (s.type) {

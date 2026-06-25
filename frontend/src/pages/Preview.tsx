@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { QType, Slide } from "../types";
 import { TYPE_LABELS } from "../slides";
-import SlideCanvas from "../components/SlideCanvas";
+import SlideScene from "../components/SlideScene";
 
 export default function Preview({
   title,
@@ -58,7 +58,7 @@ function SlideView({ slide, showAnswers }: { slide: Slide; showAnswers: boolean 
   const d = slide.data;
 
   if (slide.kind === "CONTENT") {
-    return <SlideCanvas title={d.title} body={d.body} imageUrl={d.imageUrl} />;
+    return <SlideScene data={d} />;
   }
 
   const type = (slide.type ?? "SINGLE") as QType;

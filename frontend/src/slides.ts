@@ -61,10 +61,11 @@ export function newQuestionSlide(type: QType): Slide {
 }
 
 export function newContentSlide(): Slide {
+  // Bo'sh kanvas slayd (yangi format)
   return {
     kind: "CONTENT",
     type: null,
-    data: { title: "Yangi slayd", body: "", imageUrl: "" },
+    data: { v: 2, background: { type: "color", value: "#ffffff" }, elements: [] },
     timeLimit: 20,
     points: 0,
     notes: "",
@@ -72,7 +73,17 @@ export function newContentSlide(): Slide {
 }
 
 export function slideTitle(s: Slide): string {
-  if (s.kind === "CONTENT") return s.data.title?.trim() || "Slayd";
+  if (s.kind === "CONTENT") {
+    // Yangi format: birinchi matn elementidan sarlavha
+    const els = s.data.elements;
+    if (Array.isArray(els)) {
+      const firstText = els.find((e) => e.type === "text" && (e as { text?: string }).text?.trim());
+      if (firstText) return (firstText as { text: string }).text.trim().slice(0, 60);
+      return "Slayd";
+    }
+    // Eski format
+    return s.data.title?.trim() || "Slayd";
+  }
   return s.data.text?.trim() || TYPE_LABELS[(s.type ?? "SINGLE") as QType] || "Savol";
 }
 

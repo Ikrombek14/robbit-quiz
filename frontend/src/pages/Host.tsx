@@ -3,8 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { getSocket } from "../socket";
 import { getToken } from "../api";
-import type { LeaderRow } from "../types";
-import SlideCanvas from "../components/SlideCanvas";
+import type { LeaderRow, SlideData } from "../types";
+import SlideScene from "../components/SlideScene";
 
 type Phase = "connecting" | "lobby" | "active" | "reveal" | "ended";
 
@@ -16,7 +16,7 @@ interface PublicSlide {
   type: string | null;
   timeLimit: number;
   endsAt?: number;
-  content?: { title: string; body: string; imageUrl: string };
+  content?: SlideData;
   text?: string;
   imageUrl?: string;
   options?: { id: string; text: string; imageUrl?: string }[];
@@ -455,7 +455,7 @@ export default function Host() {
         <div className={`live-main ${isContent ? "no-side" : ""}`}>
           <div className="live-content">
             {isContent ? (
-              <SlideCanvas title={slide.content?.title} body={slide.content?.body} imageUrl={slide.content?.imageUrl} />
+              <SlideScene data={slide.content ?? {}} />
             ) : (
               <>
                 <div className="live-qcard">

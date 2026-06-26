@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
+import SearchBar, { type LessonHit } from "../components/SearchBar";
 import type { QuizListItem } from "../types";
 
 type Subject = "ROBOTEXNIKA" | "DASTURLASH";
@@ -58,6 +59,7 @@ export default function Curriculum() {
   const [section, setSection] = useState<string>("DESIGN");
   const [lessons, setLessons] = useState<LessonPlan[]>([]);
   const [loading, setLoading] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const [quizList, setQuizList] = useState<QuizListItem[]>([]);
 
@@ -76,6 +78,31 @@ export default function Curriculum() {
   const [editSaving, setEditSaving] = useState(false);
 
   const allFiltersSet = ageGroup !== null && year !== null;
+
+  // Qidiruvdan dars tanlanganda — filtrlarni o'rnatib, darsni belgilash uchun id saqlaymiz
+  function pickLesson(l: LessonHit) {
+    setSubject(l.subject);
+    setAgeGroup(l.ageGroup);
+    setYear(l.year);
+    setSection(l.section ?? "DESIGN");
+    setShowAdd(false);
+    setEditingId(null);
+    setHighlightId(l.id);
+  }
+
+  // Topilgan darsni ko'rinishga keltirib, qisqa belgilab qo'yamiz
+  useEffect(() => {
+    if (!highlightId || lessons.length === 0) return;
+    if (!lessons.some((l) => l.id === highlightId)) return;
+    const el = document.getElementById(`lesson-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.transition = "box-shadow 0.3s";
+      el.style.boxShadow = "0 0 0 3px var(--primary)";
+      setTimeout(() => { el.style.boxShadow = ""; }, 1600);
+    }
+    setHighlightId(null);
+  }, [lessons, highlightId]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -182,10 +209,15 @@ export default function Curriculum() {
   return (
     <Shell>
     <div style={{ maxWidth: 860, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 28, marginBottom: 4 }}>O'quv dastur</h1>
-      <p className="muted" style={{ marginTop: 0, marginBottom: 24, fontSize: 15 }}>
-        Yosh toifasi va yo'nalish bo'yicha dars rejalar
-      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 28, marginBottom: 4 }}>O'quv dastur</h1>
+          <p className="muted" style={{ margin: 0, fontSize: 15 }}>
+            Yosh toifasi va yo'nalish bo'yicha dars rejalar
+          </p>
+        </div>
+        <SearchBar scope="lessons" onPick={(item) => pickLesson(item as LessonHit)} placeholder="Dars qidirish…" />
+      </div>
 
       {/* Subject toggle */}
       <div style={{ display: "inline-flex", background: "var(--surface-high)", borderRadius: 999, padding: 4, gap: 4, marginBottom: 28 }}>
@@ -336,7 +368,7 @@ export default function Curriculum() {
 
               // ---- KO'RISH REJIMI ----
               return (
-                <div key={l.id} style={{
+                <div key={l.id} id={`lesson-${l.id}`} style={{
                   display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
                   background: "var(--surface-low)", borderRadius: 12, border: "1px solid var(--border)",
                 }}>

@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import Markdown from "../components/Markdown";
+import SearchBar, { type GuideHit } from "../components/SearchBar";
 
 interface GuideSection {
   id: string;
@@ -41,6 +42,19 @@ export default function Guide() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  // Qidiruvdan bo'lim tanlanganda — ochib, ko'rinishga keltirib, qisqa belgilaymiz
+  function pickGuide(g: GuideHit) {
+    setOpenId(g.id);
+    setTimeout(() => {
+      const el = document.getElementById(`guide-${g.id}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.style.transition = "box-shadow 0.3s";
+      el.style.boxShadow = "0 0 0 3px var(--primary)";
+      setTimeout(() => { el.style.boxShadow = ""; }, 1600);
+    }, 50);
+  }
 
   function openAdd() {
     setForm({ ...EMPTY_EDIT, order: sections.length + 1 });
@@ -149,10 +163,15 @@ export default function Guide() {
   return (
     <Shell>
       <div style={{ maxWidth: 860, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 28, marginBottom: 4 }}>Ustozlar yo'riqnomasi</h1>
-        <p className="muted" style={{ marginTop: 0, marginBottom: 24, fontSize: 15 }}>
-          Robbit ustozlari uchun to'liq qo'llanma — bo'limlar bo'yicha
-        </p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontSize: 28, marginBottom: 4 }}>Ustozlar yo'riqnomasi</h1>
+            <p className="muted" style={{ margin: 0, fontSize: 15 }}>
+              Robbit ustozlari uchun to'liq qo'llanma — bo'limlar bo'yicha
+            </p>
+          </div>
+          <SearchBar scope="guide" onPick={(item) => pickGuide(item as GuideHit)} placeholder="Yo'riqnomadan qidirish…" />
+        </div>
 
         {loading ? (
           <p className="muted">Yuklanmoqda…</p>
@@ -172,7 +191,7 @@ export default function Guide() {
               if (isEditing && isAdmin) return <div key={s.id}>{renderForm()}</div>;
 
               return (
-                <div key={s.id} style={{ background: "var(--surface-low)", borderRadius: 12, border: "1px solid var(--border)", overflow: "hidden" }}>
+                <div key={s.id} id={`guide-${s.id}`} style={{ background: "var(--surface-low)", borderRadius: 12, border: "1px solid var(--border)", overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", cursor: "pointer" }}
                     onClick={() => setOpenId(isOpen ? null : s.id)}>
                     <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, background: "var(--primary-soft)", display: "flex", alignItems: "center", justifyContent: "center" }}>

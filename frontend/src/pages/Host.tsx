@@ -90,43 +90,55 @@ export default function Host() {
   const [mode, setMode] = useState<"LIVE" | "TEST">("LIVE");
   const [testProg, setTestProg] = useState<{ total: number; players: TestProgRow[] }>({ total: 0, players: [] });
 
-  useEffect(() => {
+  // Yo'qlama eslatmalari
+  const ADMIN_SIGNIN = "https://admin.robbit.uz/signin";
+  const [reminder1, setReminder1] = useState(false); // boshlashdan oldin: rasm + davomat
+  const [reminder2, setReminder2] = useState(false); // darsni boshlaganda: davomat saqlandimi
+  const [reminder3, setReminder3] = useState(false); // 40 daqiqadan keyin: ota-onalarga video
+  const reminder3Timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function createGame() {
     const socket = getSocket();
     const key = `host:${quizId}`;
+    socket.emit("host:create", { token: getToken(), quizId }, (r: any) => {
+      if (r.error) return setError(r.error);
+      localStorage.setItem(key, r.pin);
+      setPin(r.pin ?? "");
+      setTitle(r.title ?? "");
+      if (r.settings) setSettings(r.settings);
+      setPhase("lobby");
+    });
+  }
+
+  // 1-eslatma tasdiqlangach: davom etayotgan o'yin bo'lsa tiklaymiz, aks holda yangisini yaratamiz
+  function beginSession() {
+    const socket = getSocket();
+    const key = `host:${quizId}`;
+    const savedPin = localStorage.getItem(key);
+    if (!savedPin) { createGame(); return; }
+    socket.emit("host:resume", { pin: savedPin, token: getToken() }, (r: any) => {
+      if (r.error) { localStorage.removeItem(key); createGame(); return; }
+      setPin(r.pin ?? "");
+      setTitle(r.title ?? "");
+      if (r.settings) setSettings(r.settings);
+      if (r.mode) setMode(r.mode);
+      if (r.players) setPlayers(r.players.map((p: { nickname: string }) => p.nickname));
+      if (r.status === "ended") setPhase("ended");
+      else if (r.mode === "TEST" && r.status === "active") setPhase("active");
+      else if ((r.status === "active" || r.status === "reveal") && r.slide) {
+        setSlide(r.slide);
+        setEndsAt(r.slide.endsAt ?? 0);
+        setPhase(r.status === "reveal" ? "reveal" : "active");
+      } else setPhase("lobby");
+    });
+  }
+
+  useEffect(() => {
+    const socket = getSocket();
     if (!created.current) {
       created.current = true;
-      const doCreate = () =>
-        socket.emit("host:create", { token: getToken(), quizId }, (r: any) => {
-          if (r.error) return setError(r.error);
-          localStorage.setItem(key, r.pin);
-          setPin(r.pin ?? "");
-          setTitle(r.title ?? "");
-          if (r.settings) setSettings(r.settings);
-          setPhase("lobby");
-        });
-      const savedPin = localStorage.getItem(key);
-      if (savedPin) {
-        socket.emit("host:resume", { pin: savedPin, token: getToken() }, (r: any) => {
-          if (r.error) {
-            localStorage.removeItem(key);
-            doCreate();
-            return;
-          }
-          setPin(r.pin ?? "");
-          setTitle(r.title ?? "");
-          if (r.settings) setSettings(r.settings);
-          if (r.mode) setMode(r.mode);
-          if (r.players) setPlayers(r.players.map((p: { nickname: string }) => p.nickname));
-          if (r.status === "ended") setPhase("ended");
-          else if (r.mode === "TEST" && r.status === "active") {
-            setPhase("active");
-          } else if ((r.status === "active" || r.status === "reveal") && r.slide) {
-            setSlide(r.slide);
-            setEndsAt(r.slide.endsAt ?? 0);
-            setPhase(r.status === "reveal" ? "reveal" : "active");
-          } else setPhase("lobby");
-        });
-      } else doCreate();
+      // Har safar boshlashda avval 1-eslatma chiqadi; o'yin shundan keyin yaratiladi/davom ettiriladi
+      setReminder1(true);
     }
     const onLobby = (d: { players: { nickname: string }[] }) => setPlayers(d.players.map((p) => p.nickname));
     const onSlide = (s: PublicSlide) => {
@@ -188,6 +200,9 @@ export default function Host() {
     return () => clearInterval(id);
   }, []);
 
+  // 40-daqiqalik eslatma taymerini tozalash
+  useEffect(() => () => { if (reminder3Timer.current) clearTimeout(reminder3Timer.current); }, []);
+
   const socket = getSocket();
   const remaining = endsAt ? Math.max(0, endsAt - now) : 0;
   const secs = Math.ceil(remaining / 1000);
@@ -209,7 +224,15 @@ export default function Host() {
   function startGame() {
     socket.emit("host:start", { pin, mode });
     if (mode === "TEST") setPhase("active"); // test'da slide:show kelmaydi
+    // 3-eslatma: 40 daqiqadan keyin ota-onalar guruhiga video eslatmasi
+    if (!reminder3Timer.current) {
+      reminder3Timer.current = setTimeout(() => setReminder3(true), 40 * 60 * 1000);
+    }
   }
+
+  // 2-eslatma: darsni boshlashdan oldin "davomatni saqladingizmi?"
+  function askStart() { setReminder2(true); }
+  function confirmStart() { setReminder2(false); startGame(); }
 
   function updateSetting(patch: Partial<GameSettings>) {
     setSettings((s) => ({ ...s, ...patch }));
@@ -230,6 +253,20 @@ export default function Host() {
       </div>
     );
 
+  // 1-eslatma: boshlashdan oldin — rasm + davomat tekshiruvi (o'yin shundan keyin yaratiladi)
+  if (reminder1)
+    return (
+      <ReminderModal
+        icon="photo_camera"
+        title="Yo'qlama tekshiruvi"
+        message="ERP tizimida rasmga tushdingizmi va davomat qildingizmi?"
+        confirmLabel="Ha"
+        cancelLabel="Yo'q"
+        onConfirm={() => { setReminder1(false); beginSession(); }}
+        onCancel={() => { window.location.href = ADMIN_SIGNIN; }}
+      />
+    );
+
   if (phase === "connecting") return <div className="center-screen">Ulanmoqda…</div>;
 
   // ====================== LOBBY ======================
@@ -242,7 +279,7 @@ export default function Host() {
             <span className="material-symbols-outlined" style={{ color: "var(--primary)" }}>rocket_launch</span>
             {title}
           </div>
-          <button className="btn btn-lg" disabled={players.length === 0} onClick={startGame}>
+          <button className="btn btn-lg" disabled={players.length === 0} onClick={askStart}>
             <span className="material-symbols-outlined">play_arrow</span>
             {mode === "TEST" ? "Testni boshlash" : "Boshlash"}
           </button>
@@ -363,12 +400,24 @@ export default function Host() {
             className="btn btn-lg"
             style={{ minWidth: 240 }}
             disabled={players.length === 0}
-            onClick={startGame}
+            onClick={askStart}
           >
             <span className="material-symbols-outlined">play_arrow</span>
             {mode === "TEST" ? "Testni boshlash" : "Darsni boshlash"}
           </button>
         </div>
+
+        {reminder2 && (
+          <ReminderModal
+            icon="fact_check"
+            title="Davomatni tekshiring"
+            message="Davomatni saqladingizmi?"
+            confirmLabel="Ha"
+            cancelLabel="Yo'q"
+            onConfirm={confirmStart}
+            onCancel={() => { window.location.href = ADMIN_SIGNIN; }}
+          />
+        )}
       </div>
     );
   }
@@ -427,6 +476,16 @@ export default function Host() {
             })}
           </div>
         </div>
+
+        {reminder3 && (
+          <ReminderModal
+            icon="videocam"
+            title="Eslatma"
+            message="Ota-onalar guruhiga video jo'natib qo'ying."
+            confirmLabel="OK"
+            onConfirm={() => setReminder3(false)}
+          />
+        )}
       </div>
     );
   }
@@ -581,6 +640,15 @@ export default function Host() {
         {showBoard && results && (
           <LeaderboardOverlay rows={results.leaderboard} anonymous={settings.anonymous} onClose={() => setShowBoard(false)} />
         )}
+        {reminder3 && (
+          <ReminderModal
+            icon="videocam"
+            title="Eslatma"
+            message="Ota-onalar guruhiga video jo'natib qo'ying."
+            confirmLabel="OK"
+            onConfirm={() => setReminder3(false)}
+          />
+        )}
       </div>
     );
   }
@@ -732,6 +800,46 @@ function LeaderboardOverlay({ rows, anonymous, onClose }: { rows: LeaderRow[]; a
         );
       })}
       {rows.length === 0 && <p style={{ color: "#fff" }}>Hali natija yo'q</p>}
+    </div>
+  );
+}
+
+/* ---------------- Yo'qlama eslatma modali ---------------- */
+function ReminderModal({
+  icon, title, message, confirmLabel, cancelLabel, onConfirm, onCancel,
+}: {
+  icon: string;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel?: () => void;
+}) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,0.65)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+    }}>
+      <div style={{
+        background: "var(--surface)", borderRadius: 20, padding: "32px 28px",
+        width: "min(440px, 100%)", textAlign: "center", boxShadow: "0 24px 70px rgba(0,0,0,0.45)",
+      }}>
+        <div style={{
+          width: 68, height: 68, borderRadius: "50%", background: "var(--primary-soft)",
+          display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px",
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 36, color: "var(--primary)" }}>{icon}</span>
+        </div>
+        <h2 style={{ fontSize: 22, margin: "0 0 10px" }}>{title}</h2>
+        <p style={{ fontSize: 16, color: "var(--muted)", margin: "0 0 26px", lineHeight: 1.5 }}>{message}</p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          {cancelLabel && onCancel && (
+            <button className="btn btn-ghost btn-lg" style={{ minWidth: 120 }} onClick={onCancel}>{cancelLabel}</button>
+          )}
+          <button className="btn btn-lg" style={{ minWidth: 120 }} onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
     </div>
   );
 }

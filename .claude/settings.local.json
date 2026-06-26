@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__figma__create_new_file",
+      "mcp__figma__use_figma",
+      "PowerShell(git ls-files | Group-Object { \\($_ -split '/'\\)[0] } | Select-Object Name, Count; echo \"---SENSITIVE CHECK---\"; git ls-files | Select-String -Pattern '\\\\.env|\\\\.db|\\\\.sqlite|dist/|node_modules|public/|uploads/|\\\\.log$|\\\\.tsbuildinfo' ; echo \"---ROOT FILES---\"; git ls-files | Where-Object { $_ -notmatch '/' })",
+      "PowerShell(git add *)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "figma"
+  ]
+}

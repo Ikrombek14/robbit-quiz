@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+
+<html class="light" lang="uz"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BilimYo'li - Interaktiv Viktorina</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&amp;family=Nunito+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-bright": "#fefae4",
+                    "surface-container-highest": "#e7e3ce",
+                    "surface-container-high": "#ece9d4",
+                    "tertiary-container": "#dab800",
+                    "soft-peach": "#FFC48A",
+                    "playful-pink": "#FF319F",
+                    "on-error-container": "#93000a",
+                    "primary-fixed-dim": "#8dcdff",
+                    "secondary-fixed-dim": "#7adc7d",
+                    "inverse-surface": "#323123",
+                    "on-error": "#ffffff",
+                    "on-primary-fixed": "#001e30",
+                    "tertiary-fixed": "#ffe16d",
+                    "on-secondary-container": "#037524",
+                    "surface-tint": "#006493",
+                    "secondary": "#006e21",
+                    "primary-container": "#73c2fb",
+                    "inverse-on-surface": "#f5f1dc",
+                    "tertiary-fixed-dim": "#e9c400",
+                    "error-container": "#ffdad6",
+                    "error": "#ba1a1a",
+                    "surface": "#fefae4",
+                    "surface-dim": "#dedac6",
+                    "on-tertiary-container": "#584900",
+                    "on-primary-fixed-variant": "#004b70",
+                    "on-primary-container": "#004f75",
+                    "surface-container": "#f2eed9",
+                    "inverse-primary": "#8dcdff",
+                    "on-tertiary-fixed": "#221b00",
+                    "on-secondary-fixed": "#002105",
+                    "on-secondary-fixed-variant": "#005316",
+                    "on-tertiary": "#ffffff",
+                    "background": "#fefae4",
+                    "on-primary": "#ffffff",
+                    "outline-variant": "#bfc7d0",
+                    "on-surface": "#1d1c0f",
+                    "on-surface-variant": "#40484f",
+                    "sunny-lemon": "#ECEB75",
+                    "on-tertiary-fixed-variant": "#544600",
+                    "secondary-container": "#96f996",
+                    "surface-container-lowest": "#ffffff",
+                    "deep-plum": "#3B142A",
+                    "secondary-fixed": "#96f996",
+                    "primary-fixed": "#cae6ff",
+                    "primary": "#006493",
+                    "surface-variant": "#e7e3ce",
+                    "on-secondary": "#ffffff",
+                    "tertiary": "#705d00",
+                    "outline": "#707880",
+                    "on-background": "#1d1c0f",
+                    "surface-container-low": "#f8f4df"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter": "24px",
+                    "base": "8px",
+                    "margin-mobile": "16px",
+                    "margin-desktop": "48px",
+                    "touch-target": "48px"
+            },
+            "fontFamily": {
+                    "headline-lg-mobile": ["Quicksand"],
+                    "body-md": ["Nunito Sans"],
+                    "label-md": ["Quicksand"],
+                    "headline-lg": ["Quicksand"],
+                    "label-lg": ["Quicksand"],
+                    "body-lg": ["Nunito Sans"],
+                    "headline-md": ["Quicksand"]
+            },
+            "fontSize": {
+                    "headline-lg-mobile": ["32px", {"lineHeight": "38px", "fontWeight": "700"}],
+                    "body-md": ["18px", {"lineHeight": "26px", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "600"}],
+                    "headline-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-lg": ["18px", {"lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "body-lg": ["20px", {"lineHeight": "30px", "fontWeight": "400"}],
+                    "headline-md": ["28px", {"lineHeight": "34px", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .bounce-button {
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+            box-shadow: 0 6px 0 0 rgba(0,0,0,0.1);
+        }
+        .bounce-button:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 0 rgba(0,0,0,0.1);
+        }
+        .quiz-option-a { background-color: #FF319F; border-bottom: 6px solid #D12080; color: white; }
+        .quiz-option-b { background-color: #006493; border-bottom: 6px solid #004F75; color: white; }
+        .quiz-option-c { background-color: #006e21; border-bottom: 6px solid #005316; color: white; }
+        .quiz-option-d { background-color: #705d00; border-bottom: 6px solid #544600; color: white; }
+        
+        .timer-bar {
+            transition: width 1s linear;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .floating-element {
+            animation: float 4s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-surface-bright min-h-screen flex flex-col font-body-md overflow-x-hidden">
+<!-- Top Navigation Bar -->
+<header class="bg-surface-container-low shadow-sm flex justify-between items-center px-6 md:px-gutter w-full h-16 fixed top-0 z-50">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-primary">BilimYo'li</span>
+</div>
+<!-- Score and Progress -->
+<div class="flex items-center gap-6">
+<div class="hidden md:flex flex-col items-end">
+<span class="font-label-md text-on-surface-variant">Hozirgi ball:</span>
+<span class="font-headline-md text-primary" id="score-display">1,240</span>
+</div>
+<div class="flex items-center bg-primary-container/20 rounded-full px-4 py-2 border-2 border-primary-container">
+<span class="material-symbols-outlined text-primary mr-2" style="font-variation-settings: 'FILL' 1;">stars</span>
+<span class="font-label-lg text-on-primary-container font-bold">12/20</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">notifications</button>
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center border-2 border-secondary overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A friendly, high-quality 3D cartoon avatar of a young student with a curious expression, wearing glasses and a blue school vest. The style is soft and cinematic, with warm studio lighting and a clean pastel background that matches the educational theme of the app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAv8w1ymmiXz0k5Ossw5hXkZg4Zy4B9uzN-C3Ds0KM1EOCkIUtw3MSwagOvsWcqWKjTOLOgfywJlC9urdTV9WDuYXdDe8_FueOrAK5YkQRSPF1X5C0c43P5a3i1krzMErfHHuJnYIv47bG54PGyG2Hcw_7AeRAXh5wcligHjuhtUk0GvTcxkkgMp8NzclzpqW6qv-gExwQzdo8rpcBYl5FbHMJUg2YuJaR0iz9cdEdlU8G_kmcLQ1G6v_AmTLpqpP2W7XP2Dkb6B6no"/>
+</div>
+</div>
+</header>
+<!-- Side Navigation (Suppressed for Quiz Focus but represented as tools) -->
+<aside class="fixed left-0 top-16 bottom-0 hidden lg:flex flex-col p-4 gap-4 w-20 bg-surface-container border-r-2 border-surface-container-highest items-center justify-center">
+<button class="p-3 text-on-surface-variant hover:bg-surface-container-high rounded-xl transition-all" title="Slaydlar">
+<span class="material-symbols-outlined">layers</span>
+</button>
+<button class="p-3 bg-tertiary-container text-on-tertiary-container rounded-xl font-bold" title="Viktorina">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">quiz</span>
+</button>
+<button class="p-3 text-on-surface-variant hover:bg-surface-container-high rounded-xl transition-all" title="Media">
+<span class="material-symbols-outlined">image</span>
+</button>
+<div class="mt-auto">
+<button class="p-3 text-on-surface-variant hover:bg-surface-container-high rounded-xl transition-all" title="Sozlamalar">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-grow pt-24 pb-12 px-4 md:px-margin-desktop lg:ml-20 flex flex-col items-center max-w-7xl mx-auto w-full">
+<!-- Timer Section -->
+<div class="w-full max-w-4xl mb-8">
+<div class="flex justify-between items-end mb-2">
+<span class="font-label-lg text-on-surface font-bold">Vaqt qolmoqda: <span class="text-playful-pink" id="timer-seconds">15</span>s</span>
+<span class="font-label-md text-on-surface-variant">Savol 12/20</span>
+</div>
+<div class="h-4 w-full bg-surface-container-high rounded-full overflow-hidden shadow-inner">
+<div class="timer-bar h-full bg-sunny-lemon" id="timer-progress" style="width: 75%;"></div>
+</div>
+</div>
+<!-- Question Card -->
+<div class="w-full max-w-4xl bg-white rounded-[32px] p-8 md:p-12 shadow-xl border-2 border-surface-container-highest relative mb-10 overflow-hidden">
+<!-- Decorative Background Element -->
+<div class="absolute -top-10 -right-10 w-40 h-40 bg-soft-peach/20 rounded-full blur-3xl"></div>
+<div class="relative z-10 flex flex-col items-center text-center">
+<div class="mb-6 floating-element">
+<span class="material-symbols-outlined text-tertiary text-6xl" style="font-variation-settings: 'FILL' 1;">rocket_launch</span>
+</div>
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-on-surface leading-tight mb-4">
+                    Qaysi sayyora Quyoshga eng yaqin?
+                </h1>
+<p class="font-body-lg text-on-surface-variant max-w-2xl">
+                    Koinot haqidagi bilimlaringizni sinab ko'ring! To'g'ri javobni tanlash uchun 20 soniya bor.
+                </p>
+</div>
+</div>
+<!-- Quiz Options Bento Grid -->
+<div class="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6 px-2">
+<!-- Option A -->
+<button class="quiz-option-a bounce-button flex items-center p-6 rounded-[24px] text-left transition-all active:scale-95 group relative overflow-hidden" onclick="handleSelect(this, true)">
+<div class="flex-shrink-0 w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mr-6 font-headline-md text-white">A</div>
+<span class="font-headline-md text-white">Merkuriy</span>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">circle</span>
+</div>
+</button>
+<!-- Option B -->
+<button class="quiz-option-b bounce-button flex items-center p-6 rounded-[24px] text-left transition-all active:scale-95 group relative overflow-hidden" onclick="handleSelect(this, false)">
+<div class="flex-shrink-0 w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mr-6 font-headline-md text-white">B</div>
+<span class="font-headline-md text-white">Venera</span>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">square</span>
+</div>
+</button>
+<!-- Option C -->
+<button class="quiz-option-c bounce-button flex items-center p-6 rounded-[24px] text-left transition-all active:scale-95 group relative overflow-hidden" onclick="handleSelect(this, false)">
+<div class="flex-shrink-0 w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mr-6 font-headline-md text-white">C</div>
+<span class="font-headline-md text-white">Mars</span>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">change_history</span>
+</div>
+</button>
+<!-- Option D -->
+<button class="quiz-option-d bounce-button flex items-center p-6 rounded-[24px] text-left transition-all active:scale-95 group relative overflow-hidden" onclick="handleSelect(this, false)">
+<div class="flex-shrink-0 w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mr-6 font-headline-md text-white">D</div>
+<span class="font-headline-md text-white">Yer</span>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">pentagon</span>
+</div>
+</button>
+</div>
+<!-- Achievement Banner (Contextual Toast) -->
+<div class="fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-secondary text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center justify-between opacity-0 translate-y-10 transition-all duration-300 pointer-events-none" id="feedback-toast">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-3xl">emoji_events</span>
+<div>
+<p class="font-bold">Ajoyib!</p>
+<p class="text-sm">To'g'ri javob uchun +150 ball</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-4xl">star</span>
+</div>
+</main>
+<!-- Bottom Navigation Bar (Mobile Only) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-2 md:hidden bg-surface shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] rounded-t-xl">
+<div class="flex flex-col items-center justify-center text-on-surface-variant p-2">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-md-mobile text-label-md-mobile">Asosiy</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant p-2">
+<span class="material-symbols-outlined">folder_open</span>
+<span class="font-label-md-mobile text-label-md-mobile">Loyihalar</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-2xl px-4 py-1">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add_circle</span>
+<span class="font-label-md-mobile text-label-md-mobile">Yaratish</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant p-2">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-md-mobile text-label-md-mobile">Profil</span>
+</div>
+</nav>
+<script>
+        // Simple Timer Logic
+        let seconds = 15;
+        const timerText = document.getElementById('timer-seconds');
+        const timerProgress = document.getElementById('timer-progress');
+        
+        const countdown = setInterval(() => {
+            seconds--;
+            if (seconds >= 0) {
+                timerText.innerText = seconds;
+                timerProgress.style.width = (seconds / 20 * 100) + '%';
+            } else {
+                clearInterval(countdown);
+            }
+        }, 1000);
+
+        // Interaction Feedback
+        function handleSelect(element, isCorrect) {
+            const toast = document.getElementById('feedback-toast');
+            
+            if (isCorrect) {
+                element.classList.add('ring-4', 'ring-secondary', 'ring-offset-4');
+                toast.classList.remove('opacity-0', 'translate-y-10');
+                toast.classList.add('opacity-100', 'translate-y-0');
+                
+                // Update Score
+                const scoreDisp = document.getElementById('score-display');
+                let currentScore = parseInt(scoreDisp.innerText.replace(',', ''));
+                scoreDisp.innerText = (currentScore + 150).toLocaleString();
+
+                setTimeout(() => {
+                    toast.classList.add('opacity-0', 'translate-y-10');
+                    toast.classList.remove('opacity-100', 'translate-y-0');
+                }, 2500);
+            } else {
+                element.classList.add('shake', 'ring-4', 'ring-error', 'ring-offset-4');
+                setTimeout(() => element.classList.remove('ring-4', 'ring-error', 'ring-offset-4'), 500);
+            }
+        }
+
+        // Simple shake animation for incorrect answers
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .shake {
+                animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+            }
+            @keyframes shake {
+                10%, 90% { transform: translate3d(-1px, 0, 0); }
+                20%, 80% { transform: translate3d(2px, 0, 0); }
+                30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+                40%, 60% { transform: translate3d(4px, 0, 0); }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body></html>

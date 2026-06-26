@@ -76,6 +76,18 @@ model GamePlayerRecord {
   details       String     @default("[]") // TEST rejimi: har savol bo'yicha JSON [{index,text,answer,correct,timeMs,correctAns}]
 }
 
+// Ustozlar yo'riqnomasi: bo'limlarga ajratilgan qo'llanma
+// Har bir bo'lim — sarlavha + markdown matn. Admin tahrirlaydi/o'chiradi/qo'shadi.
+model GuideSection {
+  id        String   @id @default(cuid())
+  order     Int      @default(0)
+  title     String
+  body      String   @default("") // markdown matn
+  icon      String?  // material symbol nomi (ixtiyoriy)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // O'quv dastur: dars rejalar
 // subject: ROBOTEXNIKA | DASTURLASH
 // ageGroup: JUNIOR | MIDDLE | SENIOR

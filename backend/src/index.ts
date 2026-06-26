@@ -14,6 +14,7 @@ import { uploadRouter, UPLOADS_DIR } from "./routes/upload.js";
 import { reportRouter } from "./routes/reports.js";
 import { publicRouter } from "./routes/public.js";
 import { curriculumRouter } from "./routes/curriculum.js";
+import { guideRouter } from "./routes/guide.js";
 
 const app = express();
 // Dev'da LAN'dagi har qanday qurilma ulanishi uchun origin'ni aks ettiramiz
@@ -37,6 +38,7 @@ app.use("/api/upload", uploadRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/curriculum", curriculumRouter);
+app.use("/api/guide", guideRouter);
 
 // Production: tayyor frontend'ni (statik) shu serverdan beramiz — bitta port, bitta origin
 if (config.production) {

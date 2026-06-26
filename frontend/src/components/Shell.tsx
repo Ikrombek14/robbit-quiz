@@ -11,6 +11,7 @@ const NAV = [
   { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true },
   { key: "students", label: "O'quvchilar", icon: "group", path: "/students", soon: true, mobileHide: true },
   { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false },
+  { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {

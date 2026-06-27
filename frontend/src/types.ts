@@ -145,6 +145,7 @@ export interface Teacher {
   email: string;
   name: string;
   picture?: string | null;
+  isAdmin?: boolean;
 }
 
 export interface LeaderRow {

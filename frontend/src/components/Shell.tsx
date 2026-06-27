@@ -6,10 +6,12 @@ import type { Quiz } from "../types";
 import { getTheme, toggleTheme, type Theme } from "../theme";
 
 const NAV = [
-  { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard" },
-  { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library" },
-  { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions" },
-  { key: "students", label: "O'quvchilar", icon: "group", path: "/students", soon: true },
+  { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false },
+  { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library", mobileHide: false },
+  { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true },
+  { key: "students", label: "O'quvchilar", icon: "group", path: "/students", soon: true, mobileHide: true },
+  { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false },
+  { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -27,6 +29,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   }
 
   return (
+    <div className="shell-wrapper">
     <div className="shell">
       <aside className="sidebar">
         <div
@@ -46,7 +49,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             return (
               <button
                 key={n.key}
-                className={`side-link ${active ? "active" : ""}`}
+                className={`side-link ${active ? "active" : ""} ${n.mobileHide ? "side-link-hide-mobile" : ""}`}
                 disabled={n.soon}
                 onClick={() => !n.soon && navigate(n.path)}
                 title={n.soon ? "Tez orada" : n.label}
@@ -84,6 +87,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <main className="shell-main">{children}</main>
+    </div>
     </div>
   );
 }

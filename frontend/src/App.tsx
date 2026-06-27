@@ -13,6 +13,8 @@ import Host from "./pages/Host";
 import PlayShared from "./pages/PlayShared";
 import Reports from "./pages/Reports";
 import ReportDetail from "./pages/ReportDetail";
+import Curriculum from "./pages/Curriculum";
+import Guide from "./pages/Guide";
 
 function Protected({ children }: { children: ReactNode }) {
   const { teacher, loading } = useAuth();
@@ -38,6 +40,8 @@ export default function App() {
       <Route path="/host/:quizId" element={<Protected><Host /></Protected>} />
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />
+      <Route path="/curriculum" element={<Protected><Curriculum /></Protected>} />
+      <Route path="/guide" element={<Protected><Guide /></Protected>} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

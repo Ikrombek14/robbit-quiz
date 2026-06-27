@@ -35,14 +35,20 @@ authRouter.post("/google", async (req, res) => {
     const name = payload.name ?? email.split("@")[0];
     const picture = payload.picture ?? null;
 
+    const isAdmin = config.adminEmails.includes(email);
     let teacher = await prisma.teacher.findUnique({ where: { email } });
     if (!teacher) {
-      teacher = await prisma.teacher.create({ data: { email, name, picture, password: null } });
-    } else if (picture && teacher.picture !== picture) {
-      teacher = await prisma.teacher.update({ where: { id: teacher.id }, data: { picture } });
+      teacher = await prisma.teacher.create({ data: { email, name, picture, password: null, isAdmin } });
+    } else {
+      const updates: Record<string, unknown> = {};
+      if (picture && teacher.picture !== picture) updates.picture = picture;
+      if (teacher.isAdmin !== isAdmin) updates.isAdmin = isAdmin;
+      if (Object.keys(updates).length) {
+        teacher = await prisma.teacher.update({ where: { id: teacher.id }, data: updates });
+      }
     }
     const token = signToken(teacher.id);
-    res.json({ token, teacher: { id: teacher.id, email: teacher.email, name: teacher.name, picture: teacher.picture } });
+    res.json({ token, teacher: { id: teacher.id, email: teacher.email, name: teacher.name, picture: teacher.picture, isAdmin: teacher.isAdmin } });
   } catch {
     res.status(401).json({ error: "Google token tekshirilmadi" });
   }
@@ -67,9 +73,10 @@ authRouter.post("/register", async (req, res) => {
     return;
   }
   const hash = await bcrypt.hash(password, 10);
-  const teacher = await prisma.teacher.create({ data: { email, password: hash, name } });
+  const isAdmin = config.adminEmails.includes(email);
+  const teacher = await prisma.teacher.create({ data: { email, password: hash, name, isAdmin } });
   const token = signToken(teacher.id);
-  res.json({ token, teacher: { id: teacher.id, email, name } });
+  res.json({ token, teacher: { id: teacher.id, email, name, isAdmin: teacher.isAdmin } });
 });
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string() });
@@ -86,14 +93,19 @@ authRouter.post("/login", async (req, res) => {
     res.status(401).json({ error: "Email yoki parol xato" });
     return;
   }
+  // isAdmin ni ham yangilash (email admin ro'yxatida bo'lsa)
+  const isAdmin = config.adminEmails.includes(teacher.email);
+  if (teacher.isAdmin !== isAdmin) {
+    await prisma.teacher.update({ where: { id: teacher.id }, data: { isAdmin } });
+  }
   const token = signToken(teacher.id);
-  res.json({ token, teacher: { id: teacher.id, email: teacher.email, name: teacher.name } });
+  res.json({ token, teacher: { id: teacher.id, email: teacher.email, name: teacher.name, isAdmin } });
 });
 
 authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   const teacher = await prisma.teacher.findUnique({
     where: { id: req.teacherId },
-    select: { id: true, email: true, name: true, picture: true },
+    select: { id: true, email: true, name: true, picture: true, isAdmin: true },
   });
   res.json({ teacher });
 });

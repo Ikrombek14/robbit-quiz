@@ -16,6 +16,7 @@ model Teacher {
   password  String? // Google orqali kirganlarda bo'lmaydi
   name      String
   picture   String? // Google avatar
+  isAdmin   Boolean  @default(false)
   createdAt DateTime @default(now())
   quizzes   Quiz[]
 }
@@ -73,4 +74,35 @@ model GamePlayerRecord {
   correctCount  Int        @default(0)
   totalAnswered Int        @default(0)
   details       String     @default("[]") // TEST rejimi: har savol bo'yicha JSON [{index,text,answer,correct,timeMs,correctAns}]
+}
+
+// Ustozlar yo'riqnomasi: bo'limlarga ajratilgan qo'llanma
+// Har bir bo'lim — sarlavha + markdown matn. Admin tahrirlaydi/o'chiradi/qo'shadi.
+model GuideSection {
+  id        String   @id @default(cuid())
+  order     Int      @default(0)
+  title     String
+  body      String   @default("") // markdown matn
+  icon      String?  // material symbol nomi (ixtiyoriy)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// O'quv dastur: dars rejalar
+// subject: ROBOTEXNIKA | DASTURLASH
+// ageGroup: JUNIOR | MIDDLE | SENIOR
+// year: 1 | 2
+// section: DESIGN | PROGRAMMING | ROBOTICS (faqat ROBOTEXNIKA uchun, DASTURLASH'da null)
+model LessonPlan {
+  id        String   @id @default(cuid())
+  subject   String   // ROBOTEXNIKA | DASTURLASH
+  ageGroup  String   // JUNIOR | MIDDLE | SENIOR
+  year      Int      // 1 | 2
+  section   String?  // DESIGN | PROGRAMMING | ROBOTICS
+  order     Int      @default(0)
+  title     String
+  author    String?
+  isDemo    Boolean  @default(false)
+  quizId    String?  // biriktrilgan quiz (ixtiyoriy)
+  createdAt DateTime @default(now())
 }

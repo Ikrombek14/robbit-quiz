@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, uploadBlob } from "../api";
 import type { ChoiceOption, QType, Quiz, Slide, SlideData } from "../types";
 import { QUESTION_TYPES, newQuestionSlide, slideTitle, TYPE_LABELS } from "../slides";
-import { SLIDE_TEMPLATES, newContentSlideFromTemplate } from "../templates";
+import { SLIDE_TEMPLATES, buildTemplateData, newContentSlideFromTemplate } from "../templates";
 import { pdfToPngBlobs } from "../pdf";
 import SlideScene from "../components/SlideScene";
 import SlideCanvasEditor from "../components/SlideCanvasEditor";
@@ -43,7 +43,7 @@ export default function QuizEditor() {
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addQuestion, setAddQuestion] = useState(false);
-  const [addTemplate, setAddTemplate] = useState(false);
+  const [tplOpen, setTplOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -74,7 +74,19 @@ export default function QuizEditor() {
     });
     setAddOpen(false);
     setAddQuestion(false);
-    setAddTemplate(false);
+  }
+
+  // O'ng paneldan shablon tanlanganda — joriy CONTENT slaydga qo'llaymiz.
+  // Joriy slayd savol/bo'sh bo'lsa, shablondan yangi slayd qo'shamiz.
+  function applyTemplate(key: string) {
+    const cur = slides[selected];
+    if (cur && cur.kind === "CONTENT") {
+      const hasContent = Array.isArray(cur.data.elements) && cur.data.elements.length > 0;
+      if (hasContent && !confirm("Joriy slayd mazmuni shablon bilan almashtiriladi. Davom etamizmi?")) return;
+      updateSlide(selected, { ...cur, data: buildTemplateData(key) });
+    } else {
+      addSlide(newContentSlideFromTemplate(key));
+    }
   }
   function removeSlide(i: number) {
     setSlides((arr) => arr.filter((_, idx) => idx !== i));
@@ -199,86 +211,74 @@ export default function QuizEditor() {
           <span className="muted">{slides.length} slayd</span>
         </div>
         <div className="row">
+          <button className={`btn btn-ghost ${tplOpen ? "active" : ""}`} onClick={() => setTplOpen((o) => !o)} title="Shablonlar paneli">
+            <span className="material-symbols-outlined">dashboard_customize</span> Shablonlar
+          </button>
           <button className="btn btn-ghost" onClick={() => setShowSettings(true)}>
-            ⚙ Settings
+            <span className="material-symbols-outlined">settings</span> Sozlamalar
           </button>
           <button className="btn btn-ghost" disabled={slides.length === 0} onClick={() => setShowPreview(true)}>
-            ▶ Preview
+            <span className="material-symbols-outlined">play_arrow</span> Ko'rish
           </button>
           <button className="btn" onClick={save} disabled={saving}>
-            {saving ? "Saqlanmoqda…" : "💾 Save changes"}
+            <span className="material-symbols-outlined">save</span> {saving ? "Saqlanmoqda…" : "Saqlash"}
           </button>
         </div>
       </div>
 
       {error && <div className="error" style={{ margin: 16 }}>{error}</div>}
 
-      <div className="editor-layout">
-        {/* Thumbnails */}
-        <aside className="thumbs">
-          <input ref={fileRef} type="file" accept="application/pdf" onChange={importPdf} style={{ display: "none" }} />
-          <input
-            ref={excelRef}
-            type="file"
-            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={importExcel}
-            style={{ display: "none" }}
-          />
-          {progress && <div className="import-progress">{importing ? "⏳ " : ""}{progress}</div>}
-          <div style={{ position: "relative" }}>
-            <button className="btn btn-block" disabled={importing} onClick={() => { setAddOpen((o) => !o); setAddQuestion(false); setAddTemplate(false); }}>
-              + Add
-            </button>
-            {addOpen && (
-              <div className="add-menu">
-                {addTemplate ? (
-                  <>
-                    <button className="add-item muted" onClick={() => setAddTemplate(false)}>
-                      ← orqaga
-                    </button>
-                    {SLIDE_TEMPLATES.map((t) => (
-                      <button key={t.key} className="add-item tpl-item" onClick={() => addSlide(newContentSlideFromTemplate(t.key))}>
-                        <SlideScene data={t.build()} width={120} rounded={6} />
-                        <span>{t.label}</span>
+      <div className={`gs-editor ${tplOpen ? "with-tpl" : ""}`}>
+        <input ref={fileRef} type="file" accept="application/pdf" onChange={importPdf} style={{ display: "none" }} />
+        <input
+          ref={excelRef}
+          type="file"
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          onChange={importExcel}
+          style={{ display: "none" }}
+        />
+
+        {/* ---- Chap: Sahifalar ---- */}
+        <aside className="gs-pages">
+          <div className="gs-pages-head">
+            <span className="gs-panel-title">Sahifalar</span>
+            <div style={{ position: "relative" }}>
+              <button className="gs-add-btn" disabled={importing} onClick={() => { setAddOpen((o) => !o); setAddQuestion(false); }} title="Slayd qo'shish">
+                <span className="material-symbols-outlined">add</span>
+              </button>
+              {addOpen && (
+                <div className="add-menu">
+                  {addQuestion ? (
+                    <>
+                      <button className="add-item muted" onClick={() => setAddQuestion(false)}>← orqaga</button>
+                      {QUESTION_TYPES.map((q) => (
+                        <button key={q.type} className="add-item" onClick={() => addSlide(newQuestionSlide(q.type))}>
+                          {q.icon} {q.label}
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <button className="add-item" onClick={() => addSlide(newContentSlideFromTemplate("blank"))}>
+                        🖼️ Bo'sh slayd
                       </button>
-                    ))}
-                  </>
-                ) : addQuestion ? (
-                  <>
-                    <button className="add-item muted" onClick={() => setAddQuestion(false)}>
-                      ← orqaga
-                    </button>
-                    {QUESTION_TYPES.map((q) => (
-                      <button key={q.type} className="add-item" onClick={() => addSlide(newQuestionSlide(q.type))}>
-                        {q.icon} {q.label}
-                      </button>
-                    ))}
-                  </>
-                ) : (
-                  <>
-                    <button className="add-item" onClick={() => setAddTemplate(true)}>
-                      🖼️ Slide (taqdimot) →
-                    </button>
-                    <button className="add-item" onClick={() => setAddQuestion(true)}>
-                      ❓ Question →
-                    </button>
-                    <button className="add-item" onClick={() => fileRef.current?.click()}>
-                      📄 PDF import (sahifalar → slayd)
-                    </button>
-                    <button className="add-item" onClick={() => excelRef.current?.click()}>
-                      📊 Excel import (savollar shabloni)
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
+                      <button className="add-item" onClick={() => setAddQuestion(true)}>❓ Savol →</button>
+                      <button className="add-item" onClick={() => fileRef.current?.click()}>📄 PDF import</button>
+                      <button className="add-item" onClick={() => excelRef.current?.click()}>📊 Excel import</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="thumb-list">
+          {progress && <div className="import-progress">{importing ? "⏳ " : ""}{progress}</div>}
+
+          <div className="gs-page-list">
             {slides.map((s, i) => (
               <div
                 key={i}
-                className={`thumb ${i === selected ? "active" : ""} ${dragIndex === i ? "dragging" : ""}`}
+                className={`gs-page ${i === selected ? "active" : ""} ${dragIndex === i ? "dragging" : ""}`}
                 draggable
                 onDragStart={() => setDragIndex(i)}
                 onDragOver={(e) => e.preventDefault()}
@@ -287,52 +287,48 @@ export default function QuizEditor() {
                 onClick={() => setSelected(i)}
                 title="Tortib o'rnini almashtiring"
               >
-                <span className="thumb-num">{i + 1}</span>
-                <div className="thumb-preview">
+                <span className="gs-page-num">{i + 1}</span>
+                <div className="gs-page-prev">
                   {s.kind === "CONTENT" ? (
-                    <SlideScene data={s.data} rounded={0} />
+                    <SlideScene data={s.data} width={150} rounded={0} />
                   ) : (
                     <div className="thumb-mini">
                       <span className="badge-mini">{TYPE_LABELS[(s.type ?? "SINGLE") as QType]}</span>
                       <span className="thumb-mini-text">{slideTitle(s)}</span>
                     </div>
                   )}
-                  <button
-                    className="thumb-del"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeSlide(i);
-                    }}
-                    title="O'chirish"
-                  >
-                    ✕
-                  </button>
+                  <button className="thumb-del" onClick={(e) => { e.stopPropagation(); removeSlide(i); }} title="O'chirish">✕</button>
                 </div>
               </div>
             ))}
-            {slides.length === 0 && <p className="muted center">Slayd qo'shing →</p>}
+            {slides.length === 0 && <p className="muted center" style={{ fontSize: 13 }}>Slayd qo'shing ⤴</p>}
           </div>
         </aside>
 
-        {/* Editor */}
-        <main className="editor-main">
+        {/* ---- Markaz: Slayd ---- */}
+        <main className="gs-canvas">
           {current ? (
             <>
-              <SlideEditor slide={current} onChange={(s) => updateSlide(selected, s)} />
-              <div className="card" style={{ marginTop: 16 }}>
-                <label>Slide notes (faqat siz ko'rasiz)</label>
+              <div className="gs-canvas-stage">
+                <SlideEditor slide={current} onChange={(s) => updateSlide(selected, s)} />
+              </div>
+              <div className="gs-notes">
+                <span className="material-symbols-outlined">sticky_note_2</span>
                 <textarea
-                  rows={2}
+                  rows={1}
                   value={current.notes ?? ""}
                   onChange={(e) => updateSlide(selected, { ...current, notes: e.target.value })}
-                  placeholder="Taqdimotchi izohlari…"
+                  placeholder="Taqdimotchi izohlari (faqat siz ko'rasiz)…"
                 />
               </div>
             </>
           ) : (
-            <div className="card center muted">Chap tomondan slayd tanlang yoki "+ Add" bosing.</div>
+            <div className="card center muted">Chap tomondan slayd tanlang yoki ＋ bilan qo'shing.</div>
           )}
         </main>
+
+        {/* ---- O'ng: Shablonlar ---- */}
+        {tplOpen && <TemplatesPanel onPick={applyTemplate} onClose={() => setTplOpen(false)} />}
       </div>
 
       {showSettings && (
@@ -354,6 +350,34 @@ export default function QuizEditor() {
   );
 }
 
+/* ============ O'ng panel: Shablonlar ============ */
+const TemplatesPanel = memo(function TemplatesPanel({
+  onPick,
+  onClose,
+}: {
+  onPick: (key: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside className="gs-templates">
+      <div className="gs-tpl-head">
+        <span className="gs-panel-title">Shablonlar</span>
+        <button className="gs-close" onClick={onClose} title="Yopish">
+          <span className="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div className="gs-tpl-list">
+        {SLIDE_TEMPLATES.map((t) => (
+          <button key={t.key} className="gs-tpl-card" onClick={() => onPick(t.key)} title={t.label}>
+            <SlideScene data={t.build()} width={252} rounded={8} />
+            <span className="gs-tpl-label">{t.label}</span>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+});
+
 /* ============ Settings ============ */
 function SettingsModal(props: {
   title: string;
@@ -366,7 +390,7 @@ function SettingsModal(props: {
     <div className="modal-overlay" onClick={props.onClose}>
       <div className="card card-narrow" onClick={(e) => e.stopPropagation()}>
         <div className="between">
-          <h3 style={{ margin: 0 }}>⚙ Settings</h3>
+          <h3 style={{ margin: 0 }}>⚙ Sozlamalar</h3>
           <button className="btn btn-ghost" onClick={props.onClose}>✕</button>
         </div>
         <div className="spacer" />
@@ -374,6 +398,7 @@ function SettingsModal(props: {
         <input value={props.title} onChange={(e) => props.onChange({ title: e.target.value })} />
         <label>Tavsif</label>
         <input value={props.description} onChange={(e) => props.onChange({ description: e.target.value })} />
+
         <label className="row" style={{ cursor: "pointer" }}>
           <input
             type="checkbox"

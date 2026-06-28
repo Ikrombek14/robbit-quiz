@@ -3,6 +3,7 @@ name: Deploy → robbit-quiz server
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -58,6 +59,8 @@ jobs:
       - name: Serverga yuborish va o'rnatish
         env:
           SSHPASS: ${{ secrets.SERVER_PASS }}
+          ADMIN_EMAIL: teamlead.robbit@gmail.com
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
           HOST=${{ secrets.SERVER_HOST }}
           USER=${{ secrets.SERVER_USER }}
@@ -90,6 +93,7 @@ jobs:
             npm install --omit=dev
             npx prisma generate
             npx prisma migrate deploy
+            node prisma/seed-admin.mjs '$ADMIN_EMAIL' '$ADMIN_PASSWORD' || true
             pm2 restart robbit-quiz 2>/dev/null || pm2 start $APP/ecosystem.config.cjs
             pm2 save
             echo '✅ Deploy tugadi'

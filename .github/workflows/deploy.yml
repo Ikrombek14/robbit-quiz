@@ -41,24 +41,15 @@ jobs:
           rm -f _deploy/prisma/dev.db
           tar -czf robbit-quiz.tgz -C _deploy .
 
-      - name: .env fayl tayyorlash (secretlardan)
-        env:
-          DB_URL: ${{ secrets.SERVER_DB_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-        run: |
-          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=%s\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com\n' \
-            "$DB_URL" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" \
-            > /tmp/app.env
-          echo "✅ .env tayyor ($(wc -l < /tmp/app.env) qator)"
-
       - name: sshpass o'rnatish
         run: sudo apt-get install -y sshpass
 
       - name: Serverga yuborish va o'rnatish
         env:
           SSHPASS: ${{ secrets.SERVER_PASS }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           ADMIN_EMAIL: teamlead.robbit@gmail.com
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
@@ -77,16 +68,32 @@ jobs:
             SSH="sshpass -e ssh $SSH_OPTS"
           fi
 
-          # Papka yaratish
-          $SSH $USER@$HOST "mkdir -p $APP"
+          # Serverdan DATABASE_URL ni o'qiymiz (server-setup.sh da yaratilgan)
+          DB_URL=$($SSH $USER@$HOST "grep DATABASE_URL /root/db_credentials.txt 2>/dev/null | cut -d= -f2- | tr -d '\"'" || echo "")
+          if [ -z "$DB_URL" ]; then
+            echo "❌ XATO: /root/db_credentials.txt topilmadi! server-setup.yml ni avval ishga tushiring."
+            exit 1
+          fi
+          echo "✅ DATABASE_URL serverdan olindi"
 
-          # Fayllarni yuborish
+          # .env fayl tayyorlash
+          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=%s\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com\n' \
+            "$DB_URL" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" \
+            > /tmp/app.env
+
+          # Papka yaratish va fayllarni yuborish
+          $SSH $USER@$HOST "mkdir -p $APP"
           $SCP robbit-quiz.tgz $USER@$HOST:/tmp/robbit-quiz.tgz
           $SCP /tmp/app.env    $USER@$HOST:$APP/.env
 
-          # O'rnatish
+          # O'rnatish (PostgreSQL parolini ham server-side peer auth bilan yangilaymiz)
           $SSH $USER@$HOST "
             set -e
+            DB_RAW_URL=\$(grep DATABASE_URL /root/db_credentials.txt | cut -d= -f2- | tr -d '\"')
+            DB_PW=\$(echo \"\$DB_RAW_URL\" | sed 's|postgresql://[^:]*:\([^@]*\)@.*|\1|')
+            echo 'Updating PostgreSQL password via peer auth...'
+            sudo -u postgres psql < /dev/null -c \"ALTER USER robbit WITH PASSWORD '\$DB_PW';\" && echo 'Password updated OK' || echo 'Password update warning (may already be correct)'
+            mkdir -p $APP
             tar -xzf /tmp/robbit-quiz.tgz -C $APP
             rm -f /tmp/robbit-quiz.tgz
             cd $APP

@@ -40,34 +40,26 @@ echo ">>> PostgreSQL paroli yaratildi: $DB_PASS"
 echo ">>> Bu parolni .env.production ga qo'ying!"
 echo ""
 
-sudo -u postgres psql <<EOF
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'robbit') THEN
-    CREATE USER robbit WITH PASSWORD '$DB_PASS';
-  ELSE
-    ALTER USER robbit WITH PASSWORD '$DB_PASS';
-  END IF;
-END
-\$\$;
-EOF
+# User yaratish yoki parolni yangilash (sodda psql -c yondashuvi)
+sudo -u postgres psql -c "CREATE USER robbit WITH PASSWORD '$DB_PASS';" 2>/dev/null \
+  || sudo -u postgres psql -c "ALTER USER robbit WITH PASSWORD '$DB_PASS';"
+sudo -u postgres psql -c "ALTER USER robbit CREATEDB;" || true
 
+# Database
 sudo -u postgres psql -c "CREATE DATABASE robbit_quiz OWNER robbit;" 2>/dev/null || echo "Baza allaqachon mavjud"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE robbit_quiz TO robbit;" 2>/dev/null || true
-# PostgreSQL 15+ da public schema izni alohida beriladi
-sudo -u postgres psql -d robbit_quiz -c "GRANT ALL ON SCHEMA public TO robbit;" 2>/dev/null || true
-sudo -u postgres psql -d robbit_quiz -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO robbit;" 2>/dev/null || true
-# Prisma shadow DB uchun (migrate dev)
-sudo -u postgres psql -c "ALTER USER robbit CREATEDB;" 2>/dev/null || true
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE robbit_quiz TO robbit;" || true
+# PostgreSQL 15+ da public schema uchun alohida ruxsat kerak
+sudo -u postgres psql -d robbit_quiz -c "GRANT ALL ON SCHEMA public TO robbit;" || true
+sudo -u postgres psql -d robbit_quiz -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO robbit;" || true
 
 echo "DATABASE_URL=\"postgresql://robbit:${DB_PASS}@localhost:5432/robbit_quiz?schema=public\"" > /root/db_credentials.txt
 echo "Hisob ma'lumotlari /root/db_credentials.txt ga saqlandi"
 
 # Ulanishni tekshirish
 echo ">>> PostgreSQL ulanishini tekshirish..."
-PGPASSWORD="$DB_PASS" psql -U robbit -h localhost -d robbit_quiz -c "SELECT version();" \
+PGPASSWORD="$DB_PASS" psql -U robbit -h 127.0.0.1 -d robbit_quiz -c "SELECT 'OK' AS test;" \
   && echo ">>> ✅ PostgreSQL ulanish MUVAFFAQIYATLI" \
-  || echo ">>> ❌ PostgreSQL ulanish XATO — pg_hba.conf ni tekshiring"
+  || echo ">>> ❌ PostgreSQL ulanish XATO"
 
 # ---------- 5. Nginx ----------
 echo "[5/7] Nginx o'rnatilmoqda..."

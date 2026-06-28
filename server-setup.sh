@@ -126,7 +126,7 @@ fi
 # ---------- 7. SSH key (GitHub Actions uchun) ----------
 echo "[7/7] GitHub Actions SSH kaliti yaratilmoqda..."
 KEY_PATH=/root/.ssh/github_actions
-ssh-keygen -t ed25519 -f $KEY_PATH -N "" -C "github-actions-robbit-quiz"
+ssh-keygen -t ed25519 -f $KEY_PATH -N "" -C "github-actions-robbit-quiz" -y 2>/dev/null || ssh-keygen -t ed25519 -f $KEY_PATH -N "" -C "github-actions-robbit-quiz" <<< y
 cat ${KEY_PATH}.pub >> /root/.ssh/authorized_keys
 chmod 600 /root/.ssh/authorized_keys
 

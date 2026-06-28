@@ -54,9 +54,20 @@ EOF
 
 sudo -u postgres psql -c "CREATE DATABASE robbit_quiz OWNER robbit;" 2>/dev/null || echo "Baza allaqachon mavjud"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE robbit_quiz TO robbit;" 2>/dev/null || true
+# PostgreSQL 15+ da public schema izni alohida beriladi
+sudo -u postgres psql -d robbit_quiz -c "GRANT ALL ON SCHEMA public TO robbit;" 2>/dev/null || true
+sudo -u postgres psql -d robbit_quiz -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO robbit;" 2>/dev/null || true
+# Prisma shadow DB uchun (migrate dev)
+sudo -u postgres psql -c "ALTER USER robbit CREATEDB;" 2>/dev/null || true
 
 echo "DATABASE_URL=\"postgresql://robbit:${DB_PASS}@localhost:5432/robbit_quiz?schema=public\"" > /root/db_credentials.txt
 echo "Hisob ma'lumotlari /root/db_credentials.txt ga saqlandi"
+
+# Ulanishni tekshirish
+echo ">>> PostgreSQL ulanishini tekshirish..."
+PGPASSWORD="$DB_PASS" psql -U robbit -h localhost -d robbit_quiz -c "SELECT version();" \
+  && echo ">>> ✅ PostgreSQL ulanish MUVAFFAQIYATLI" \
+  || echo ">>> ❌ PostgreSQL ulanish XATO — pg_hba.conf ni tekshiring"
 
 # ---------- 5. Nginx ----------
 echo "[5/7] Nginx o'rnatilmoqda..."

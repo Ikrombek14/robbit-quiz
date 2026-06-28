@@ -34,7 +34,7 @@ systemctl enable postgresql
 systemctl start postgresql
 
 # Baza va foydalanuvchi yaratish
-DB_PASS=$(openssl rand -base64 20 | tr -dc 'a-zA-Z0-9' | head -c 24)
+DB_PASS="${DB_PASS:-$(openssl rand -base64 20 | tr -dc 'a-zA-Z0-9' | head -c 24)}"
 echo ""
 echo ">>> PostgreSQL paroli yaratildi: $DB_PASS"
 echo ">>> Bu parolni .env.production ga qo'ying!"

@@ -31,45 +31,59 @@ jobs:
       - name: Tarball tayyorlash
         run: |
           mkdir -p _deploy/public
-          cp -r backend/dist          _deploy/dist
-          cp -r frontend/dist/.       _deploy/public/
-          cp -r backend/prisma        _deploy/prisma
-          cp    backend/package.json  _deploy/
+          cp -r backend/dist            _deploy/dist
+          cp -r frontend/dist/.         _deploy/public/
+          cp -r backend/prisma          _deploy/prisma
+          cp    backend/package.json    _deploy/
           cp    backend/package-lock.json _deploy/
           cp    backend/ecosystem.config.cjs _deploy/
           rm -f _deploy/prisma/dev.db
           tar -czf robbit-quiz.tgz -C _deploy .
 
-      - name: sshpass o'rnatish (SSH key bo'lmasa)
+      - name: .env fayl tayyorlash (secretlardan)
+        env:
+          DB_URL: ${{ secrets.SERVER_DB_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        run: |
+          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=%s\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com\n' \
+            "$DB_URL" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" \
+            > /tmp/app.env
+          echo "✅ .env tayyor ($(wc -l < /tmp/app.env) qator)"
+
+      - name: sshpass o'rnatish
         run: sudo apt-get install -y sshpass
 
       - name: Serverga yuborish va o'rnatish
         env:
           SSHPASS: ${{ secrets.SERVER_PASS }}
         run: |
+          HOST=${{ secrets.SERVER_HOST }}
+          USER=${{ secrets.SERVER_USER }}
           APP=/root/apps/robbit-quiz
-
-          # SSH ulanish usuli: avval key sinab ko'r, bo'lmasa parol ishlat
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=30"
 
           if [ -n "${{ secrets.SERVER_SSH_KEY }}" ]; then
             echo "${{ secrets.SERVER_SSH_KEY }}" > /tmp/deploy_key
             chmod 600 /tmp/deploy_key
-            SCP_CMD="scp -i /tmp/deploy_key $SSH_OPTS"
-            SSH_CMD="ssh -i /tmp/deploy_key $SSH_OPTS"
+            SCP="scp -i /tmp/deploy_key $SSH_OPTS"
+            SSH="ssh -i /tmp/deploy_key $SSH_OPTS"
           else
-            SCP_CMD="sshpass -e scp $SSH_OPTS"
-            SSH_CMD="sshpass -e ssh $SSH_OPTS"
+            SCP="sshpass -e scp $SSH_OPTS"
+            SSH="sshpass -e ssh $SSH_OPTS"
           fi
 
-          # Tarball yuborish
-          $SCP_CMD robbit-quiz.tgz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/
+          # Papka yaratish
+          $SSH $USER@$HOST "mkdir -p $APP"
 
-          # Serverda o'rnatish
-          $SSH_CMD ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} bash <<'ENDSSH'
+          # Fayllarni yuborish
+          $SCP robbit-quiz.tgz $USER@$HOST:/tmp/robbit-quiz.tgz
+          $SCP /tmp/app.env    $USER@$HOST:$APP/.env
+
+          # O'rnatish
+          $SSH $USER@$HOST "
             set -e
-            APP=/root/apps/robbit-quiz
-            mkdir -p $APP
             tar -xzf /tmp/robbit-quiz.tgz -C $APP
             rm -f /tmp/robbit-quiz.tgz
             cd $APP
@@ -78,6 +92,6 @@ jobs:
             npx prisma migrate deploy
             pm2 restart robbit-quiz 2>/dev/null || pm2 start $APP/ecosystem.config.cjs
             pm2 save
-            echo "✅ Deploy tugadi: $(date)"
-            pm2 logs robbit-quiz --lines 10 --nostream
-          ENDSSH
+            echo '✅ Deploy tugadi'
+            pm2 logs robbit-quiz --lines 15 --nostream
+          "

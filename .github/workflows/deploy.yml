@@ -85,6 +85,7 @@ jobs:
           # O'rnatish
           $SSH $USER@$HOST "
             set -e
+            rm -rf $APP/prisma/migrations $APP/dist $APP/public
             tar -xzf /tmp/robbit-quiz.tgz -C $APP
             rm -f /tmp/robbit-quiz.tgz
             cd $APP

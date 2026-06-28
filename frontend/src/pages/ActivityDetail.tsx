@@ -16,14 +16,16 @@ export default function ActivityDetail() {
   const [copied, setCopied] = useState(false);
 
   const shareLink = quiz ? `${window.location.origin}/s/${quiz.id}` : "";
-  async function copyLink() {
+  const hostLink = quiz ? `${window.location.origin}/h/${quiz.id}` : "";
+  const [copiedHost, setCopiedHost] = useState(false);
+  async function copyText(text: string, which: "play" | "host") {
     try {
-      await navigator.clipboard.writeText(shareLink);
+      await navigator.clipboard.writeText(text);
     } catch {
       /* clipboard bloklangan bo'lishi mumkin */
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (which === "host") { setCopiedHost(true); setTimeout(() => setCopiedHost(false), 2000); }
+    else { setCopied(true); setTimeout(() => setCopied(false), 2000); }
   }
 
   useEffect(() => {
@@ -67,13 +69,24 @@ export default function ActivityDetail() {
                 </button>
                 {shareOpen && (
                   <div className="share-menu">
-                    <strong className="text-sm">📝 Vazifa havolasi</strong>
+                    <strong className="text-sm">🎤 Host havolasi (ustoz uchun)</strong>
+                    <p className="muted text-sm" style={{ margin: "4px 0 8px" }}>
+                      Boshqa ustoz havolani ochib, Gmail bilan kirib <b>host qiladi</b>:
+                    </p>
+                    <input readOnly value={hostLink} onClick={(e) => (e.target as HTMLInputElement).select()} style={{ marginBottom: 8 }} />
+                    <button className="btn btn-block" onClick={() => copyText(hostLink, "host")}>
+                      {copiedHost ? "✓ Nusxalandi" : "Host havolasini nusxalash"}
+                    </button>
+
+                    <div className="or-divider" style={{ margin: "12px 0" }}>—</div>
+
+                    <strong className="text-sm">📝 Vazifa havolasi (o'quvchi uchun)</strong>
                     <p className="muted text-sm" style={{ margin: "4px 0 8px" }}>
                       O'quvchilar mustaqil bajaradi, natija <b>Sessiyalarda</b> chiqadi:
                     </p>
                     <input readOnly value={shareLink} onClick={(e) => (e.target as HTMLInputElement).select()} style={{ marginBottom: 8 }} />
-                    <button className="btn btn-block" onClick={copyLink}>
-                      {copied ? "✓ Nusxalandi" : "Havolani nusxalash"}
+                    <button className="btn btn-block btn-ghost" onClick={() => copyText(shareLink, "play")}>
+                      {copied ? "✓ Nusxalandi" : "Vazifa havolasini nusxalash"}
                     </button>
                   </div>
                 )}

@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer } from "http";
@@ -19,12 +21,76 @@ import { searchRouter } from "./routes/search.js";
 import { teachersRouter } from "./routes/teachers.js";
 
 const app = express();
-// Dev'da LAN'dagi har qanday qurilma ulanishi uchun origin'ni aks ettiramiz
-app.use(cors({ origin: true }));
+app.set("trust proxy", 1); // nginx orqasida to'g'ri IP olish uchun
+
+// Xavfsizlik header'lari. CSP hozircha o'chirilgan (SPA/Google fontlar/OAuth'ni
+// buzmasligi uchun) — keyinchalik aniq sozlanadi. Rasmlar cross-origin yuklanadi.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+
+// CORS: dev'da LAN'dagi qurilmalar (origin aks ettiriladi); prod'da faqat CLIENT_URL
+app.use(
+  cors({
+    origin: config.production ? [config.clientUrl] : true,
+    credentials: true,
+  }),
+);
 app.use(express.json({ limit: "1mb" }));
 
-// Yuklangan fayllar (PDF sahifalari rasmlari)
-app.use("/uploads", express.static(UPLOADS_DIR));
+// ---- Rate limiting (brute-force / xarajat / DoS himoyasi) ----
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // 15 daqiqada IP boshiga 30 urinish (login/register)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring." },
+});
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20, // soatiga 20 PDF→AI (Claude xarajati)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "AI generatsiyasi limiti. Birozdan keyin urinib ko'ring." },
+});
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+// /uploads statik fayllarini brute-force yuklab olishdan himoyalash
+// (To'liq auth — S3/MinIO ga o'tganda signed URL bilan hal qilinadi)
+const uploadsStaticLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300, // daqiqada 300 ta rasm (o'yin paytida bir xonada 30 o'quvchi ~10 rasm)
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+// Mualliflashtirilgan maxsus endpointlarga (auth router'idan oldin) qo'llanadi
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/google", authLimiter);
+app.use("/api/pdf", aiLimiter);
+app.use("/api/upload", uploadLimiter);
+
+// Yuklangan fayllar (PDF sahifalari rasmlari) — inline, sniff'siz
+// Rate-limited: ommaviy yuklab olishni cheklaydi
+app.use(
+  "/uploads",
+  uploadsStaticLimiter,
+  express.static(UPLOADS_DIR, {
+    setHeaders: (res) => {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("Cache-Control", "private, max-age=86400"); // 1 kun kesh
+    },
+  }),
+);
 
 // Sog'liq tekshiruvi
 app.get("/api/health", (_req, res) => {

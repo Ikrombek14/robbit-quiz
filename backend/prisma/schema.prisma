@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -48,6 +48,9 @@ model Quiz {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   slides      Slide[]
+
+  @@index([teacherId])
+  @@index([createdAt])
 }
 
 // Universal "slayd" — ham kontent slayd, ham savol bo'lishi mumkin.
@@ -66,6 +69,8 @@ model Slide {
   notes     String?
   timeLimit Int     @default(20)
   points    Int     @default(1000)
+
+  @@index([quizId, order])
 }
 
 // O'ynalgan o'yin natijasi (hisobot uchun)
@@ -80,6 +85,9 @@ model GameRecord {
   questionStats String             @default("[]") // JSON: [{index,text,correct,total}]
   playedAt      DateTime           @default(now())
   players       GamePlayerRecord[]
+
+  @@index([teacherId, playedAt])
+  @@index([quizId])
 }
 
 model GamePlayerRecord {
@@ -91,6 +99,8 @@ model GamePlayerRecord {
   correctCount  Int        @default(0)
   totalAnswered Int        @default(0)
   details       String     @default("[]") // TEST rejimi: har savol bo'yicha JSON [{index,text,answer,correct,timeMs,correctAns}]
+
+  @@index([gameId])
 }
 
 // Ustozlar yo'riqnomasi: bo'limlarga ajratilgan qo'llanma

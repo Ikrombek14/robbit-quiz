@@ -11,6 +11,7 @@ import ActivityDetail from "./pages/ActivityDetail";
 import QuizEditor from "./pages/QuizEditor";
 import Host from "./pages/Host";
 import PlayShared from "./pages/PlayShared";
+import HostShare from "./pages/HostShare";
 import Reports from "./pages/Reports";
 import ReportDetail from "./pages/ReportDetail";
 import Curriculum from "./pages/Curriculum";
@@ -43,6 +44,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/join" element={<Join />} />
       <Route path="/s/:id" element={<PlayShared />} />
+      <Route path="/h/:id" element={<HostShare />} />
       <Route path="/admin" element={<AdminLogin />} />
       <Route path="/login" element={<AdminLogin />} />
       <Route path="/register" element={<Register />} />

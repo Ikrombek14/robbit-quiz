@@ -353,8 +353,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       cb?.({ error: "Avtorizatsiya kerak" });
       return;
     }
-    const quiz = await prisma.quiz.findFirst({
-      where: { id: data.quizId, teacherId },
+    // Har qanday kirgan ustoz istalgan quizni host qila oladi (link orqali ulashish uchun).
+    // teacherId = host qiluvchi (taqdimotchi) — hisobot unga tegishli; quiz egasi o'zgarmaydi.
+    const quiz = await prisma.quiz.findUnique({
+      where: { id: data.quizId },
       include: { slides: { orderBy: { order: "asc" } } },
     });
     if (!quiz || quiz.slides.length === 0) {

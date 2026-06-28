@@ -91,6 +91,7 @@ jobs:
             cd $APP
             npm install --omit=dev
             npx prisma generate
+            npx prisma migrate resolve --rolled-back 20260619053018_init 2>/dev/null || true
             npx prisma migrate deploy
             node prisma/seed-admin.mjs '$ADMIN_EMAIL' '$ADMIN_PASSWORD' || true
             pm2 restart robbit-quiz 2>/dev/null || pm2 start $APP/ecosystem.config.cjs

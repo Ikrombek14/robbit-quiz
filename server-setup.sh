@@ -45,15 +45,11 @@ DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'robbit') THEN
     CREATE USER robbit WITH PASSWORD '$DB_PASS';
+  ELSE
+    ALTER USER robbit WITH PASSWORD '$DB_PASS';
   END IF;
 END
 \$\$;
-
-SELECT 'baza mavjud' FROM pg_database WHERE datname = 'robbit_quiz'
-UNION ALL
-SELECT 'baza yaratildi' FROM (
-  SELECT pg_catalog.pg_database.datname FROM pg_catalog.pg_database WHERE datname = 'robbit_quiz'
-) t WHERE false;
 EOF
 
 sudo -u postgres psql -c "CREATE DATABASE robbit_quiz OWNER robbit;" 2>/dev/null || echo "Baza allaqachon mavjud"

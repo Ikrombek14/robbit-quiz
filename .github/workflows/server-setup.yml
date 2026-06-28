@@ -1,0 +1,57 @@
+name: Server sozlash (bir martalik)
+
+on:
+  workflow_dispatch:  # Faqat qo'lda ishga tushiriladi
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: sshpass o'rnatish
+        run: sudo apt-get install -y sshpass
+
+      - name: Server holati tekshirish
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASS }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "echo '=== Server ===' && uname -a && df -h / | tail -1 && free -h | grep Mem"
+
+      - name: server-setup.sh yuborish va ishga tushirish
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASS }}
+        run: |
+          # Skriptni serverga ko'chiramiz
+          sshpass -e scp -o StrictHostKeyChecking=no \
+            server-setup.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/root/server-setup.sh
+
+          # Ishga tushiramiz (HTTPS uchun "n" javob beramiz — DNS hali tayyor emas bo'lishi mumkin)
+          sshpass -e ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "chmod +x /root/server-setup.sh && echo 'n' | bash /root/server-setup.sh 2>&1"
+
+      - name: SSH private key'ni secrets ga saqlash uchun ko'rsatish
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASS }}
+        run: |
+          echo "=== GitHub Actions SSH Private Key ==="
+          sshpass -e ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cat /root/.ssh/github_actions && echo '=== Public Key ===' && cat /root/.ssh/github_actions.pub"
+          echo ""
+          echo ">>> Bu private key'ni GitHub Secrets ga SERVER_SSH_KEY nomi bilan qo'shing!"
+
+      - name: DB credentials ko'rsatish
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASS }}
+        run: |
+          echo "=== DB Credentials ==="
+          sshpass -e ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "cat /root/db_credentials.txt"
+          echo ""
+          echo ">>> Bu DATABASE_URL ni .env.production ga qo'shing va SERVER_DB_URL secrets ga saqlang!"

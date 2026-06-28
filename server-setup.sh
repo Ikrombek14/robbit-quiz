@@ -72,7 +72,7 @@ systemctl start nginx
 cat > /etc/nginx/sites-available/robbit-quiz <<'NGINX'
 server {
     listen 80;
-    server_name quiz.robbit.uz;
+    server_name robbitquiz.uz www.robbitquiz.uz;
 
     # Bot/crawler'lardan himoya
     location = /robots.txt { return 200 "User-agent: *\nDisallow: /api/\n"; }
@@ -106,7 +106,7 @@ NGINX
 ln -sf /etc/nginx/sites-available/robbit-quiz /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
-echo "Nginx sozlandi: http://quiz.robbit.uz"
+echo "Nginx sozlandi: http://robbitquiz.uz"
 
 # ---------- 6. HTTPS (Let's Encrypt) ----------
 echo "[6/7] HTTPS (certbot) sozlanmoqda..."
@@ -116,7 +116,7 @@ echo ""
 echo ">>> Domen DNS sozlanganmi? (quiz.robbit.uz → 157.173.114.153)"
 read -p ">>> HTTPS o'rnatilsinmi? (y/n): " yn
 if [ "$yn" = "y" ]; then
-    certbot --nginx -d quiz.robbit.uz --non-interactive --agree-tos -m admin@robbit.uz
+    certbot --nginx -d robbitquiz.uz -d www.robbitquiz.uz --non-interactive --agree-tos -m admin@robbitquiz.uz
     systemctl enable certbot.timer
     echo "HTTPS tayyor! Avtomatik yangilanadi."
 else

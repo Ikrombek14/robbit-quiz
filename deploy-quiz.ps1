@@ -84,5 +84,5 @@ Set-Location $root
 
 Write-Host ""
 Write-Host "===== Deploy tugadi! =====" -ForegroundColor Green
-Write-Host "Sayt: https://quiz.robbit.uz" -ForegroundColor Cyan
+Write-Host "Sayt: https://robbitquiz.uz" -ForegroundColor Cyan
 Write-Host ""

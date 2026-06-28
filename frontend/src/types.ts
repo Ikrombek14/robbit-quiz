@@ -146,6 +146,19 @@ export interface Teacher {
   name: string;
   picture?: string | null;
   isAdmin?: boolean;
+  approved?: boolean; // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa
+}
+
+// Rasmiy ustozlar ro'yxati (roster) elementi
+export interface RosterTeacher {
+  id: string;
+  name: string;
+  branch?: string | null;
+  category?: string | null;
+  phone?: string | null;
+  username?: string | null;
+  status?: string | null;
+  order: number;
 }
 
 export interface LeaderRow {

@@ -5,13 +5,25 @@ import { api } from "../api";
 import type { Quiz } from "../types";
 import { getTheme, toggleTheme, type Theme } from "../theme";
 
-const NAV = [
+interface NavItem {
+  key: string;
+  label: string;
+  icon: string;
+  path: string;
+  mobileHide?: boolean;
+  show?: (t: { isAdmin?: boolean; approved?: boolean } | null) => boolean;
+}
+
+// approved (yoki admin) bo'lsagina O'quv dastur / Yo'riqnoma ko'rinadi
+const canApproved = (t: { isAdmin?: boolean; approved?: boolean } | null) => !!(t?.isAdmin || t?.approved);
+
+const NAV: NavItem[] = [
   { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false },
   { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library", mobileHide: false },
   { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true },
-  { key: "students", label: "O'quvchilar", icon: "group", path: "/students", soon: true, mobileHide: true },
-  { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false },
-  { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false },
+  { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true },
+  { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false, show: canApproved },
+  { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canApproved },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -44,19 +56,17 @@ export default function Shell({ children }: { children: ReactNode }) {
           Yaratish
         </button>
         <nav className="side-nav">
-          {NAV.map((n) => {
+          {NAV.filter((n) => !n.show || n.show(teacher)).map((n) => {
             const active = location.pathname === n.path || location.pathname.startsWith(n.path + "/");
             return (
               <button
                 key={n.key}
                 className={`side-link ${active ? "active" : ""} ${n.mobileHide ? "side-link-hide-mobile" : ""}`}
-                disabled={n.soon}
-                onClick={() => !n.soon && navigate(n.path)}
-                title={n.soon ? "Tez orada" : n.label}
+                onClick={() => navigate(n.path)}
+                title={n.label}
               >
                 <span className="material-symbols-outlined">{n.icon}</span>
                 <span>{n.label}</span>
-                {n.soon && <span className="soon-badge">tez orada</span>}
               </button>
             );
           })}

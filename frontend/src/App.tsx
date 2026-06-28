@@ -15,11 +15,25 @@ import Reports from "./pages/Reports";
 import ReportDetail from "./pages/ReportDetail";
 import Curriculum from "./pages/Curriculum";
 import Guide from "./pages/Guide";
+import Teachers from "./pages/Teachers";
+import Shell from "./components/Shell";
 
-function Protected({ children }: { children: ReactNode }) {
+function Protected({ children, approved }: { children: ReactNode; approved?: boolean }) {
   const { teacher, loading } = useAuth();
   if (loading) return <div className="container">Yuklanmoqda…</div>;
   if (!teacher) return <Navigate to="/admin" replace />;
+  // approved talab qilinsa va user roster'da yo'q bo'lsa — ruxsat yo'q
+  if (approved && !(teacher.isAdmin || teacher.approved)) {
+    return (
+      <Shell>
+        <div className="card center" style={{ marginTop: 40 }}>
+          <div style={{ fontSize: 44 }}>🔒</div>
+          <h2 style={{ marginTop: 8 }}>Ruxsat yo'q</h2>
+          <p className="muted">Bu bo'lim faqat ro'yxatdagi (tasdiqlangan) ustozlar uchun. Admin bilan bog'laning.</p>
+        </div>
+      </Shell>
+    );
+  }
   return <>{children}</>;
 }
 
@@ -40,8 +54,9 @@ export default function App() {
       <Route path="/host/:quizId" element={<Protected><Host /></Protected>} />
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />
-      <Route path="/curriculum" element={<Protected><Curriculum /></Protected>} />
-      <Route path="/guide" element={<Protected><Guide /></Protected>} />
+      <Route path="/curriculum" element={<Protected approved><Curriculum /></Protected>} />
+      <Route path="/guide" element={<Protected approved><Guide /></Protected>} />
+      <Route path="/teachers" element={<Protected><Teachers /></Protected>} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

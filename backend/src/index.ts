@@ -16,6 +16,7 @@ import { publicRouter } from "./routes/public.js";
 import { curriculumRouter } from "./routes/curriculum.js";
 import { guideRouter } from "./routes/guide.js";
 import { searchRouter } from "./routes/search.js";
+import { teachersRouter } from "./routes/teachers.js";
 
 const app = express();
 // Dev'da LAN'dagi har qanday qurilma ulanishi uchun origin'ni aks ettiramiz
@@ -41,6 +42,7 @@ app.use("/api/public", publicRouter);
 app.use("/api/curriculum", curriculumRouter);
 app.use("/api/guide", guideRouter);
 app.use("/api/search", searchRouter);
+app.use("/api/teachers", teachersRouter);
 
 // Production: tayyor frontend'ni (statik) shu serverdan beramiz — bitta port, bitta origin
 if (config.production) {

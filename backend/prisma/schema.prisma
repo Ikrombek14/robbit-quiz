@@ -17,8 +17,25 @@ model Teacher {
   name      String
   picture   String? // Google avatar
   isAdmin   Boolean  @default(false)
+  approved  Boolean  @default(false) // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa true
   createdAt DateTime @default(now())
   quizzes   Quiz[]
+}
+
+// Rasmiy ustozlar ro'yxati (CSV'dan import qilinadi). Admin boshqaradi.
+// Foydalanuvchi ismi-familiyasi shu yerdagi name'ga (nameKey orqali) mos kelsa
+// — u "approved" bo'ladi va O'quv reja / Yo'riqnomaga kira oladi.
+model RosterTeacher {
+  id        String   @id @default(cuid())
+  name      String // "Bobonova Gulnoza"
+  branch    String? // Filial
+  category  String? // Hozirgi toifasi (1/2/3)
+  phone     String?
+  username  String?
+  status    String? // CSV status / guruh turi
+  nameKey   String   @unique // normalize(name) — moslik va dedupe uchun
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
 }
 
 model Quiz {

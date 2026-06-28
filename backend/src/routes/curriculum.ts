@@ -1,7 +1,7 @@
 import { Router, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, type AuthedRequest } from "../auth.js";
+import { requireAuth, requireApproved, type AuthedRequest } from "../auth.js";
 
 export const curriculumRouter = Router();
 curriculumRouter.use(requireAuth);
@@ -28,8 +28,8 @@ const lessonSchema = z.object({
   quizId: z.string().nullable().optional(),
 });
 
-// Ro'yxat — filter bilan (barcha o'qituvchilar ko'radi)
-curriculumRouter.get("/", async (req, res) => {
+// Ro'yxat — filter bilan (faqat roster'da tasdiqlangan / admin)
+curriculumRouter.get("/", requireApproved, async (req, res) => {
   const { subject, ageGroup, year, section } = req.query;
   const where: Record<string, unknown> = {};
   if (subject) where.subject = String(subject);

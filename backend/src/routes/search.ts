@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requireApproved } from "../auth.js";
 
 export const searchRouter = Router();
-searchRouter.use(requireAuth);
+searchRouter.use(requireAuth, requireApproved);
 
 // Markdown belgilarini olib tashlab, qidiruv atrofidan qisqa parcha (snippet) yasaydi
 function makeSnippet(body: string, ql: string): string {

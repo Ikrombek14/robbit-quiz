@@ -23,3 +23,6 @@ backend/uploads/
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Roster CSV (shaxsiy ma'lumot) — repoga qo'shilmaydi
+*.csv

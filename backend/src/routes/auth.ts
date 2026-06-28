@@ -5,10 +5,15 @@ import { OAuth2Client } from "google-auth-library";
 import { prisma } from "../prisma.js";
 import { config } from "../config.js";
 import { signToken, requireAuth, type AuthedRequest } from "../auth.js";
+import { computeApproved } from "../lib/approval.js";
 
 export const authRouter = Router();
 
 const googleClient = new OAuth2Client(config.googleClientId);
+
+function publicTeacher(t: { id: string; email: string; name: string; picture?: string | null; isAdmin: boolean; approved: boolean }) {
+  return { id: t.id, email: t.email, name: t.name, picture: t.picture ?? null, isAdmin: t.isAdmin, approved: t.approved };
+}
 
 // Google email bilan kirish: frontend ID token (credential) yuboradi
 authRouter.post("/google", async (req, res) => {
@@ -36,19 +41,21 @@ authRouter.post("/google", async (req, res) => {
     const picture = payload.picture ?? null;
 
     const isAdmin = config.adminEmails.includes(email);
+    const approved = await computeApproved(email, name);
     let teacher = await prisma.teacher.findUnique({ where: { email } });
     if (!teacher) {
-      teacher = await prisma.teacher.create({ data: { email, name, picture, password: null, isAdmin } });
+      teacher = await prisma.teacher.create({ data: { email, name, picture, password: null, isAdmin, approved } });
     } else {
       const updates: Record<string, unknown> = {};
       if (picture && teacher.picture !== picture) updates.picture = picture;
       if (teacher.isAdmin !== isAdmin) updates.isAdmin = isAdmin;
+      if (teacher.approved !== approved) updates.approved = approved;
       if (Object.keys(updates).length) {
         teacher = await prisma.teacher.update({ where: { id: teacher.id }, data: updates });
       }
     }
     const token = signToken(teacher.id);
-    res.json({ token, teacher: { id: teacher.id, email: teacher.email, name: teacher.name, picture: teacher.picture, isAdmin: teacher.isAdmin } });
+    res.json({ token, teacher: publicTeacher(teacher) });
   } catch {
     res.status(401).json({ error: "Google token tekshirilmadi" });
   }
@@ -74,9 +81,10 @@ authRouter.post("/register", async (req, res) => {
   }
   const hash = await bcrypt.hash(password, 10);
   const isAdmin = config.adminEmails.includes(email);
-  const teacher = await prisma.teacher.create({ data: { email, password: hash, name, isAdmin } });
+  const approved = await computeApproved(email, name);
+  const teacher = await prisma.teacher.create({ data: { email, password: hash, name, isAdmin, approved } });
   const token = signToken(teacher.id);
-  res.json({ token, teacher: { id: teacher.id, email, name, isAdmin: teacher.isAdmin } });
+  res.json({ token, teacher: publicTeacher(teacher) });
 });
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string() });
@@ -93,19 +101,21 @@ authRouter.post("/login", async (req, res) => {
     res.status(401).json({ error: "Email yoki parol xato" });
     return;
   }
-  // isAdmin ni ham yangilash (email admin ro'yxatida bo'lsa)
+  // isAdmin va approved ni qayta hisoblab yangilaymiz
   const isAdmin = config.adminEmails.includes(teacher.email);
-  if (teacher.isAdmin !== isAdmin) {
-    await prisma.teacher.update({ where: { id: teacher.id }, data: { isAdmin } });
+  const approved = await computeApproved(teacher.email, teacher.name);
+  let t = teacher;
+  if (teacher.isAdmin !== isAdmin || teacher.approved !== approved) {
+    t = await prisma.teacher.update({ where: { id: teacher.id }, data: { isAdmin, approved } });
   }
-  const token = signToken(teacher.id);
-  res.json({ token, teacher: { id: teacher.id, email: teacher.email, name: teacher.name, isAdmin } });
+  const token = signToken(t.id);
+  res.json({ token, teacher: publicTeacher(t) });
 });
 
 authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   const teacher = await prisma.teacher.findUnique({
     where: { id: req.teacherId },
-    select: { id: true, email: true, name: true, picture: true, isAdmin: true },
+    select: { id: true, email: true, name: true, picture: true, isAdmin: true, approved: true },
   });
-  res.json({ teacher });
+  res.json({ teacher: teacher ? publicTeacher(teacher) : null });
 });

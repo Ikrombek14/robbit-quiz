@@ -1,7 +1,7 @@
 import { Router, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, type AuthedRequest } from "../auth.js";
+import { requireAuth, requireApproved, type AuthedRequest } from "../auth.js";
 
 export const guideRouter = Router();
 guideRouter.use(requireAuth);
@@ -23,8 +23,8 @@ const sectionSchema = z.object({
   icon: z.string().nullable().optional(),
 });
 
-// Ro'yxat — barcha o'qituvchilar ko'radi
-guideRouter.get("/", async (_req, res) => {
+// Ro'yxat — faqat roster'da tasdiqlangan / admin
+guideRouter.get("/", requireApproved, async (_req, res) => {
   const sections = await prisma.guideSection.findMany({ orderBy: { order: "asc" } });
   res.json({ sections });
 });

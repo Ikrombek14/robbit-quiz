@@ -48,16 +48,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: |
-          cat > /tmp/app.env <<EOF
-          NODE_ENV=production
-          PORT=4000
-          CLIENT_URL=https://robbitquiz.uz
-          DATABASE_URL=postgresql://robbit:${DB_PASS}@localhost:5432/robbit_quiz
-          JWT_SECRET=${JWT_SECRET}
-          ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-          GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-          ADMIN_EMAILS=teamlead.robbit@gmail.com
-          EOF
+          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=postgresql://robbit:%s@localhost:5432/robbit_quiz\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com\n' \
+            "$DB_PASS" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" > /tmp/app.env
 
       - name: sshpass o'rnatish
         run: sudo apt-get install -y sshpass
@@ -89,22 +81,24 @@ jobs:
             fi
             systemctl enable postgresql --now 2>/dev/null || true
 
-            # pg_hba.conf — parol (md5) autentifikatsiyasiga ruxsat
-            PG_HBA=\$(sudo -u postgres psql -tAc \"SHOW hba_file\")
-            if ! grep -q \"^host.*robbit_quiz.*md5\" \"\$PG_HBA\" 2>/dev/null; then
-              echo \"host robbit_quiz robbit 127.0.0.1/32 md5\" | sudo tee -a \"\$PG_HBA\"
-              echo \"host robbit_quiz robbit ::1/128 md5\" | sudo tee -a \"\$PG_HBA\"
-              sudo systemctl reload postgresql
+            # pg_hba.conf — trust auth (localhost, firewall orqasida xavfsiz)
+            PG_HBA=\$(sudo -u postgres psql -tAc 'SHOW hba_file')
+            if ! grep -q 'robbit_quiz.*trust' \"\$PG_HBA\" 2>/dev/null; then
+              sed -i '1s/^/host robbit_quiz robbit 127.0.0.1\/32 trust\nhost robbit_quiz robbit ::1\/128 trust\n/' \"\$PG_HBA\"
+              systemctl reload postgresql
             fi
 
             # DB va user yaratish (agar yo'q bo'lsa)
-            sudo -u postgres psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='robbit'\" | grep -q 1 || \
-              sudo -u postgres psql -c \"CREATE USER robbit WITH PASSWORD '$DB_PASS'\"
-            sudo -u postgres psql -c \"ALTER USER robbit WITH PASSWORD '$DB_PASS'\" 2>/dev/null || true
+            sudo -u postgres psql -c \"DO \\\$\\\$ BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='robbit') THEN
+                CREATE USER robbit WITH PASSWORD '$DB_PASS';
+              END IF;
+            END \\\$\\\$;\"
+            sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE robbit_quiz TO robbit\" 2>/dev/null || true
             sudo -u postgres psql -tc \"SELECT 1 FROM pg_database WHERE datname='robbit_quiz'\" | grep -q 1 || \
               sudo -u postgres createdb -O robbit robbit_quiz
 
-            # Eski fayllarni tozalash, yangi deploy
+            # Eski fayllarni tozalash
             rm -rf $APP/prisma/migrations $APP/dist $APP/public
             tar -xzf /tmp/robbit-quiz.tgz -C $APP
             rm -f /tmp/robbit-quiz.tgz
@@ -113,8 +107,8 @@ jobs:
             npm install --omit=dev
             npx prisma generate
 
-            # Failed migratsiyalarni tozalab keyin deploy
-            sudo -u postgres psql robbit_quiz -c \"DELETE FROM \\\"_prisma_migrations\\\" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL\" 2>/dev/null || true
+            # Failed migratsiyalarni tozalash
+            sudo -u postgres psql robbit_quiz -c 'DELETE FROM \"_prisma_migrations\" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL' 2>/dev/null || true
             npx prisma migrate deploy
 
             node prisma/seed-admin.mjs '$ADMIN_EMAIL' '$ADMIN_PASSWORD' || true

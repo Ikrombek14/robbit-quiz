@@ -91,11 +91,21 @@ jobs:
             set -e
             DB_RAW_URL=\$(grep DATABASE_URL /root/db_credentials.txt | cut -d= -f2- | tr -d '\"')
             DB_PW=\$(echo \"\$DB_RAW_URL\" | sed 's|postgresql://[^:]*:\([^@]*\)@.*|\1|')
+            echo \"DB_PW uzunligi: \${#DB_PW}\"
+
             echo 'Updating PostgreSQL password via peer auth...'
-            sudo -u postgres psql < /dev/null -c \"ALTER USER robbit WITH PASSWORD '\$DB_PW';\" && echo 'Password updated OK' || echo 'Password update warning (may already be correct)'
+            sudo -u postgres psql < /dev/null -c \"ALTER USER robbit WITH PASSWORD '\$DB_PW';\" && echo 'Password updated OK' || echo 'Password update failed!'
+
+            echo 'Testing DB connection directly...'
+            PGPASSWORD=\"\$DB_PW\" psql -U robbit -h 127.0.0.1 -d robbit_quiz -c \"SELECT 'connected' AS status;\" < /dev/null \
+              && echo '✅ DB connection OK' \
+              || { echo '❌ DB connection FAILED'; exit 1; }
+
             mkdir -p $APP
             tar -xzf /tmp/robbit-quiz.tgz -C $APP
             rm -f /tmp/robbit-quiz.tgz
+            echo \"--- .env DATABASE_URL ---\"
+            grep DATABASE_URL $APP/.env | sed 's|://.*:.*@|://USER:***@|g'
             cd $APP
             npm install --omit=dev
             npx prisma generate

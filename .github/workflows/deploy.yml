@@ -41,15 +41,24 @@ jobs:
           rm -f _deploy/prisma/dev.db
           tar -czf robbit-quiz.tgz -C _deploy .
 
+      - name: .env fayl tayyorlash (Neon DB URL secretdan)
+        env:
+          DB_URL: ${{ secrets.SERVER_DB_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        run: |
+          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=%s\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com\n' \
+            "$DB_URL" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" \
+            > /tmp/app.env
+          echo "✅ .env tayyor | DATABASE_URL host: $(echo $DB_URL | sed 's|.*@\([^/]*\)/.*|\1|')"
+
       - name: sshpass o'rnatish
         run: sudo apt-get install -y sshpass
 
       - name: Serverga yuborish va o'rnatish
         env:
           SSHPASS: ${{ secrets.SERVER_PASS }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           ADMIN_EMAIL: teamlead.robbit@gmail.com
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
@@ -68,60 +77,16 @@ jobs:
             SSH="sshpass -e ssh $SSH_OPTS"
           fi
 
-          # Serverdan DATABASE_URL ni o'qiymiz (server-setup.sh da yaratilgan)
-          DB_URL=$($SSH $USER@$HOST "grep DATABASE_URL /root/db_credentials.txt 2>/dev/null | cut -d= -f2- | tr -d '\"'" || echo "")
-          if [ -z "$DB_URL" ]; then
-            echo "❌ XATO: /root/db_credentials.txt topilmadi! server-setup.yml ni avval ishga tushiring."
-            exit 1
-          fi
-          echo "✅ DATABASE_URL serverdan olindi"
-
-          # .env fayl tayyorlash
-          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=%s\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com\n' \
-            "$DB_URL" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" \
-            > /tmp/app.env
-
-          # Papka yaratish va fayllarni yuborish
+          # Papka va fayllarni yuborish
           $SSH $USER@$HOST "mkdir -p $APP"
           $SCP robbit-quiz.tgz $USER@$HOST:/tmp/robbit-quiz.tgz
           $SCP /tmp/app.env    $USER@$HOST:$APP/.env
 
-          # O'rnatish (PostgreSQL parolini ham server-side peer auth bilan yangilaymiz)
+          # O'rnatish
           $SSH $USER@$HOST "
             set -e
-            DB_RAW_URL=\$(grep DATABASE_URL /root/db_credentials.txt | cut -d= -f2- | tr -d '\"')
-            DB_PW=\$(echo \"\$DB_RAW_URL\" | sed 's|postgresql://[^:]*:\([^@]*\)@.*|\1|')
-            echo \"DB_PW uzunligi: \${#DB_PW}\"
-
-            echo 'Configuring PostgreSQL auth (scram-sha-256)...'
-            PG_VER=\$(ls /etc/postgresql/ | tail -1)
-            PG_CONF=\"/etc/postgresql/\$PG_VER/main\"
-            echo \"PostgreSQL version: \$PG_VER\"
-
-            # postgresql.conf: password_encryption = scram-sha-256
-            sed -i \"s/#\\?password_encryption\\s*=.*/password_encryption = scram-sha-256/\" \"\$PG_CONF/postgresql.conf\"
-            grep -q '^password_encryption' \"\$PG_CONF/postgresql.conf\" || echo 'password_encryption = scram-sha-256' >> \"\$PG_CONF/postgresql.conf\"
-
-            # pg_hba.conf: robbit user uchun host ulanish (agar yo'q bo'lsa)
-            grep -q 'robbit_quiz.*robbit' \"\$PG_CONF/pg_hba.conf\" || \
-              sed -i '1s|^|host    robbit_quiz    robbit    127.0.0.1/32    scram-sha-256\nhost    robbit_quiz    robbit    ::1/128    scram-sha-256\n|' \"\$PG_CONF/pg_hba.conf\"
-
-            # Reload PostgreSQL
-            pg_ctlcluster \$PG_VER main reload && echo 'PostgreSQL reloaded'
-
-            echo 'Updating PostgreSQL password (scram-sha-256 stored)...'
-            sudo -u postgres psql < /dev/null -c \"ALTER USER robbit WITH PASSWORD '\$DB_PW';\" && echo 'Password updated OK' || echo 'Password update failed!'
-
-            echo 'Testing DB connection directly...'
-            PGPASSWORD=\"\$DB_PW\" psql -U robbit -h 127.0.0.1 -d robbit_quiz -c \"SELECT 'connected' AS status;\" < /dev/null \
-              && echo '✅ DB connection OK' \
-              || { echo '❌ DB connection FAILED'; exit 1; }
-
-            mkdir -p $APP
             tar -xzf /tmp/robbit-quiz.tgz -C $APP
             rm -f /tmp/robbit-quiz.tgz
-            echo \"--- .env DATABASE_URL ---\"
-            grep DATABASE_URL $APP/.env | sed 's|://.*:.*@|://USER:***@|g'
             cd $APP
             npm install --omit=dev
             npx prisma generate
@@ -130,5 +95,5 @@ jobs:
             pm2 restart robbit-quiz 2>/dev/null || pm2 start $APP/ecosystem.config.cjs
             pm2 save
             echo '✅ Deploy tugadi'
-            pm2 logs robbit-quiz --lines 15 --nostream
+            pm2 logs robbit-quiz --lines 10 --nostream
           "

@@ -93,7 +93,23 @@ jobs:
             DB_PW=\$(echo \"\$DB_RAW_URL\" | sed 's|postgresql://[^:]*:\([^@]*\)@.*|\1|')
             echo \"DB_PW uzunligi: \${#DB_PW}\"
 
-            echo 'Updating PostgreSQL password via peer auth...'
+            echo 'Configuring PostgreSQL auth (scram-sha-256)...'
+            PG_VER=\$(ls /etc/postgresql/ | tail -1)
+            PG_CONF=\"/etc/postgresql/\$PG_VER/main\"
+            echo \"PostgreSQL version: \$PG_VER\"
+
+            # postgresql.conf: password_encryption = scram-sha-256
+            sed -i \"s/#\\?password_encryption\\s*=.*/password_encryption = scram-sha-256/\" \"\$PG_CONF/postgresql.conf\"
+            grep -q '^password_encryption' \"\$PG_CONF/postgresql.conf\" || echo 'password_encryption = scram-sha-256' >> \"\$PG_CONF/postgresql.conf\"
+
+            # pg_hba.conf: robbit user uchun host ulanish (agar yo'q bo'lsa)
+            grep -q 'robbit_quiz.*robbit' \"\$PG_CONF/pg_hba.conf\" || \
+              sed -i '1s|^|host    robbit_quiz    robbit    127.0.0.1/32    scram-sha-256\nhost    robbit_quiz    robbit    ::1/128    scram-sha-256\n|' \"\$PG_CONF/pg_hba.conf\"
+
+            # Reload PostgreSQL
+            pg_ctlcluster \$PG_VER main reload && echo 'PostgreSQL reloaded'
+
+            echo 'Updating PostgreSQL password (scram-sha-256 stored)...'
             sudo -u postgres psql < /dev/null -c \"ALTER USER robbit WITH PASSWORD '\$DB_PW';\" && echo 'Password updated OK' || echo 'Password update failed!'
 
             echo 'Testing DB connection directly...'

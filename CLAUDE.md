@@ -35,6 +35,20 @@ va **bir xil funksiyani ikki marta yozmaslik** uchun:
   ma'lumotlar bor — **commit qilmang**. Asosiy usul baribir GitHub Actions.
 - Server: `root@157.173.114.153` · App: `/root/apps/robbit-quiz` · Domen: `robbitquiz.uz`
   · PM2: `robbit-quiz` (fork, 1 instance — game state in-memory).
+  · **Eslatma:** bu serverda boshqa loyihalar ham bor (zakovat-quiz, xodim-plus, unitedepc) —
+    shu sabab robbit PostgreSQL'i 5432 emas 5435 da.
+
+### 🛑 MA'LUMOT XAVFSIZLIGI (deploy ma'lumotni O'CHIRMASLIGI kerak)
+- **Prodда HECH QACHON** `prisma migrate dev` yoki `prisma migrate reset` ishlatmang —
+  ular drift bo'lsa **butun bazani o'chiradi**. Faqat `prisma migrate deploy` (forward-only,
+  ma'lumotni saqlaydi). Lokal dev uchun `npm run prisma:migrate`, prod uchun `prisma:deploy`.
+- **Avtomatik backup:** deploy har safar migratsiyadan OLDIN `pg_dump` oladi →
+  `/root/backups/robbit_quiz_<TS>.sql` (oxirgi 30 ta saqlanadi).
+  Tiklash: `sudo -u postgres psql -p 5435 robbit_quiz < /root/backups/<FAYL>.sql`.
+- Yangi migratsiya **faqat additiv** bo'lsin (`ADD COLUMN`, yangi jadval). Ustun/jadval
+  o'chirish ma'lumot yo'qotadi — ehtiyot bo'ling.
+- Tarixiy eslatma: dastlabki quizlar 5432→5435 klaster ko'chirishda bir marta yo'qolgan
+  (o'shanda backup yo'q edi). Endi backup bor — takrorlanmaydi.
 
 ## Commands
 

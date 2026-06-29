@@ -122,6 +122,18 @@ jobs:
             sudo -u postgres psql -p \$PG_PORT -tc \"SELECT 1 FROM pg_database WHERE datname='robbit_quiz'\" | grep -q 1 || \
               sudo -u postgres createdb -p \$PG_PORT -O robbit robbit_quiz
 
+            # --- AVTOMATIK BACKUP (migratsiyadan OLDIN) — ma'lumot yo'qolmasligi kafolati ---
+            # Har deployда to'liq pg_dump olinadi. Oxirgi 30 ta backup saqlanadi.
+            # Tiklash:  sudo -u postgres psql -p PORT robbit_quiz < /root/backups/FAYL.sql
+            mkdir -p /root/backups
+            BK_TS=\$(date +%Y%m%d_%H%M%S)
+            if sudo -u postgres pg_dump -p \$PG_PORT robbit_quiz > /root/backups/robbit_quiz_\$BK_TS.sql 2>/dev/null; then
+              echo \"✅ Backup: /root/backups/robbit_quiz_\$BK_TS.sql (\$(wc -c < /root/backups/robbit_quiz_\$BK_TS.sql) bayt)\"
+            else
+              echo \"⚠️ Backup olinmadi (baza bo'sh yoki yangi bo'lishi mumkin)\"
+            fi
+            ls -1t /root/backups/robbit_quiz_*.sql 2>/dev/null | tail -n +31 | xargs -r rm -f
+
             # Failed/yarim qolgan migratsiya yozuvlarini tozalash
             sudo -u postgres psql -p \$PG_PORT robbit_quiz -c 'DELETE FROM \"_prisma_migrations\" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL' 2>/dev/null || true
             # Jadvallar allaqachon bor, lekin migratsiya tarixi yo'q bo'lsa (P3005) — init'ni

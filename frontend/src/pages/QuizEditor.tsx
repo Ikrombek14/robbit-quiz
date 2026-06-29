@@ -48,6 +48,8 @@ export default function QuizEditor() {
   const [showPreview, setShowPreview] = useState(false);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState("");
+  const [waygroundOpen, setWaygroundOpen] = useState(false);
+  const [waygroundUrl, setWaygroundUrl] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const excelRef = useRef<HTMLInputElement>(null);
 
@@ -176,6 +178,45 @@ export default function QuizEditor() {
     }
   }
 
+  async function importWayground() {
+    const url = waygroundUrl.trim();
+    if (!url) return;
+    setWaygroundOpen(false);
+    setWaygroundUrl("");
+    setAddOpen(false);
+    setImporting(true);
+    setError("");
+    try {
+      setProgress("Wayground'dan yuklanmoqda…");
+      const r = await api<{
+        title: string;
+        slides: Slide[];
+        summary: { total: number; content: number; single: number; multiple: number; poll: number; open: number; other: number; skipped: number };
+      }>("/import/wayground", { method: "POST", body: JSON.stringify({ url }) });
+      setSlides((arr) => {
+        const next = [...arr, ...r.slides];
+        setSelected(arr.length);
+        return next;
+      });
+      const s = r.summary;
+      const variant = s.single + s.multiple;
+      setProgress(
+        `✅ ${s.total} slayd qo'shildi` +
+          (s.content ? ` — kontent: ${s.content}` : "") +
+          (variant ? `, savol: ${variant}` : "") +
+          (s.poll ? `, so'rovnoma: ${s.poll}` : "") +
+          (s.open ? `, yozma: ${s.open}` : "") +
+          (s.skipped ? ` (${s.skipped} o'tkazib yuborildi)` : ""),
+      );
+      setTimeout(() => setProgress(""), 6000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Quiz import xatosi");
+      setProgress("");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function save() {
     setSaving(true);
     setError("");
@@ -265,6 +306,7 @@ export default function QuizEditor() {
                       <button className="add-item" onClick={() => setAddQuestion(true)}>❓ Savol →</button>
                       <button className="add-item" onClick={() => fileRef.current?.click()}>📄 PDF import</button>
                       <button className="add-item" onClick={() => excelRef.current?.click()}>📊 Excel import</button>
+                      <button className="add-item" onClick={() => { setAddOpen(false); setWaygroundOpen(true); }}>🎮 Quiz import</button>
                     </>
                   )}
                 </div>
@@ -346,6 +388,39 @@ export default function QuizEditor() {
       )}
 
       {showPreview && <Preview title={title} slides={slides} onClose={() => setShowPreview(false)} />}
+
+      {waygroundOpen && (
+        <div className="modal-overlay" onClick={() => setWaygroundOpen(false)}>
+          <div className="card card-narrow" onClick={(e) => e.stopPropagation()}>
+            <div className="between">
+              <h3 style={{ margin: 0 }}>🎮 Quiz import (Wayground)</h3>
+              <button className="gs-close" onClick={() => setWaygroundOpen(false)} title="Yopish">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <p className="muted" style={{ marginTop: 8 }}>
+              Wayground (Quizizz) ochiq quiz havolasini joylang — savollar va variantlar shu yerga ko'chiriladi.
+            </p>
+            <input
+              autoFocus
+              placeholder="https://wayground.com/admin/presentation/..."
+              value={waygroundUrl}
+              onChange={(e) => setWaygroundUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") importWayground(); }}
+              style={{ width: "100%", marginTop: 8 }}
+            />
+            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              ⚠️ Quiz <b>public/shared</b> bo'lishi kerak. Yopiq (private) bo'lsa import ishlamaydi.
+            </p>
+            <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+              <button className="btn btn-ghost" onClick={() => setWaygroundOpen(false)}>Bekor</button>
+              <button className="btn" onClick={importWayground} disabled={!waygroundUrl.trim() || importing}>
+                <span className="material-symbols-outlined">download</span> Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -112,22 +112,24 @@ jobs:
             npm install --omit=dev
             npx prisma generate
 
-            # --- DIAGNOSTIKA (P1000 sababini aniqlash uchun) ---
-            echo '--- pg_hba (yuqori 12 qator) ---'
-            sudo -u postgres psql -tAc 'SHOW hba_file' | xargs -r head -12
-            echo '--- clusters / port ---'
-            (pg_lsclusters 2>/dev/null || true)
-            sudo -u postgres psql -tAc 'SHOW port' || true
-            echo '--- robbit roli ---'
-            sudo -u postgres psql -tAc \"SELECT rolname, rolcanlogin FROM pg_roles WHERE rolname='robbit'\" || true
-            echo '--- socket orqali robbit ulanishi ---'
-            sudo -u postgres psql 'postgresql://robbit@localhost:5432/robbit_quiz?host=/var/run/postgresql' -tAc 'SELECT current_user' || echo 'SOCKET ULANISH XATO'
-            echo '--- diagnostika tugadi ---'
+            # PostgreSQL cluster'i 5432 da bo'lmasligi mumkin (bu serverda 5435 da turibdi;
+            # 5432 ni boshqa narsa egallagan → P1000). Haqiqiy portni aniqlab, Prisma'ni
+            # o'sha cluster'ning unix socket'iga yo'naltiramiz (local trust — parolsiz, port-agnostik).
+            PG_PORT=\$(sudo -u postgres psql -tAc 'SHOW port' | tr -d '[:space:]')
+            echo \"PostgreSQL porti: \$PG_PORT\"
+            sed -i \"s#^DATABASE_URL=.*#DATABASE_URL=postgresql://robbit@localhost:\${PG_PORT}/robbit_quiz?host=/var/run/postgresql#\" $APP/.env
+            # robbit_quiz bazasi o'sha cluster'da borligini kafolatlash
+            sudo -u postgres psql -p \$PG_PORT -tc \"SELECT 1 FROM pg_database WHERE datname='robbit_quiz'\" | grep -q 1 || \
+              sudo -u postgres createdb -p \$PG_PORT -O robbit robbit_quiz
 
-            # Migratsiya: P3005 (jadvallar bor, tarix yo'q) holatini avtomatik hal qilish
-            npx prisma migrate resolve --applied 20260628104152_init 2>/dev/null || true
-            # Failed/yarim qolgan yozuvlarni tozalash
-            sudo -u postgres psql robbit_quiz -c 'DELETE FROM \"_prisma_migrations\" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL' 2>/dev/null || true
+            # Failed/yarim qolgan migratsiya yozuvlarini tozalash
+            sudo -u postgres psql -p \$PG_PORT robbit_quiz -c 'DELETE FROM \"_prisma_migrations\" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL' 2>/dev/null || true
+            # Jadvallar allaqachon bor, lekin migratsiya tarixi yo'q bo'lsa (P3005) — init'ni
+            # baseline qilamiz. Bo'sh bazada esa resolve QILMAYMIZ — migrate deploy hammasini quradi.
+            HAS_TABLE=\$(sudo -u postgres psql -p \$PG_PORT -d robbit_quiz -tAc \"SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='Teacher'\" | tr -d '[:space:]')
+            if [ \"\$HAS_TABLE\" = \"1\" ]; then
+              npx prisma migrate resolve --applied 20260628104152_init 2>/dev/null || true
+            fi
             npx prisma migrate deploy
 
             node prisma/seed-admin.mjs '$ADMIN_EMAIL' '$ADMIN_PASSWORD' || true

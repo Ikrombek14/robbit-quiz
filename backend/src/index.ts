@@ -1,3 +1,4 @@
+import "express-async-errors"; // async route'lardagi xatolarni Express error handler'ga yo'naltiradi (process qulamasin)
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -140,6 +141,22 @@ if (config.production) {
     res.sendFile(path.join(staticDir, "index.html"));
   });
 }
+
+// Global xato ishlovchisi (barcha route'lardan keyin). express-async-errors tufayli
+// async route'lardagi rejection'lar ham shu yerga keladi — process qulamaydi, mijozga 500 qaytadi.
+app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error(`❌ Route xatosi [${req.method} ${req.path}]:`, err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Server xatosi. Birozdan keyin qayta urinib ko'ring." });
+});
+
+// So'nggi himoya qatlami: kutilmagan xato process'ni O'CHIRMASIN (pm2 restart loop oldini olish).
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ unhandledRejection (process tirik qoladi):", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ uncaughtException (process tirik qoladi):", err);
+});
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {

@@ -149,6 +149,20 @@ export interface Teacher {
   approved?: boolean; // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa
 }
 
+// Saytga kirgan foydalanuvchi (Teacher account) — admin nazorat paneli uchun
+export interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  picture?: string | null;
+  isAdmin: boolean;
+  approved: boolean;
+  accessOverride: boolean | null; // null = avtomatik, true = berilgan, false = olib tashlangan
+  envAdmin: boolean; // ADMIN_EMAILS'dagi admin — huquqini panelda olib bo'lmaydi
+  quizCount: number;
+  createdAt: string;
+}
+
 // Rasmiy ustozlar ro'yxati (roster) elementi
 export interface RosterTeacher {
   id: string;

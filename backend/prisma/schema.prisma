@@ -18,6 +18,9 @@ model Teacher {
   picture   String? // Google avatar
   isAdmin   Boolean  @default(false)
   approved  Boolean  @default(false) // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa true
+  // Admin qo'lda bergan/olib tashlagan ustoz huquqi. null = avtomatik (roster yoki admin email
+  // bo'yicha). true = majburan berilgan, false = majburan olib tashlangan. approved'dan ustun.
+  accessOverride Boolean?
   createdAt DateTime @default(now())
   quizzes   Quiz[]
 }

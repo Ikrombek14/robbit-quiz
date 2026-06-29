@@ -20,6 +20,7 @@ import { curriculumRouter } from "./routes/curriculum.js";
 import { guideRouter } from "./routes/guide.js";
 import { searchRouter } from "./routes/search.js";
 import { teachersRouter } from "./routes/teachers.js";
+import { adminRouter } from "./routes/admin.js";
 
 const app = express();
 app.set("trust proxy", 1); // nginx orqasida to'g'ri IP olish uchun
@@ -120,6 +121,7 @@ app.use("/api/curriculum", curriculumRouter);
 app.use("/api/guide", guideRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/teachers", teachersRouter);
+app.use("/api/admin", adminRouter);
 
 // Production: tayyor frontend'ni (statik) shu serverdan beramiz — bitta port, bitta origin
 if (config.production) {

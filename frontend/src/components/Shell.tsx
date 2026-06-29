@@ -16,12 +16,15 @@ interface NavItem {
 
 // approved (yoki admin) bo'lsagina O'quv dastur / Yo'riqnoma ko'rinadi
 const canApproved = (t: { isAdmin?: boolean; approved?: boolean } | null) => !!(t?.isAdmin || t?.approved);
+// faqat admin ko'radi
+const isAdmin = (t: { isAdmin?: boolean } | null) => !!t?.isAdmin;
 
 const NAV: NavItem[] = [
   { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false },
   { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library", mobileHide: false },
   { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true },
   { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true },
+  { key: "users", label: "Foydalanuvchilar", icon: "manage_accounts", path: "/users", mobileHide: true, show: isAdmin },
   { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false, show: canApproved },
   { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canApproved },
 ];

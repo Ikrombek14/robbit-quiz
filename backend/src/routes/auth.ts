@@ -5,7 +5,7 @@ import { OAuth2Client } from "google-auth-library";
 import { prisma } from "../prisma.js";
 import { config } from "../config.js";
 import { signToken, requireAuth, type AuthedRequest } from "../auth.js";
-import { computeApproved } from "../lib/approval.js";
+import { computeApproved, isAdminEmail } from "../lib/approval.js";
 
 export const authRouter = Router();
 
@@ -40,9 +40,11 @@ authRouter.post("/google", async (req, res) => {
     const name = payload.name ?? email.split("@")[0];
     const picture = payload.picture ?? null;
 
-    const isAdmin = config.adminEmails.includes(email);
-    const approved = await computeApproved(email, name);
     let teacher = await prisma.teacher.findUnique({ where: { email } });
+    // Admin huquqi: env admin yoki DB'da qo'lda berilgan (qaytadan kirishda yo'qolmasin).
+    // Ustoz huquqi: accessOverride'ni hisobga olib hisoblanadi.
+    const isAdmin = isAdminEmail(email) || teacher?.isAdmin === true;
+    const approved = await computeApproved(email, name, teacher?.accessOverride);
     if (!teacher) {
       teacher = await prisma.teacher.create({ data: { email, name, picture, password: null, isAdmin, approved } });
     } else {
@@ -80,8 +82,8 @@ authRouter.post("/register", async (req, res) => {
     return;
   }
   const hash = await bcrypt.hash(password, 10);
-  const isAdmin = config.adminEmails.includes(email);
-  const approved = await computeApproved(email, name);
+  const isAdmin = isAdminEmail(email);
+  const approved = await computeApproved(email, name, null);
   const teacher = await prisma.teacher.create({ data: { email, password: hash, name, isAdmin, approved } });
   const token = signToken(teacher.id);
   res.json({ token, teacher: publicTeacher(teacher) });
@@ -101,9 +103,10 @@ authRouter.post("/login", async (req, res) => {
     res.status(401).json({ error: "Email yoki parol xato" });
     return;
   }
-  // isAdmin va approved ni qayta hisoblab yangilaymiz
-  const isAdmin = config.adminEmails.includes(teacher.email);
-  const approved = await computeApproved(teacher.email, teacher.name);
+  // isAdmin va approved ni qayta hisoblab yangilaymiz.
+  // env admin yoki DB'da qo'lda berilgan admin huquqi saqlanadi; ustoz huquqi override'ni hisobga oladi.
+  const isAdmin = isAdminEmail(teacher.email) || teacher.isAdmin === true;
+  const approved = await computeApproved(teacher.email, teacher.name, teacher.accessOverride);
   let t = teacher;
   if (teacher.isAdmin !== isAdmin || teacher.approved !== approved) {
     t = await prisma.teacher.update({ where: { id: teacher.id }, data: { isAdmin, approved } });

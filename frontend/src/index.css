@@ -954,3 +954,50 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
   .roster-row { grid-template-columns: 28px 1fr auto; }
   .roster-row > :nth-child(3), .roster-row > :nth-child(4) { display: none; }
 }
+
+/* ============================================================
+   UMUMIY RESPONSIVITY — barcha ekranlarga moslashuv
+   ============================================================ */
+
+/* Media va kontent hech qachon konteynerdan oshib chiqmasin */
+img, svg, video { max-width: 100%; height: auto; }
+.shell-main > * { min-width: 0; }
+
+/* Topbar (muharrir va h.k.) — torда o'ralsin */
+.topbar { flex-wrap: wrap; gap: 8px; }
+.topbar .row { flex-wrap: wrap; min-width: 0; }
+
+/* Ochiladigan menyular ekrandan oshib ketmasin */
+.share-menu { width: min(320px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
+.add-menu { max-width: 100%; }
+
+/* Modal kartalar baland bo'lsa — ichida skroll */
+.modal-overlay > .card { max-height: 90vh; overflow-y: auto; }
+
+/* Jadvallar juda torда — yon skroll (ma'lumot kesilmasin) */
+.roster-table { overflow-x: auto; }
+
+/* Planshet (<= 1024px) */
+@media (max-width: 1024px) {
+  .shell { grid-template-columns: 200px 1fr; }
+  .shell-main { padding: 22px 22px; }
+}
+
+/* Sidebar mobil rejimda — barcha bo'limlarga yetish uchun gorizontal skroll */
+@media (max-width: 700px) {
+  .side-nav { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .side-nav::-webkit-scrollbar { display: none; }
+  .side-link { flex: 0 0 auto; }
+  /* mobilда yashirilgan muhim bo'limlar (Sessiyalar/O'qituvchilar/Foydalanuvchilar) ham ko'rinsin */
+  .side-link-hide-mobile { display: flex !important; }
+}
+
+/* Telefon (<= 560px) — zichlikni kamaytirish */
+@media (max-width: 560px) {
+  .shell-main { padding: 14px 12px; }
+  h1 { font-size: 24px !important; }
+  .btn { padding: 10px 14px; font-size: 14px; }
+  .container { padding: 16px; }
+  /* Sarlavha + amallar ustun bo'lib joylashsin */
+  .between { gap: 10px; }
+}

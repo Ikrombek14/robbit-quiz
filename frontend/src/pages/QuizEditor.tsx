@@ -249,7 +249,7 @@ export default function QuizEditor() {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            style={{ margin: 0, width: 320, fontWeight: 700 }}
+            style={{ margin: 0, flex: "1 1 160px", minWidth: 0, maxWidth: 320, fontWeight: 700 }}
           />
           <span className="muted">{slides.length} slayd</span>
         </div>

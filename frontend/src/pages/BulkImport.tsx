@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
+import type { FolderItem } from "../types";
 
 // Ommaviy Wayground import: ko'p havolani birdan joylab, har biridan
 // avtomatik quiz yaratadi (kontent slaydlar + savollar birga ko'chiriladi).
@@ -31,10 +32,23 @@ export default function BulkImport() {
   const [text, setText] = useState("");
   const [rows, setRows] = useState<RowResult[]>([]);
   const [running, setRunning] = useState(false);
-  // Import qilingan slaydlar shu papkaga tushadi (egasi nomi + bugungi sana)
-  const [intoFolder, setIntoFolder] = useState(true);
-  const folderName = `${teacher?.name ?? "Import"} — ${todayStr()}`;
-  const [folderId, setFolderId] = useState<string | null>(null);
+
+  // Qaysi papkaga joylash:
+  //   "NEW"  → yangi "<ism> — <sana>" papkasi yaratiladi
+  //   "NONE" → papkasiz
+  //   <id>   → mavjud papka
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [dest, setDest] = useState<string>("NEW");
+  const newFolderName = `${teacher?.name ?? "Import"} — ${todayStr()}`;
+  const [folderId, setFolderId] = useState<string | null>(null); // yakunda ochish uchun
+  const [folderLabel, setFolderLabel] = useState<string>(""); // ochish havolasi matni
+
+  // Mavjud papkalarni yuklaymiz (faqat o'ziniki — backend shunday qaytaradi)
+  useEffect(() => {
+    api<{ folders: FolderItem[] }>("/folders")
+      .then((r) => setFolders(r.folders.filter((f) => f.mine)))
+      .catch(() => {});
+  }, []);
 
   // Matndan 24-belgili quiz ID bor satrlarni ajratamiz, ID bo'yicha takrorni olib tashlaymiz
   const parsed = useMemo(() => {
@@ -63,20 +77,28 @@ export default function BulkImport() {
     setRows(initial);
     setRunning(true);
 
-    // Tanlangan bo'lsa — avval bugungi sanali papka yaratamiz (ism + sana)
+    // Manzil papkasini aniqlaymiz
     let targetFolderId: string | null = null;
-    if (intoFolder) {
+    let targetLabel = "";
+    if (dest === "NEW") {
+      // Yangi "<ism> — <sana>" papkasini yaratamiz
       try {
         const fr = await api<{ folder: { id: string } }>("/folders", {
           method: "POST",
-          body: JSON.stringify({ name: folderName }),
+          body: JSON.stringify({ name: newFolderName }),
         });
         targetFolderId = fr.folder.id;
-        setFolderId(targetFolderId);
+        targetLabel = newFolderName;
       } catch {
         // Papka yaratilmasa ham import to'xtamaydi — slaydlar papkasiz tushadi
       }
+    } else if (dest !== "NONE") {
+      // Mavjud papka tanlandi
+      targetFolderId = dest;
+      targetLabel = folders.find((f) => f.id === dest)?.name ?? "";
     }
+    setFolderId(targetFolderId);
+    setFolderLabel(targetLabel);
 
     let idx = 0;
     async function worker() {
@@ -123,26 +145,36 @@ export default function BulkImport() {
           placeholder={"https://wayground.com/admin/quiz/...\nhttps://wayground.com/admin/quiz/...\n..."}
           style={{ fontFamily: "monospace", fontSize: 13 }}
         />
-        {/* Papkaga joylash */}
-        <label
+        {/* Papkaga joylash — qaysi papkaga tushishini tanlash */}
+        <div
           style={{
-            display: "flex", alignItems: "center", gap: 8, marginTop: 10,
+            display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap",
             padding: "10px 12px", background: "var(--surface-low)", borderRadius: 10,
-            border: "1px solid var(--border)", cursor: running ? "default" : "pointer", fontSize: 14,
+            border: "1px solid var(--border)", fontSize: 14,
           }}
         >
-          <input
-            type="checkbox"
-            checked={intoFolder}
+          <span className="material-symbols-outlined" style={{ color: "var(--primary)" }}>folder</span>
+          <span style={{ fontWeight: 600 }}>Papka:</span>
+          <select
+            value={dest}
             disabled={running}
-            onChange={(e) => setIntoFolder(e.target.checked)}
-            style={{ width: 18, height: 18, margin: 0 }}
-          />
-          <span>
-            Alohida papkaga joylash:{" "}
-            <b>{intoFolder ? folderName : "— (papkasiz)"}</b>
-          </span>
-        </label>
+            onChange={(e) => setDest(e.target.value)}
+            style={{
+              flex: 1, minWidth: 220, padding: "8px 12px", borderRadius: 8,
+              border: "2px solid var(--border)", background: "var(--surface)", fontSize: 14, color: "var(--ink)",
+            }}
+          >
+            <option value="NEW">🆕 Yangi papka: {newFolderName}</option>
+            {folders.length > 0 && (
+              <optgroup label="Mavjud papkalar">
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>📁 {f.name} ({f.count})</option>
+                ))}
+              </optgroup>
+            )}
+            <option value="NONE">— Papkasiz —</option>
+          </select>
+        </div>
 
         <div className="between" style={{ alignItems: "center", marginTop: 10 }}>
           <span className="muted" style={{ fontSize: 13 }}>
@@ -167,7 +199,7 @@ export default function BulkImport() {
               {done}/{rows.length} tugadi · ✅ {okCount} · ❌ {errCount} · jami {totalSlides} slayd
               {!running && done === rows.length && (
                 <> — <Link to={folderId ? `/library?folder=${folderId}` : "/library"} style={{ color: "var(--primary)", fontWeight: 600 }}>
-                  {folderId ? `"${folderName}" papkasini ochish →` : "Kutubxonaga o'tish →"}
+                  {folderId ? `"${folderLabel}" papkasini ochish →` : "Kutubxonaga o'tish →"}
                 </Link></>
               )}
             </div>

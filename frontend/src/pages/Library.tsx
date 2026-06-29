@@ -74,6 +74,13 @@ export default function Library() {
       method: "POST",
       body: JSON.stringify({ title: "Yangi loyiha", slides: [] }),
     });
+    // Papka ichida turgan bo'lsak — yangi loyiha o'sha papkaga tushadi
+    if (folderFilter !== "ALL" && folderFilter !== "NONE") {
+      await api("/quizzes/move", {
+        method: "POST",
+        body: JSON.stringify({ ids: [r.quiz.id], folderId: folderFilter }),
+      }).catch(() => {});
+    }
     navigate(`/quiz/${r.quiz.id}`);
   }
 

@@ -90,6 +90,7 @@ quizRouter.get("/", async (req: AuthedRequest, res) => {
       title: q.title,
       description: q.description,
       updatedAt: q.updatedAt,
+      folderId: q.folderId,
       _count: q._count,
       owner: { id: q.teacher.id, name: q.teacher.name, email: q.teacher.email },
       mine: q.teacherId === req.teacherId,
@@ -146,6 +147,37 @@ quizRouter.post("/", requireCanCreate, async (req: AuthedRequest, res) => {
       slides: quiz.slides.map(parseSlide),
     },
   });
+});
+
+// Loyihalarni papkaga ko'chirish (bir nechtasini birdan) — folderId null = papkadan chiqarish
+const moveSchema = z.object({
+  ids: z.array(z.string()).min(1),
+  folderId: z.string().nullable(),
+});
+quizRouter.post("/move", requireCanCreate, async (req: AuthedRequest, res) => {
+  const parsed = moveSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
+    return;
+  }
+  const admin = await isAdminUser(req.teacherId);
+  const { ids, folderId } = parsed.data;
+  // Papka ko'rsatilsa — egasi (yoki admin) ekanini tekshiramiz
+  if (folderId) {
+    const folder = await prisma.folder.findFirst({
+      where: admin ? { id: folderId } : { id: folderId, teacherId: req.teacherId },
+    });
+    if (!folder) {
+      res.status(404).json({ error: "Papka topilmadi" });
+      return;
+    }
+  }
+  // Faqat o'ziga tegishli (admin bo'lsa hammasi) loyihalarni ko'chiramiz
+  const r = await prisma.quiz.updateMany({
+    where: admin ? { id: { in: ids } } : { id: { in: ids }, teacherId: req.teacherId },
+    data: { folderId },
+  });
+  res.json({ moved: r.count });
 });
 
 // Yangilash (slaydlar to'liq almashtiriladi) — "slayd qilish" ruxsati kerak

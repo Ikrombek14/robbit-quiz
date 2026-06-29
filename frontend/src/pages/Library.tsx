@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
-import type { QuizListItem, Quiz } from "../types";
+import type { QuizListItem, Quiz, FolderItem } from "../types";
 
 const EMOJIS = ["🚀", "🌍", "📐", "🔬", "🎨", "📚", "🧮", "🌟", "🦋", "🎯"];
 
@@ -22,16 +22,27 @@ const BULK_SECTIONS = [
   { key: "ROBOTICS", label: "Robotics" },
 ];
 
+// Papka filtri: barchasi | papkasiz | aniq papka id
+type FolderFilter = "ALL" | "NONE" | string;
+
 export default function Library() {
   const navigate = useNavigate();
   const { teacher } = useAuth();
+  const [searchParams] = useSearchParams();
   const isAdmin = teacher?.isAdmin === true;
   const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati
   const [quizzes, setQuizzes] = useState<QuizListItem[]>([]);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showBulk, setShowBulk] = useState(false);
+  const [showMove, setShowMove] = useState(false);
+
+  // Papka filtri — URL'dagi ?folder=... bo'lsa o'shani ochamiz (ommaviy importdan keyin)
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>(searchParams.get("folder") || "ALL");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
   function toggleSelect(id: string) {
     setSelected((s) => {
@@ -44,8 +55,12 @@ export default function Library() {
 
   async function load() {
     try {
-      const r = await api<{ quizzes: QuizListItem[] }>("/quizzes");
-      setQuizzes(r.quizzes);
+      const [qr, fr] = await Promise.all([
+        api<{ quizzes: QuizListItem[] }>("/quizzes"),
+        api<{ folders: FolderItem[] }>("/folders"),
+      ]);
+      setQuizzes(qr.quizzes);
+      setFolders(fr.folders);
     } finally {
       setLoading(false);
     }
@@ -69,18 +84,86 @@ export default function Library() {
     setQuizzes((qs) => qs.filter((x) => x.id !== id));
   }
 
+  // Yangi papka yaratish
+  async function createFolder() {
+    const name = newFolderName.trim();
+    if (!name) return;
+    const r = await api<{ folder: FolderItem }>("/folders", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    setFolders((fs) => [{ ...r.folder, count: 0, mine: true }, ...fs]);
+    setNewFolderName("");
+    setCreatingFolder(false);
+    setFolderFilter(r.folder.id);
+  }
+
+  // Joriy papka nomini o'zgartirish
+  async function renameFolder(id: string) {
+    const cur = folders.find((f) => f.id === id);
+    const name = prompt("Papka nomi:", cur?.name ?? "")?.trim();
+    if (!name || name === cur?.name) return;
+    await api(`/folders/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+    setFolders((fs) => fs.map((f) => (f.id === id ? { ...f, name } : f)));
+  }
+
+  // Papkani o'chirish (ichidagi loyihalar saqlanadi, papkasiz bo'lib qoladi)
+  async function deleteFolder(id: string) {
+    if (!confirm("Papkani o'chirasizmi? Ichidagi loyihalar o'chmaydi, papkadan chiqariladi.")) return;
+    await api(`/folders/${id}`, { method: "DELETE" });
+    setFolders((fs) => fs.filter((f) => f.id !== id));
+    setQuizzes((qs) => qs.map((x) => (x.folderId === id ? { ...x, folderId: null } : x)));
+    setFolderFilter("ALL");
+  }
+
+  // Bir nechta loyihani papkaga ko'chirish (yoki papkadan chiqarish: folderId=null)
+  async function moveSelected(folderId: string | null) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    await api("/quizzes/move", { method: "POST", body: JSON.stringify({ ids, folderId }) });
+    setQuizzes((qs) => qs.map((x) => (selected.has(x.id) ? { ...x, folderId } : x)));
+    setSelected(new Set());
+    setShowMove(false);
+  }
+
   const needle = q.toLowerCase();
-  const filtered = quizzes.filter(
-    (x) =>
-      x.title.toLowerCase().includes(needle) ||
-      (isAdmin && (x.owner?.name.toLowerCase().includes(needle) || x.owner?.email.toLowerCase().includes(needle))),
-  );
+  const matchesSearch = (x: QuizListItem) =>
+    x.title.toLowerCase().includes(needle) ||
+    (isAdmin && (x.owner?.name.toLowerCase().includes(needle) || x.owner?.email.toLowerCase().includes(needle)));
+
+  // Papka bo'yicha sonlarni mahalliy hisoblaymiz (ko'chirgandan keyin ham aniq turadi)
+  const noFolderCount = useMemo(() => quizzes.filter((x) => !x.folderId).length, [quizzes]);
+  const folderCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const x of quizzes) if (x.folderId) m.set(x.folderId, (m.get(x.folderId) ?? 0) + 1);
+    return m;
+  }, [quizzes]);
+
+  const filtered = quizzes.filter((x) => {
+    if (!matchesSearch(x)) return false;
+    if (folderFilter === "ALL") return true;
+    if (folderFilter === "NONE") return !x.folderId;
+    return x.folderId === folderFilter;
+  });
+
+  const activeFolderObj = folders.find((f) => f.id === folderFilter);
 
   return (
     <Shell>
       <div className="between">
         <h1 style={{ fontSize: 28 }}>{isAdmin ? "Barcha loyihalar" : "Kutubxonam"}</h1>
         <div className="row" style={{ gap: 8 }}>
+          {canCreate && (
+            <button
+              className="btn btn-ghost"
+              disabled={selected.size === 0}
+              onClick={() => setShowMove(true)}
+              title="Tanlangan loyihalarni papkaga ko'chirish"
+            >
+              <span className="material-symbols-outlined">drive_file_move</span>
+              Papkaga ko'chirish{selected.size > 0 ? ` (${selected.size})` : ""}
+            </button>
+          )}
           {isAdmin && (
             <button
               className="btn btn-ghost"
@@ -100,6 +183,88 @@ export default function Library() {
           Admin sifatida barcha o'qituvchilarning loyihalarini ko'rasiz.
         </p>
       )}
+
+      {/* Papkalar paneli */}
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
+        <FolderChip
+          label="Hammasi"
+          icon="apps"
+          count={quizzes.length}
+          active={folderFilter === "ALL"}
+          onClick={() => setFolderFilter("ALL")}
+        />
+        {folders.map((f) => (
+          <FolderChip
+            key={f.id}
+            label={f.name}
+            icon="folder"
+            count={folderCounts.get(f.id) ?? f.count}
+            active={folderFilter === f.id}
+            onClick={() => setFolderFilter(f.id)}
+          />
+        ))}
+        {noFolderCount > 0 && (
+          <FolderChip
+            label="Papkasiz"
+            icon="folder_off"
+            count={noFolderCount}
+            active={folderFilter === "NONE"}
+            onClick={() => setFolderFilter("NONE")}
+          />
+        )}
+        {canCreate &&
+          (creatingFolder ? (
+            <div className="row" style={{ gap: 6 }}>
+              <input
+                autoFocus
+                placeholder="Papka nomi…"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") createFolder();
+                  if (e.key === "Escape") setCreatingFolder(false);
+                }}
+                style={{ marginBottom: 0, width: 160, padding: "6px 10px" }}
+              />
+              <button className="btn" style={{ padding: "6px 12px" }} onClick={createFolder} disabled={!newFolderName.trim()}>
+                Saqlash
+              </button>
+              <button className="btn btn-ghost" style={{ padding: "6px 10px" }} onClick={() => setCreatingFolder(false)}>
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn btn-ghost"
+              style={{ padding: "6px 12px", fontSize: 13 }}
+              onClick={() => setCreatingFolder(true)}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>create_new_folder</span>
+              Yangi papka
+            </button>
+          ))}
+      </div>
+
+      {/* Joriy papka boshqaruvi (nomini o'zgartirish / o'chirish) */}
+      {activeFolderObj && (
+        <div className="row" style={{ gap: 8, marginTop: 8, alignItems: "center" }}>
+          <span className="muted text-sm">
+            📁 <b>{activeFolderObj.name}</b>
+            {isAdmin && activeFolderObj.owner && !activeFolderObj.mine && <> · 👤 {activeFolderObj.owner.name}</>}
+          </span>
+          {(activeFolderObj.mine || isAdmin) && (
+            <>
+              <button className="btn btn-ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => renameFolder(activeFolderObj.id)}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span> Nomi
+              </button>
+              <button className="btn btn-ghost" style={{ padding: "3px 8px", fontSize: 12, color: "var(--error)" }} onClick={() => deleteFolder(activeFolderObj.id)}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span> O'chirish
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <input
         placeholder={isAdmin ? "🔍 Nomi yoki o'qituvchi bo'yicha qidirish…" : "🔍 Nomi bo'yicha qidirish…"}
         value={q}
@@ -107,7 +272,7 @@ export default function Library() {
         style={{ marginTop: 12 }}
       />
 
-      {isAdmin && !loading && filtered.length > 0 && (
+      {canCreate && !loading && filtered.length > 0 && (
         <div className="row" style={{ gap: 10, marginTop: 4, marginBottom: 4 }}>
           <button
             className="btn btn-ghost"
@@ -147,13 +312,13 @@ export default function Library() {
                   {isAdmin && item.mine && <> · 👤 Siz</>}
                 </div>
               </div>
-              {isAdmin && (
+              {canCreate && (
                 <input
                   type="checkbox"
                   checked={selected.has(item.id)}
                   onClick={(e) => e.stopPropagation()}
                   onChange={() => toggleSelect(item.id)}
-                  title="O'quv rejaga qo'shish uchun tanlash"
+                  title="Tanlash (papkaga ko'chirish / o'quv rejaga qo'shish)"
                   style={{ width: 22, height: 22, margin: 0, flexShrink: 0, cursor: "pointer" }}
                 />
               )}
@@ -206,7 +371,102 @@ export default function Library() {
           }}
         />
       )}
+
+      {showMove && (
+        <MoveModal
+          count={selected.size}
+          folders={folders}
+          onClose={() => setShowMove(false)}
+          onCreate={createFolder}
+          onPick={moveSelected}
+          newFolderName={newFolderName}
+          setNewFolderName={setNewFolderName}
+        />
+      )}
     </Shell>
+  );
+}
+
+/* ============ Papka chipi ============ */
+function FolderChip({
+  label, icon, count, active, onClick,
+}: { label: string; icon: string; count: number; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "6px 14px", borderRadius: 999, border: "2px solid",
+        borderColor: active ? "var(--primary)" : "var(--border)",
+        background: active ? "var(--primary-soft)" : "transparent",
+        color: active ? "var(--primary)" : "var(--ink)",
+        fontWeight: 600, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap",
+      }}
+    >
+      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{icon}</span>
+      {label}
+      <span style={{ opacity: 0.7, fontWeight: 700 }}>{count}</span>
+    </button>
+  );
+}
+
+/* ============ Papkaga ko'chirish modali ============ */
+// Tanlangan loyihalarni bitta papkaga ko'chiradi (yoki papkadan chiqaradi).
+function MoveModal({
+  count, folders, onClose, onPick, onCreate, newFolderName, setNewFolderName,
+}: {
+  count: number;
+  folders: FolderItem[];
+  onClose: () => void;
+  onPick: (folderId: string | null) => void;
+  onCreate: () => Promise<void>;
+  newFolderName: string;
+  setNewFolderName: (s: string) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="card card-narrow" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "82vh", overflowY: "auto" }}>
+        <div className="between">
+          <h3 style={{ margin: 0 }}>📁 Papkaga ko'chirish</h3>
+          <button className="btn btn-ghost" onClick={onClose}>✕</button>
+        </div>
+        <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+          {count} ta loyiha tanlandi. Qaysi papkaga ko'chiramiz?
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+          <button className="btn btn-ghost" style={{ justifyContent: "flex-start" }} onClick={() => onPick(null)}>
+            <span className="material-symbols-outlined">folder_off</span> Papkasiz (papkadan chiqarish)
+          </button>
+          {folders.map((f) => (
+            <button key={f.id} className="btn btn-ghost" style={{ justifyContent: "flex-start" }} onClick={() => onPick(f.id)}>
+              <span className="material-symbols-outlined">folder</span> {f.name}
+              <span className="muted" style={{ marginLeft: "auto" }}>{f.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {creating ? (
+          <div className="row" style={{ gap: 6, marginTop: 10 }}>
+            <input
+              autoFocus
+              placeholder="Yangi papka nomi…"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onCreate()}
+              style={{ marginBottom: 0, flex: 1, padding: "8px 10px" }}
+            />
+            <button className="btn" onClick={onCreate} disabled={!newFolderName.trim()}>Yaratish</button>
+          </div>
+        ) : (
+          <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => setCreating(true)}>
+            <span className="material-symbols-outlined">create_new_folder</span> Yangi papka yaratish
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

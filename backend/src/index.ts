@@ -12,6 +12,7 @@ import { prisma } from "./prisma.js";
 import { registerGameHandlers } from "./socket/game.js";
 import { authRouter } from "./routes/auth.js";
 import { quizRouter } from "./routes/quizzes.js";
+import { folderRouter } from "./routes/folders.js";
 import { pdfRouter } from "./routes/pdf.js";
 import { excelRouter } from "./routes/excel.js";
 import { importRouter } from "./routes/import.js";
@@ -115,6 +116,7 @@ app.get("/api/health", (_req, res) => {
 // API marshrutlari
 app.use("/api/auth", authRouter);
 app.use("/api/quizzes", quizRouter);
+app.use("/api/folders", folderRouter);
 app.use("/api/pdf", pdfRouter);
 app.use("/api/excel", excelRouter);
 app.use("/api/import", importRouter);

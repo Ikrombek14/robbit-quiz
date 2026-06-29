@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 
 // Ommaviy Wayground import: ko'p havolani birdan joylab, har biridan
@@ -18,10 +19,22 @@ interface RowResult {
 
 const CONCURRENCY = 3; // Wayground'ni ortiqcha yuklamaslik uchun bir vaqtda 3 ta
 
+// Bugungi sana — YYYY-MM-DD
+function todayStr(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 export default function BulkImport() {
+  const { teacher } = useAuth();
   const [text, setText] = useState("");
   const [rows, setRows] = useState<RowResult[]>([]);
   const [running, setRunning] = useState(false);
+  // Import qilingan slaydlar shu papkaga tushadi (egasi nomi + bugungi sana)
+  const [intoFolder, setIntoFolder] = useState(true);
+  const folderName = `${teacher?.name ?? "Import"} — ${todayStr()}`;
+  const [folderId, setFolderId] = useState<string | null>(null);
 
   // Matndan 24-belgili quiz ID bor satrlarni ajratamiz, ID bo'yicha takrorni olib tashlaymiz
   const parsed = useMemo(() => {
@@ -50,6 +63,21 @@ export default function BulkImport() {
     setRows(initial);
     setRunning(true);
 
+    // Tanlangan bo'lsa — avval bugungi sanali papka yaratamiz (ism + sana)
+    let targetFolderId: string | null = null;
+    if (intoFolder) {
+      try {
+        const fr = await api<{ folder: { id: string } }>("/folders", {
+          method: "POST",
+          body: JSON.stringify({ name: folderName }),
+        });
+        targetFolderId = fr.folder.id;
+        setFolderId(targetFolderId);
+      } catch {
+        // Papka yaratilmasa ham import to'xtamaydi — slaydlar papkasiz tushadi
+      }
+    }
+
     let idx = 0;
     async function worker() {
       while (idx < parsed.length) {
@@ -59,7 +87,7 @@ export default function BulkImport() {
         try {
           const r = await api<{ quizId: string; title: string; summary: { total: number } }>(
             "/import/wayground/save",
-            { method: "POST", body: JSON.stringify({ url }) },
+            { method: "POST", body: JSON.stringify({ url, folderId: targetFolderId }) },
           );
           setRows((rs) =>
             rs.map((x, i) =>
@@ -95,7 +123,28 @@ export default function BulkImport() {
           placeholder={"https://wayground.com/admin/quiz/...\nhttps://wayground.com/admin/quiz/...\n..."}
           style={{ fontFamily: "monospace", fontSize: 13 }}
         />
-        <div className="between" style={{ alignItems: "center", marginTop: 4 }}>
+        {/* Papkaga joylash */}
+        <label
+          style={{
+            display: "flex", alignItems: "center", gap: 8, marginTop: 10,
+            padding: "10px 12px", background: "var(--surface-low)", borderRadius: 10,
+            border: "1px solid var(--border)", cursor: running ? "default" : "pointer", fontSize: 14,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={intoFolder}
+            disabled={running}
+            onChange={(e) => setIntoFolder(e.target.checked)}
+            style={{ width: 18, height: 18, margin: 0 }}
+          />
+          <span>
+            Alohida papkaga joylash:{" "}
+            <b>{intoFolder ? folderName : "— (papkasiz)"}</b>
+          </span>
+        </label>
+
+        <div className="between" style={{ alignItems: "center", marginTop: 10 }}>
           <span className="muted" style={{ fontSize: 13 }}>
             {parsed.length} ta yaroqli havola aniqlandi
           </span>
@@ -117,7 +166,9 @@ export default function BulkImport() {
             <div className="muted" style={{ fontSize: 13, margin: "8px 0 12px" }}>
               {done}/{rows.length} tugadi · ✅ {okCount} · ❌ {errCount} · jami {totalSlides} slayd
               {!running && done === rows.length && (
-                <> — <Link to="/library" style={{ color: "var(--primary)", fontWeight: 600 }}>Kutubxonaga o'tish →</Link></>
+                <> — <Link to={folderId ? `/library?folder=${folderId}` : "/library"} style={{ color: "var(--primary)", fontWeight: 600 }}>
+                  {folderId ? `"${folderName}" papkasini ochish →` : "Kutubxonaga o'tish →"}
+                </Link></>
               )}
             </div>
 

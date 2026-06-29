@@ -391,17 +391,24 @@ importRouter.post("/wayground", requireAuth, requireCanCreate, async (req, res) 
 // Ommaviy import yadrosi: bitta havola → to'liq yangi quiz YARATADI va saqlaydi.
 // Frontend buni har bir havola uchun ketma-ket chaqirib, jarayonni ko'rsatadi.
 importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
-  const { url, title } = (req.body ?? {}) as { url?: string; title?: string };
+  const { url, title, folderId } = (req.body ?? {}) as { url?: string; title?: string; folderId?: string | null };
   const r = await fetchWayground(url ?? "");
   if (!r.ok) {
     res.status(r.status).json({ error: r.error });
     return;
+  }
+  // Papka ko'rsatilsa — egasi (joriy foydalanuvchi) ekanini tekshiramiz
+  let useFolderId: string | null = null;
+  if (folderId) {
+    const folder = await prisma.folder.findFirst({ where: { id: folderId, teacherId: req.teacherId } });
+    if (folder) useFolderId = folder.id;
   }
   const finalTitle = (title?.trim() || r.title?.trim() || "Import qilingan quiz").slice(0, 200);
   const quiz = await prisma.quiz.create({
     data: {
       title: finalTitle,
       teacherId: req.teacherId!,
+      folderId: useFolderId,
       slides: { create: slidesToCreate(r.slides) },
     },
     select: { id: true },

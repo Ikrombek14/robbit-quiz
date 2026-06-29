@@ -26,6 +26,20 @@ model Teacher {
   accessOverride Boolean?
   createdAt DateTime @default(now())
   quizzes   Quiz[]
+  folders   Folder[]
+}
+
+// Kutubxona papkasi — loyihalarni guruhlash uchun. Egasiga tegishli.
+// Ommaviy import qilinganda avtomatik "<ism> — <sana>" nomli papka yaratiladi.
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  quizzes   Quiz[]
+
+  @@index([teacherId])
 }
 
 // Rasmiy ustozlar ro'yxati (CSV'dan import qilinadi). Admin boshqaradi.
@@ -51,12 +65,15 @@ model Quiz {
   teacherId   String
   teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   shuffle     Boolean  @default(false) // savollar tartibini aralashtirish
+  folderId    String?  // kutubxona papkasi (ixtiyoriy)
+  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   slides      Slide[]
 
   @@index([teacherId])
   @@index([createdAt])
+  @@index([folderId])
 }
 
 // Universal "slayd" — ham kontent slayd, ham savol bo'lishi mumkin.

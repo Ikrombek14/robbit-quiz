@@ -137,9 +137,20 @@ export interface QuizListItem {
   title: string;
   description?: string | null;
   updatedAt: string;
+  folderId?: string | null;
   _count: { slides: number };
   // Admin ro'yxatda barcha o'qituvchilarning loyihalarini ko'radi — egasi ko'rsatiladi
   owner?: { id: string; name: string; email: string };
+  mine?: boolean;
+}
+
+// Kutubxona papkasi
+export interface FolderItem {
+  id: string;
+  name: string;
+  createdAt: string;
+  count: number;
+  owner?: { id: string; name: string };
   mine?: boolean;
 }
 

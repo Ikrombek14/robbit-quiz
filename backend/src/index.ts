@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { config } from "./config.js";
+import { prisma } from "./prisma.js";
 import { registerGameHandlers } from "./socket/game.js";
 import { authRouter } from "./routes/auth.js";
 import { quizRouter } from "./routes/quizzes.js";
@@ -143,10 +144,26 @@ if (config.production) {
 }
 
 // Global xato ishlovchisi (barcha route'lardan keyin). express-async-errors tufayli
-// async route'lardagi rejection'lar ham shu yerga keladi — process qulamaydi, mijozga 500 qaytadi.
+// async route'lardagi rejection'lar ham shu yerga keladi — process qulamaydi, mijozga toza javob qaytadi.
 app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(`❌ Route xatosi [${req.method} ${req.path}]:`, err);
+  const code = err && typeof err === "object" && "code" in err ? String((err as { code: unknown }).code) : "";
+  console.error(`❌ Route xatosi [${req.method} ${req.path}]${code ? ` (${code})` : ""}:`, err);
   if (res.headersSent) return;
+  // Buzuq JSON tana — 400
+  if (err instanceof SyntaxError && "body" in err) {
+    res.status(400).json({ error: "So'rov formati noto'g'ri" });
+    return;
+  }
+  // Prisma: JWT'dagi teacher bazada yo'q (eskirgan sessiya) → qayta kirishni so'raymiz
+  if (code === "P2003" || code === "P2025") {
+    res.status(401).json({ error: "Sessiya eskirgan. Iltimos, tizimga qayta kiring." });
+    return;
+  }
+  // Prisma ulanish/vaqt xatolari → 503 (baza vaqtincha ishlamayapti)
+  if (code === "P1001" || code === "P1002" || code === "P1008" || code === "P1017") {
+    res.status(503).json({ error: "Baza vaqtincha javob bermayapti. Birozdan keyin qayta urinib ko'ring." });
+    return;
+  }
   res.status(500).json({ error: "Server xatosi. Birozdan keyin qayta urinib ko'ring." });
 });
 
@@ -170,5 +187,20 @@ io.on("connection", (socket) => {
 httpServer.listen(config.port, () => {
   console.log(`✅ Backend ishga tushdi: http://localhost:${config.port}`);
 });
+
+// Toza to'xtatish (pm2 reload/restart, deploy) — ochiq so'rovlarni yakunlab, DB ulanishini yopadi.
+let shuttingDown = false;
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`↩️  ${signal} qabul qilindi — toza to'xtatilmoqda…`);
+  httpServer.close(() => {
+    prisma.$disconnect().finally(() => process.exit(0));
+  });
+  // Belgilangan vaqtda yopilmasa — majburan chiqamiz (pm2 kill_timeout 7s dan oldin)
+  setTimeout(() => process.exit(0), 6000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 export { io };

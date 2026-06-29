@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, uploadBlob } from "../api";
+import { useAuth } from "../auth";
 import type { ChoiceOption, QType, Quiz, Slide, SlideData } from "../types";
 import { QUESTION_TYPES, newQuestionSlide, slideTitle, TYPE_LABELS } from "../slides";
 import { SLIDE_TEMPLATES, buildTemplateData, newContentSlideFromTemplate } from "../templates";
@@ -31,6 +32,8 @@ async function pickAndUploadImage(): Promise<string | null> {
 export default function QuizEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { teacher } = useAuth();
+  const isAdmin = teacher?.isAdmin === true;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -380,6 +383,8 @@ export default function QuizEditor() {
           title={title}
           description={description}
           shuffle={shuffle}
+          isAdmin={isAdmin}
+          quizId={id}
           onChange={(p) => {
             if (p.title !== undefined) setTitle(p.title);
             if (p.description !== undefined) setDescription(p.description);
@@ -460,12 +465,14 @@ function SettingsModal(props: {
   title: string;
   description: string;
   shuffle: boolean;
+  isAdmin: boolean;
+  quizId?: string;
   onChange: (p: { title?: string; description?: string; shuffle?: boolean }) => void;
   onClose: () => void;
 }) {
   return (
     <div className="modal-overlay" onClick={props.onClose}>
-      <div className="card card-narrow" onClick={(e) => e.stopPropagation()}>
+      <div className="card card-narrow" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "88vh", overflowY: "auto" }}>
         <div className="between">
           <h3 style={{ margin: 0 }}>⚙ Sozlamalar</h3>
           <button className="btn btn-ghost" onClick={props.onClose}>✕</button>
@@ -485,9 +492,252 @@ function SettingsModal(props: {
           />
           Savollarni aralashtirish
         </label>
+
+        {/* Faqat admin — slaydni to'g'ridan-to'g'ri o'quv rejaga qo'shish */}
+        {props.isAdmin && props.quizId && (
+          <CurriculumPlacements quizId={props.quizId} quizTitle={props.title} />
+        )}
+
         <div className="spacer" />
         <button className="btn btn-block" onClick={props.onClose}>Tayyor</button>
       </div>
+    </div>
+  );
+}
+
+/* ============ O'quv rejaga qo'shish (faqat admin) ============ */
+// Bir slaydni (quiz) bevosita o'quv rejaga joylaydi. Bir quiz bir nechta
+// yo'nalish/yosh toifa/yil/bo'limga qo'shilishi mumkin — har bir joylashuv
+// alohida tartib raqamiga ega (mas: Dasturlashda #23, Robotexnikada boshqa raqam).
+interface Placement {
+  id: string;
+  subject: string;
+  ageGroup: string;
+  year: number;
+  section: string | null;
+  order: number;
+  title: string;
+  author: string | null;
+  isDemo: boolean;
+  quizId: string | null;
+}
+
+const PL_SUBJECTS = [
+  { key: "ROBOTEXNIKA", label: "Robotexnika" },
+  { key: "DASTURLASH", label: "Dasturlash" },
+];
+const PL_AGES = [
+  { key: "MIDDLE", label: "Middle" },
+  { key: "SENIOR", label: "Senior" },
+];
+const PL_SECTIONS = [
+  { key: "DESIGN", label: "Design" },
+  { key: "PROGRAMMING", label: "Programming" },
+  { key: "ROBOTICS", label: "Robotics" },
+];
+const plLabel = (arr: { key: string; label: string }[], k: string | null) =>
+  arr.find((x) => x.key === k)?.label ?? k ?? "";
+
+function CurriculumPlacements({ quizId, quizTitle }: { quizId: string; quizTitle: string }) {
+  const [items, setItems] = useState<Placement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  // Qo'shish formasi
+  const [subject, setSubject] = useState("DASTURLASH");
+  const [section, setSection] = useState("DESIGN");
+  const [ages, setAges] = useState<string[]>(["MIDDLE"]);
+  const [years, setYears] = useState<number[]>([1]);
+  const [order, setOrder] = useState(1);
+  const [isDemo, setIsDemo] = useState(false);
+
+  useEffect(() => {
+    api<{ lessons: Placement[] }>(`/curriculum/for-quiz/${quizId}`)
+      .then((r) => setItems(r.lessons))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [quizId]);
+
+  const toggle = <T,>(setter: React.Dispatch<React.SetStateAction<T[]>>, v: T) =>
+    setter((xs) => (xs.includes(v) ? xs.filter((x) => x !== v) : [...xs, v]));
+
+  // Belgilangan yosh toifa × yil kombinatsiyalari bo'yicha bir nechta joylashuv yaratadi
+  async function add() {
+    if (ages.length === 0 || years.length === 0) return;
+    setBusy(true);
+    try {
+      const created: Placement[] = [];
+      for (const ag of ages) {
+        for (const y of years) {
+          const body = {
+            subject,
+            ageGroup: ag,
+            year: y,
+            section: subject === "ROBOTEXNIKA" ? section : null,
+            order: order - 1,
+            title: quizTitle.trim() || "Dars",
+            author: null,
+            isDemo,
+            quizId,
+          };
+          const r = await api<{ lesson: Placement }>("/curriculum", { method: "POST", body: JSON.stringify(body) });
+          created.push(r.lesson);
+        }
+      }
+      setItems((xs) => [...xs, ...created]);
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    await api(`/curriculum/${id}`, { method: "DELETE" });
+    setItems((xs) => xs.filter((x) => x.id !== id));
+  }
+
+  // Tartib raqamini joylashuv bo'yicha alohida o'zgartirish (PUT to'liq tana talab qiladi)
+  async function setOrderFor(p: Placement, n: number) {
+    setItems((xs) => xs.map((x) => (x.id === p.id ? { ...x, order: n - 1 } : x)));
+    await api(`/curriculum/${p.id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        subject: p.subject,
+        ageGroup: p.ageGroup,
+        year: p.year,
+        section: p.section,
+        order: n - 1,
+        title: p.title,
+        author: p.author,
+        isDemo: p.isDemo,
+        quizId,
+      }),
+    }).catch(() => {});
+  }
+
+  const chip = (active: boolean): React.CSSProperties => ({
+    padding: "5px 12px",
+    borderRadius: 8,
+    border: "2px solid",
+    borderColor: active ? "var(--primary)" : "var(--border)",
+    background: active ? "var(--primary-soft)" : "transparent",
+    color: active ? "var(--primary)" : "var(--ink)",
+    fontWeight: 600,
+    fontSize: 13,
+    cursor: "pointer",
+  });
+
+  return (
+    <div style={{ marginTop: 18, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+      <div className="between" style={{ alignItems: "center" }}>
+        <label style={{ margin: 0, fontWeight: 700 }}>📚 O'quv rejaga qo'shish</label>
+        <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: 13 }} onClick={() => setOpen((o) => !o)}>
+          {open ? "Yopish" : "+ Joylashtirish"}
+        </button>
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+        Bu slaydni bevosita dars rejaga qo'ying. Bir slaydni bir nechta yo'nalish/bo'limga qo'shsa bo'ladi —
+        har biri alohida tartib raqamiga ega bo'ladi.
+      </p>
+
+      {/* Joriy joylashuvlar */}
+      {loading ? (
+        <p className="muted" style={{ fontSize: 13 }}>Yuklanmoqda…</p>
+      ) : items.length === 0 ? (
+        <p className="muted" style={{ fontSize: 13 }}>Hali o'quv rejaga qo'shilmagan.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+          {items.map((p) => (
+            <div key={p.id} style={{
+              display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
+              background: "var(--surface-low)", borderRadius: 8, border: "1px solid var(--border)",
+            }}>
+              <input
+                type="number"
+                min={1}
+                value={p.order + 1}
+                onChange={(e) => setOrderFor(p, Number(e.target.value) || 1)}
+                title="Tartib raqami"
+                style={{ width: 56, textAlign: "center", marginBottom: 0, padding: "4px 6px" }}
+              />
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>
+                {plLabel(PL_SUBJECTS, p.subject)} · {plLabel(PL_AGES, p.ageGroup)} · {p.year}-yil
+                {p.section ? ` · ${plLabel(PL_SECTIONS, p.section)}` : ""}
+              </span>
+              <button className="btn btn-ghost" style={{ padding: "2px 8px", color: "var(--error)" }}
+                title="Olib tashlash" onClick={() => remove(p.id)}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Qo'shish formasi */}
+      {open && (
+        <div style={{ padding: 12, background: "var(--surface-low)", borderRadius: 10, border: "2px dashed var(--border)", marginTop: 6 }}>
+          <div className="muted text-sm" style={{ fontWeight: 700, marginBottom: 6 }}>Yo'nalish</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+            {PL_SUBJECTS.map((s) => (
+              <button key={s.key} type="button" style={chip(subject === s.key)} onClick={() => setSubject(s.key)}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {subject === "ROBOTEXNIKA" && (
+            <>
+              <div className="muted text-sm" style={{ fontWeight: 700, marginBottom: 6 }}>Bo'lim</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                {PL_SECTIONS.map((s) => (
+                  <button key={s.key} type="button" style={chip(section === s.key)} onClick={() => setSection(s.key)}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="muted text-sm" style={{ fontWeight: 700, marginBottom: 6 }}>Yosh toifa (bir nechta tanlash mumkin)</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+            {PL_AGES.map((a) => (
+              <button key={a.key} type="button" style={chip(ages.includes(a.key))} onClick={() => toggle(setAges, a.key)}>
+                {ages.includes(a.key) ? "☑ " : "☐ "}{a.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="muted text-sm" style={{ fontWeight: 700, marginBottom: 6 }}>O'quv yili (bir nechta tanlash mumkin)</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+            {[1, 2].map((y) => (
+              <button key={y} type="button" style={chip(years.includes(y))} onClick={() => toggle(setYears, y)}>
+                {years.includes(y) ? "☑ " : "☐ "}{y}-yil
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ width: 90 }}>
+              <div className="muted text-sm" style={{ fontWeight: 700, marginBottom: 6 }}>Tartib #</div>
+              <input type="number" min={1} value={order} onChange={(e) => setOrder(Number(e.target.value) || 1)}
+                style={{ textAlign: "center", marginBottom: 0 }} />
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 8, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
+              <input type="checkbox" checked={isDemo} onChange={(e) => setIsDemo(e.target.checked)} />
+              Demo Day
+            </label>
+          </div>
+
+          <button className="btn btn-block" style={{ marginTop: 12 }} onClick={add}
+            disabled={busy || ages.length === 0 || years.length === 0}>
+            {busy ? "Qo'shilmoqda…" : "O'quv rejaga qo'shish"}
+          </button>
+          <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+            Tanlangan yosh toifa × o'quv yili kombinatsiyalari uchun alohida joylashuv yaratiladi.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

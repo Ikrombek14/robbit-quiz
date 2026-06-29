@@ -60,6 +60,18 @@ curriculumRouter.get("/", requireApproved, async (req, res) => {
   });
 });
 
+// Bitta quizga biriktirilgan barcha o'quv-reja joylashuvlari (faqat admin).
+// Muharrirdagi "Sozlamalar → O'quv rejaga qo'shish" paneli shu orqali joriy
+// holatni ko'rsatadi. Bir quiz bir nechta yo'nalish/bo'lim/yilda — har biri
+// alohida tartib raqami bilan tura oladi.
+curriculumRouter.get("/for-quiz/:quizId", requireAdmin, async (req, res) => {
+  const lessons = await prisma.lessonPlan.findMany({
+    where: { quizId: String(req.params.quizId) },
+    orderBy: [{ subject: "asc" }, { ageGroup: "asc" }, { year: "asc" }, { order: "asc" }],
+  });
+  res.json({ lessons });
+});
+
 // Yaratish — faqat admin
 curriculumRouter.post("/", requireAdmin, async (req, res) => {
   const parsed = lessonSchema.safeParse(req.body);

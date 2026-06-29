@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import type { QuizListItem, Quiz } from "../types";
 
@@ -8,6 +9,8 @@ const EMOJIS = ["🚀", "🌍", "📐", "🔬", "🎨", "📚", "🧮", "🌟", 
 
 export default function Library() {
   const navigate = useNavigate();
+  const { teacher } = useAuth();
+  const isAdmin = teacher?.isAdmin === true;
   const [quizzes, setQuizzes] = useState<QuizListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -39,16 +42,26 @@ export default function Library() {
     setQuizzes((qs) => qs.filter((x) => x.id !== id));
   }
 
-  const filtered = quizzes.filter((x) => x.title.toLowerCase().includes(q.toLowerCase()));
+  const needle = q.toLowerCase();
+  const filtered = quizzes.filter(
+    (x) =>
+      x.title.toLowerCase().includes(needle) ||
+      (isAdmin && (x.owner?.name.toLowerCase().includes(needle) || x.owner?.email.toLowerCase().includes(needle))),
+  );
 
   return (
     <Shell>
       <div className="between">
-        <h1 style={{ fontSize: 28 }}>Kutubxonam</h1>
+        <h1 style={{ fontSize: 28 }}>{isAdmin ? "Barcha loyihalar" : "Kutubxonam"}</h1>
         <button className="btn" onClick={createQuiz}>+ Yangi loyiha</button>
       </div>
+      {isAdmin && (
+        <p className="muted" style={{ marginTop: 4 }}>
+          Admin sifatida barcha o'qituvchilarning loyihalarini ko'rasiz.
+        </p>
+      )}
       <input
-        placeholder="🔍 Nomi bo'yicha qidirish…"
+        placeholder={isAdmin ? "🔍 Nomi yoki o'qituvchi bo'yicha qidirish…" : "🔍 Nomi bo'yicha qidirish…"}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         style={{ marginTop: 12 }}
@@ -67,7 +80,11 @@ export default function Library() {
               <div className="lib-thumb">{EMOJIS[i % EMOJIS.length]}</div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 <strong className="font-head">{item.title}</strong>
-                <div className="muted text-sm">{item._count.slides} ta slayd</div>
+                <div className="muted text-sm">
+                  {item._count.slides} ta slayd
+                  {isAdmin && item.owner && !item.mine && <> · 👤 {item.owner.name}</>}
+                  {isAdmin && item.mine && <> · 👤 Siz</>}
+                </div>
               </div>
               <button
                 className="btn btn-secondary"

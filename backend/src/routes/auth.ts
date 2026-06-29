@@ -11,8 +11,16 @@ export const authRouter = Router();
 
 const googleClient = new OAuth2Client(config.googleClientId);
 
-function publicTeacher(t: { id: string; email: string; name: string; picture?: string | null; isAdmin: boolean; approved: boolean }) {
-  return { id: t.id, email: t.email, name: t.name, picture: t.picture ?? null, isAdmin: t.isAdmin, approved: t.approved };
+function publicTeacher(t: { id: string; email: string; name: string; picture?: string | null; isAdmin: boolean; approved: boolean; password?: string | null }) {
+  return {
+    id: t.id,
+    email: t.email,
+    name: t.name,
+    picture: t.picture ?? null,
+    isAdmin: t.isAdmin,
+    approved: t.approved,
+    hasPassword: !!t.password, // parol o'rnatilganmi (Sozlamalar UI uchun)
+  };
 }
 
 // Google email bilan kirish: frontend ID token (credential) yuboradi
@@ -118,7 +126,39 @@ authRouter.post("/login", async (req, res) => {
 authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   const teacher = await prisma.teacher.findUnique({
     where: { id: req.teacherId },
-    select: { id: true, email: true, name: true, picture: true, isAdmin: true, approved: true },
+    select: { id: true, email: true, name: true, picture: true, isAdmin: true, approved: true, password: true },
   });
   res.json({ teacher: teacher ? publicTeacher(teacher) : null });
+});
+
+// Parolni o'rnatish / o'zgartirish (o'zining accounti uchun).
+// Parol mavjud bo'lsa — joriy parolni tekshiramiz. Google bilan kirgan (parolsiz)
+// foydalanuvchi joriy parolsiz yangi parol o'rnatishi mumkin — shu "parolni unutdim"
+// holatini qoplaydi: Google bilan kiradi, keyin shu yerda yangi parol o'rnatadi.
+const changePasswordSchema = z.object({
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(6),
+});
+
+authRouter.post("/password", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Yangi parol kamida 6 belgi bo'lishi kerak" });
+    return;
+  }
+  const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId } });
+  if (!teacher) {
+    res.status(404).json({ error: "Foydalanuvchi topilmadi" });
+    return;
+  }
+  if (teacher.password) {
+    const ok = parsed.data.currentPassword && (await bcrypt.compare(parsed.data.currentPassword, teacher.password));
+    if (!ok) {
+      res.status(400).json({ error: "Joriy parol noto'g'ri" });
+      return;
+    }
+  }
+  const hash = await bcrypt.hash(parsed.data.newPassword, 10);
+  await prisma.teacher.update({ where: { id: teacher.id }, data: { password: hash } });
+  res.json({ ok: true });
 });

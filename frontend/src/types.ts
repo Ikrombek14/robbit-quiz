@@ -138,6 +138,9 @@ export interface QuizListItem {
   description?: string | null;
   updatedAt: string;
   _count: { slides: number };
+  // Admin ro'yxatda barcha o'qituvchilarning loyihalarini ko'radi — egasi ko'rsatiladi
+  owner?: { id: string; name: string; email: string };
+  mine?: boolean;
 }
 
 export interface Teacher {
@@ -147,6 +150,7 @@ export interface Teacher {
   picture?: string | null;
   isAdmin?: boolean;
   approved?: boolean; // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa
+  hasPassword?: boolean; // parol o'rnatilganmi (Sozlamalar: joriy parol kerakmi)
 }
 
 // Saytga kirgan foydalanuvchi (Teacher account) — admin nazorat paneli uchun

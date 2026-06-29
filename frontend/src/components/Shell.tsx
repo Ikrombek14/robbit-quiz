@@ -27,6 +27,7 @@ const NAV: NavItem[] = [
   { key: "users", label: "Foydalanuvchilar", icon: "manage_accounts", path: "/users", mobileHide: true, show: isAdmin },
   { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false, show: canApproved },
   { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canApproved },
+  { key: "settings", label: "Sozlamalar", icon: "settings", path: "/settings", mobileHide: false },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {

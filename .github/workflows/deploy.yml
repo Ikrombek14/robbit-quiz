@@ -23,6 +23,10 @@ jobs:
 
       - name: Frontend build
         working-directory: frontend
+        env:
+          # Google bilan kirish tugmasi build paytida client_id'ni talab qiladi (Vite).
+          # Bu bo'lmasa frontend "Google bilan kirish sozlanmagan" deb chiqaradi.
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: npm ci && npm run build
 
       - name: Backend build

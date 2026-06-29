@@ -58,7 +58,15 @@ export default function AdminLogin() {
           </button>
         </form>
 
-        <p className="center muted" style={{ marginBottom: 0 }}>
+        <details style={{ marginTop: 10 }}>
+          <summary className="muted text-sm" style={{ cursor: "pointer" }}>Parolni unutdingizmi?</summary>
+          <p className="muted text-sm" style={{ margin: "6px 0 0" }}>
+            Google bilan kiring (yuqoridagi tugma), so'ng <b>Sozlamalar → Parol</b> bo'limidan yangi parol o'rnating.
+            Agar Google'siz bo'lsa, admin bilan bog'laning — u parolingizni tiklab beradi.
+          </p>
+        </details>
+
+        <p className="center muted" style={{ marginBottom: 0, marginTop: 10 }}>
           Akkaunt yo'qmi? <Link to="/register">Ro'yxatdan o'tish</Link>
         </p>
       </div>

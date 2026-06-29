@@ -6,6 +6,13 @@ import { requireAuth, type AuthedRequest } from "../auth.js";
 export const quizRouter = Router();
 quizRouter.use(requireAuth);
 
+// Joriy foydalanuvchi admin'mi? (admin barcha o'qituvchilarning quizlarini ko'radi/boshqaradi)
+async function isAdminUser(teacherId?: string): Promise<boolean> {
+  if (!teacherId) return false;
+  const t = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { isAdmin: true } });
+  return t?.isAdmin === true;
+}
+
 const slideSchema = z.object({
   kind: z.enum(["CONTENT", "QUESTION"]),
   type: z.string().nullable().optional(),
@@ -65,20 +72,36 @@ function parseSlide(s: SlideRow) {
   };
 }
 
-// Ro'yxat
+// Ro'yxat — admin barcha o'qituvchilarning loyihalarini ko'radi (egasi bilan)
 quizRouter.get("/", async (req: AuthedRequest, res) => {
+  const admin = await isAdminUser(req.teacherId);
   const quizzes = await prisma.quiz.findMany({
-    where: { teacherId: req.teacherId },
+    where: admin ? {} : { teacherId: req.teacherId },
     orderBy: { updatedAt: "desc" },
-    include: { _count: { select: { slides: true } } },
+    include: {
+      _count: { select: { slides: true } },
+      teacher: { select: { id: true, name: true, email: true } },
+    },
   });
-  res.json({ quizzes });
+  res.json({
+    isAdmin: admin,
+    quizzes: quizzes.map((q) => ({
+      id: q.id,
+      title: q.title,
+      description: q.description,
+      updatedAt: q.updatedAt,
+      _count: q._count,
+      owner: { id: q.teacher.id, name: q.teacher.name, email: q.teacher.email },
+      mine: q.teacherId === req.teacherId,
+    })),
+  });
 });
 
-// Bitta quiz (to'liq)
+// Bitta quiz (to'liq) — admin har qanday loyihani ko'ra oladi
 quizRouter.get("/:id", async (req: AuthedRequest, res) => {
+  const admin = await isAdminUser(req.teacherId);
   const quiz = await prisma.quiz.findFirst({
-    where: { id: String(req.params.id), teacherId: req.teacherId },
+    where: admin ? { id: String(req.params.id) } : { id: String(req.params.id), teacherId: req.teacherId },
     include: { slides: { orderBy: { order: "asc" } } },
   });
   if (!quiz) {
@@ -132,8 +155,9 @@ quizRouter.put("/:id", async (req: AuthedRequest, res) => {
     res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
     return;
   }
+  const admin = await isAdminUser(req.teacherId);
   const owned = await prisma.quiz.findFirst({
-    where: { id: String(req.params.id), teacherId: req.teacherId },
+    where: admin ? { id: String(req.params.id) } : { id: String(req.params.id), teacherId: req.teacherId },
   });
   if (!owned) {
     res.status(404).json({ error: "Quiz topilmadi" });
@@ -162,10 +186,11 @@ quizRouter.put("/:id", async (req: AuthedRequest, res) => {
   });
 });
 
-// O'chirish
+// O'chirish — admin har qanday loyihani o'chira oladi
 quizRouter.delete("/:id", async (req: AuthedRequest, res) => {
+  const admin = await isAdminUser(req.teacherId);
   const owned = await prisma.quiz.findFirst({
-    where: { id: String(req.params.id), teacherId: req.teacherId },
+    where: admin ? { id: String(req.params.id) } : { id: String(req.params.id), teacherId: req.teacherId },
   });
   if (!owned) {
     res.status(404).json({ error: "Quiz topilmadi" });

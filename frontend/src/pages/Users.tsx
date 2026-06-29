@@ -43,6 +43,31 @@ export default function Users() {
     });
   }, [rows, q, filter]);
 
+  async function resetPassword(u: AppUser) {
+    const pw = window.prompt(`"${u.name}" uchun yangi parol kiriting (kamida 6 belgi):`);
+    if (pw === null) return; // bekor qilindi
+    if (pw.length < 6) {
+      setMsg("Parol kamida 6 belgi bo'lishi kerak");
+      setTimeout(() => setMsg(""), 4000);
+      return;
+    }
+    setBusy(u.id);
+    setMsg("");
+    try {
+      await api(`/admin/users/${u.id}/password`, {
+        method: "POST",
+        body: JSON.stringify({ password: pw }),
+      });
+      setMsg(`✓ "${u.name}" paroli yangilandi`);
+      setTimeout(() => setMsg(""), 5000);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Xatolik");
+      setTimeout(() => setMsg(""), 5000);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function patch(u: AppUser, body: { accessOverride?: boolean | null; isAdmin?: boolean }) {
     setBusy(u.id);
     setMsg("");
@@ -96,17 +121,17 @@ export default function Users() {
         <div className="card"><p className="muted">Topilmadi.</p></div>
       ) : (
         <div className="roster-table">
-          <div className="roster-row roster-head" style={{ gridTemplateColumns: "28px 1fr 200px 120px" }}>
+          <div className="roster-row roster-head" style={{ gridTemplateColumns: "28px 1fr 200px 160px" }}>
             <span>#</span>
             <span>Foydalanuvchi</span>
             <span>Ustoz huquqi</span>
-            <span style={{ textAlign: "right" }}>Admin</span>
+            <span style={{ textAlign: "right" }}>Parol · Admin</span>
           </div>
           {filtered.map((u, i) => {
             const isMe = u.id === me?.id;
             const working = busy === u.id;
             return (
-              <div className="roster-row" key={u.id} style={{ gridTemplateColumns: "28px 1fr 200px 120px", alignItems: "center" }}>
+              <div className="roster-row" key={u.id} style={{ gridTemplateColumns: "28px 1fr 200px 160px", alignItems: "center" }}>
                 <span className="muted">{i + 1}</span>
                 <span className="roster-name">
                   <span className="side-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>
@@ -147,8 +172,17 @@ export default function Users() {
                   </span>
                 </span>
 
-                {/* Admin */}
-                <span className="row" style={{ justifyContent: "flex-end" }}>
+                {/* Parol tiklash + Admin */}
+                <span className="row" style={{ justifyContent: "flex-end", gap: 6 }}>
+                  <button
+                    className="icon-btn"
+                    style={{ width: 40, height: 36 }}
+                    disabled={working}
+                    onClick={() => resetPassword(u)}
+                    title="Parolni tiklash (yangi parol o'rnatish)"
+                  >
+                    <span className="material-symbols-outlined">key</span>
+                  </button>
                   <button
                     className="icon-btn"
                     style={{

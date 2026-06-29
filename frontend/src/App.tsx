@@ -18,6 +18,7 @@ import Curriculum from "./pages/Curriculum";
 import Guide from "./pages/Guide";
 import Teachers from "./pages/Teachers";
 import Users from "./pages/Users";
+import Settings from "./pages/Settings";
 import Shell from "./components/Shell";
 
 function Protected({ children, approved, admin }: { children: ReactNode; approved?: boolean; admin?: boolean }) {
@@ -73,6 +74,7 @@ export default function App() {
       <Route path="/guide" element={<Protected approved><Guide /></Protected>} />
       <Route path="/teachers" element={<Protected><Teachers /></Protected>} />
       <Route path="/users" element={<Protected admin><Users /></Protected>} />
+      <Route path="/settings" element={<Protected><Settings /></Protected>} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

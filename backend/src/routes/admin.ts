@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../auth.js";
@@ -104,4 +105,25 @@ adminRouter.patch("/users/:id", async (req: AuthedRequest, res) => {
     },
   });
   res.json({ user: publicUser(updated) });
+});
+
+// ---- Foydalanuvchi parolini tiklash (admin) ----
+// Foydalanuvchi parolni unutsa va Google bilan ham kira olmasa, admin yangi parol
+// o'rnatib beradi. Foydalanuvchi keyin Sozlamalar orqali o'zgartirishi mumkin.
+const resetPwSchema = z.object({ password: z.string().min(6) });
+adminRouter.post("/users/:id/password", async (req: AuthedRequest, res) => {
+  const parsed = resetPwSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Parol kamida 6 belgi bo'lishi kerak" });
+    return;
+  }
+  const id = String(req.params.id);
+  const target = await prisma.teacher.findUnique({ where: { id } });
+  if (!target) {
+    res.status(404).json({ error: "Foydalanuvchi topilmadi" });
+    return;
+  }
+  const hash = await bcrypt.hash(parsed.data.password, 10);
+  await prisma.teacher.update({ where: { id }, data: { password: hash } });
+  res.json({ ok: true });
 });

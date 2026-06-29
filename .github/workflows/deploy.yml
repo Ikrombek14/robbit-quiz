@@ -48,10 +48,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: |
-          # Parolda URL uchun maxsus belgilar (@ / : # % +) bo'lsa, DATABASE_URL buziladi
-          # va P1000 (auth failed) beradi. Shu sabab parolni percent-encode qilamiz.
+          # Unix socket orqali ulanamiz (host=/var/run/postgresql): bu psql boshqaradigan
+          # aynan o'sha cluster, 'local ... trust' qoidasiga tushadi — TCP/IPv6/parol
+          # noaniqliklarisiz. Parol ham (percent-encode qilingan) qoldiriladi — ehtiyot uchun.
           DB_PASS_ENC=$(jq -rn --arg x "$DB_PASS" '$x|@uri')
-          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=postgresql://robbit:%s@localhost:5432/robbit_quiz\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com,ilkhomjon2001@gmail.com\n' \
+          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=postgresql://robbit:%s@localhost:5432/robbit_quiz?host=/var/run/postgresql\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com,ilkhomjon2001@gmail.com\n' \
             "$DB_PASS_ENC" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" > /tmp/app.env
 
       - name: sshpass o'rnatish
@@ -110,6 +111,18 @@ jobs:
             cd $APP
             npm install --omit=dev
             npx prisma generate
+
+            # --- DIAGNOSTIKA (P1000 sababini aniqlash uchun) ---
+            echo '--- pg_hba (yuqori 12 qator) ---'
+            sudo -u postgres psql -tAc 'SHOW hba_file' | xargs -r head -12
+            echo '--- clusters / port ---'
+            (pg_lsclusters 2>/dev/null || true)
+            sudo -u postgres psql -tAc 'SHOW port' || true
+            echo '--- robbit roli ---'
+            sudo -u postgres psql -tAc \"SELECT rolname, rolcanlogin FROM pg_roles WHERE rolname='robbit'\" || true
+            echo '--- socket orqali robbit ulanishi ---'
+            sudo -u postgres psql 'postgresql://robbit@localhost:5432/robbit_quiz?host=/var/run/postgresql' -tAc 'SELECT current_user' || echo 'SOCKET ULANISH XATO'
+            echo '--- diagnostika tugadi ---'
 
             # Migratsiya: P3005 (jadvallar bor, tarix yo'q) holatini avtomatik hal qilish
             npx prisma migrate resolve --applied 20260628104152_init 2>/dev/null || true

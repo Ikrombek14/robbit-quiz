@@ -84,12 +84,15 @@ jobs:
             fi
             systemctl enable postgresql --now 2>/dev/null || true
 
-            # pg_hba.conf — trust auth (localhost, firewall orqasida xavfsiz)
+            # pg_hba.conf — trust auth (localhost, firewall orqasida xavfsiz).
+            # Trust qo'yamiz va parolni e'tiborsiz qoldiramiz (P1000 oldini olish).
             PG_HBA=\$(sudo -u postgres psql -tAc 'SHOW hba_file')
-            if ! grep -q 'robbit_quiz.*trust' \"\$PG_HBA\" 2>/dev/null; then
-              sed -i '1s/^/host robbit_quiz robbit 127.0.0.1\/32 trust\nhost robbit_quiz robbit ::1\/128 trust\n/' \"\$PG_HBA\"
-              systemctl reload postgresql
+            if ! grep -q 'robbit_quiz.*robbit.*trust' \"\$PG_HBA\" 2>/dev/null; then
+              sed -i '1s/^/local robbit_quiz robbit trust\nhost robbit_quiz robbit 127.0.0.1\/32 trust\nhost robbit_quiz robbit ::1\/128 trust\n/' \"\$PG_HBA\"
             fi
+            # Ishlab turgan instance'ga konfigni qayta o'qitamiz (systemctl reload ba'zan
+            # meta-service'da no-op bo'ladi; pg_reload_conf() aniq ishlaydi).
+            sudo -u postgres psql -c \"SELECT pg_reload_conf();\" || systemctl reload postgresql || true
 
             # DB va user yaratish / parolni yangilash
             sudo -u postgres psql -c \"CREATE USER robbit WITH PASSWORD '$DB_PASS';\" 2>/dev/null || true

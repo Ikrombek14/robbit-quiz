@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requireCanCreate } from "../auth.js";
 import { generateQuestionsFromPdf } from "../services/claude.js";
 
 const upload = multer({
@@ -11,7 +11,7 @@ const upload = multer({
 export const pdfRouter = Router();
 
 // PDF yuklash -> AI savollar yaratadi -> ro'yxat qaytariladi (hali saqlanmaydi)
-pdfRouter.post("/generate", requireAuth, upload.single("pdf"), async (req, res) => {
+pdfRouter.post("/generate", requireAuth, requireCanCreate, upload.single("pdf"), async (req, res) => {
   const file = (req as unknown as { file?: { buffer: Buffer; mimetype: string } }).file;
   if (!file) {
     res.status(400).json({ error: "PDF fayl yuborilmadi" });

@@ -35,6 +35,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { teacher, logout } = useAuth();
   const [theme, setThemeState] = useState<Theme>(getTheme());
+  const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati
 
   async function createQuiz() {
     const r = await api<{ quiz: Quiz }>("/quizzes", {
@@ -55,10 +56,12 @@ export default function Shell({ children }: { children: ReactNode }) {
         >
           Robbit
         </div>
-        <button className="side-create" onClick={createQuiz}>
-          <span className="material-symbols-outlined">add</span>
-          Yaratish
-        </button>
+        {canCreate && (
+          <button className="side-create" onClick={createQuiz}>
+            <span className="material-symbols-outlined">add</span>
+            Yaratish
+          </button>
+        )}
         <nav className="side-nav">
           {NAV.filter((n) => !n.show || n.show(teacher)).map((n) => {
             const active = location.pathname === n.path || location.pathname.startsWith(n.path + "/");

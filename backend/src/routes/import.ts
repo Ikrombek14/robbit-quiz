@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requireCanCreate } from "../auth.js";
 
 export const importRouter = Router();
 
@@ -327,7 +327,7 @@ export function mapQuizResponse(json: any): { title: string; slides: any[]; summ
   return { title: stripHtml(quiz?.info?.name ?? quiz?.name ?? ""), slides, summary };
 }
 
-importRouter.post("/wayground", requireAuth, async (req, res) => {
+importRouter.post("/wayground", requireAuth, requireCanCreate, async (req, res) => {
   const { url } = (req.body ?? {}) as { url?: string };
   const id = extractQuizId(url ?? "");
   if (!id) {

@@ -149,7 +149,9 @@ export interface Teacher {
   name: string;
   picture?: string | null;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean; // ADMIN_EMAILS env'dagi = super admin (hamma narsa)
   approved?: boolean; // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa
+  canCreate?: boolean; // "slayd qilish" ruxsati (quiz yaratish/tahrirlash/biriktirish)
   hasPassword?: boolean; // parol o'rnatilganmi (Sozlamalar: joriy parol kerakmi)
 }
 
@@ -161,8 +163,9 @@ export interface AppUser {
   picture?: string | null;
   isAdmin: boolean;
   approved: boolean;
+  canCreate: boolean; // "slayd qilish" ruxsati
   accessOverride: boolean | null; // null = avtomatik, true = berilgan, false = olib tashlangan
-  envAdmin: boolean; // ADMIN_EMAILS'dagi admin — huquqini panelda olib bo'lmaydi
+  envAdmin: boolean; // ADMIN_EMAILS'dagi (super admin) — huquqini panelda olib bo'lmaydi
   quizCount: number;
   createdAt: string;
 }

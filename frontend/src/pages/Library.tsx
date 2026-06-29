@@ -11,6 +11,7 @@ export default function Library() {
   const navigate = useNavigate();
   const { teacher } = useAuth();
   const isAdmin = teacher?.isAdmin === true;
+  const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati
   const [quizzes, setQuizzes] = useState<QuizListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -53,7 +54,7 @@ export default function Library() {
     <Shell>
       <div className="between">
         <h1 style={{ fontSize: 28 }}>{isAdmin ? "Barcha loyihalar" : "Kutubxonam"}</h1>
-        <button className="btn" onClick={createQuiz}>+ Yangi loyiha</button>
+        {canCreate && <button className="btn" onClick={createQuiz}>+ Yangi loyiha</button>}
       </div>
       {isAdmin && (
         <p className="muted" style={{ marginTop: 4 }}>
@@ -96,25 +97,29 @@ export default function Library() {
               >
                 ▶ Boshlash
               </button>
-              <button
-                className="w-11 h-11 rounded-xl flex items-center justify-center"
-                style={{ background: "#cae6ff", color: "#004f75" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/quiz/${item.id}`);
-                }}
-                title="Tahrirlash"
-              >
-                <span className="material-symbols-outlined">edit</span>
-              </button>
-              <button
-                className="w-11 h-11 rounded-xl flex items-center justify-center"
-                style={{ background: "#ffdad6", color: "#ba1a1a" }}
-                onClick={(e) => remove(item.id, e)}
-                title="O'chirish"
-              >
-                <span className="material-symbols-outlined">delete</span>
-              </button>
+              {canCreate && (
+                <>
+                  <button
+                    className="w-11 h-11 rounded-xl flex items-center justify-center"
+                    style={{ background: "#cae6ff", color: "#004f75" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/quiz/${item.id}`);
+                    }}
+                    title="Tahrirlash"
+                  >
+                    <span className="material-symbols-outlined">edit</span>
+                  </button>
+                  <button
+                    className="w-11 h-11 rounded-xl flex items-center justify-center"
+                    style={{ background: "#ffdad6", color: "#ba1a1a" }}
+                    onClick={(e) => remove(item.id, e)}
+                    title="O'chirish"
+                  >
+                    <span className="material-symbols-outlined">delete</span>
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>

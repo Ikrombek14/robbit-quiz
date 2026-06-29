@@ -52,6 +52,7 @@ export default function Curriculum() {
   const { teacher } = useAuth();
   const navigate = useNavigate();
   const isAdmin = teacher?.isAdmin === true;
+  const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati (quizni biriktira oladi)
 
   const [subject, setSubject] = useState<Subject>("ROBOTEXNIKA");
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
@@ -105,11 +106,11 @@ export default function Curriculum() {
   }, [lessons, highlightId]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canCreate) return;
     api<{ quizzes: QuizListItem[] }>("/quizzes")
       .then((r) => setQuizList(r.quizzes))
       .catch(() => {});
-  }, [isAdmin]);
+  }, [canCreate]);
 
   useEffect(() => {
     if (!allFiltersSet) { setLessons([]); return; }
@@ -198,6 +199,14 @@ export default function Curriculum() {
     if (!confirm("Darsni o'chirishni tasdiqlaysizmi?")) return;
     await api(`/curriculum/${id}`, { method: "DELETE" });
     setLessons((ls) => ls.filter((l) => l.id !== id));
+  }
+
+  // canCreate ustoz (admin emas) darsga o'z quizini biriktiradi — faqat quizId o'zgaradi
+  async function attachQuiz(l: LessonPlan, quizId: string) {
+    await api(`/curriculum/${l.id}/quiz`, { method: "PATCH", body: JSON.stringify({ quizId: quizId || null }) });
+    setLessons((ls) =>
+      ls.map((x) => (x.id === l.id ? { ...x, quizId: quizId || null, quiz: quizId ? quizForId(quizId) : null } : x)),
+    );
   }
 
   const btnBase: React.CSSProperties = {
@@ -409,6 +418,24 @@ export default function Curriculum() {
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>play_arrow</span>
                       Boshlash
                     </button>
+                  )}
+
+                  {/* canCreate ustoz (admin emas) — o'z slaydini biriktirish */}
+                  {!isAdmin && canCreate && (
+                    <select
+                      value={l.quizId ?? ""}
+                      onChange={(e) => attachQuiz(l, e.target.value)}
+                      title="Darsga o'z slaydingizni biriktirish"
+                      style={{
+                        flexShrink: 0, maxWidth: 200, padding: "6px 10px", borderRadius: 8,
+                        border: "2px solid var(--border)", background: "var(--surface)", fontSize: 13, color: "var(--ink)",
+                      }}
+                    >
+                      <option value="">— Slayd biriktirish —</option>
+                      {quizList.map((q) => (
+                        <option key={q.id} value={q.id}>{q.title} ({q._count.slides} slayd)</option>
+                      ))}
+                    </select>
                   )}
 
                   {/* Admin tugmalari */}

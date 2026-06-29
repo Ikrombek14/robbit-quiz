@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 import { config } from "./config.js";
 import { prisma } from "./prisma.js";
+import { isAdminEmail } from "./lib/approval.js";
 
 export interface AuthedRequest extends Request {
   teacherId?: string;
@@ -50,6 +51,27 @@ export async function requireApproved(req: AuthedRequest, res: Response, next: N
   const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { isAdmin: true, approved: true } });
   if (!teacher?.isAdmin && !teacher?.approved) {
     res.status(403).json({ error: "Bu bo'lim faqat ro'yxatdagi ustozlar uchun. Admin bilan bog'laning." });
+    return;
+  }
+  next();
+}
+
+// "Slayd qilish" ruxsati — quiz yaratish/tahrirlash, slayd generatsiya, darsga biriktirish.
+// Admin (super yoki oddiy) yoki canCreate berilgan ustoz. (Host/o'yin bunga bog'liq EMAS — hamma uchun ochiq.)
+export async function requireCanCreate(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
+  const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { isAdmin: true, canCreate: true } });
+  if (!teacher?.isAdmin && !teacher?.canCreate) {
+    res.status(403).json({ error: "Slayd yaratish ruxsati yo'q. Admin bilan bog'laning." });
+    return;
+  }
+  next();
+}
+
+// Faqat super admin (ADMIN_EMAILS env'dagi) — admin huquqi berish, parol tiklash, roster boshqaruvi.
+export async function requireSuperAdmin(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
+  const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { email: true } });
+  if (!teacher || !isAdminEmail(teacher.email)) {
+    res.status(403).json({ error: "Bu amal faqat super admin uchun ruxsat etilgan" });
     return;
   }
   next();

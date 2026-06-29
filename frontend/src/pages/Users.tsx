@@ -14,6 +14,9 @@ function accessSource(u: AppUser): string {
 
 export default function Users() {
   const { teacher: me } = useAuth();
+  const isSuper = me?.isSuperAdmin === true; // super admin: admin huquqi, parol, ustoz huquqi
+  // Oddiy admin faqat "slayd ruxsati"ni boshqaradi; super admin uchun barcha ustunlar.
+  const cols = isSuper ? "28px 1fr 150px 190px 150px" : "28px 1fr 1fr";
   const [rows, setRows] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -68,7 +71,7 @@ export default function Users() {
     }
   }
 
-  async function patch(u: AppUser, body: { accessOverride?: boolean | null; isAdmin?: boolean }) {
+  async function patch(u: AppUser, body: { accessOverride?: boolean | null; isAdmin?: boolean; canCreate?: boolean }) {
     setBusy(u.id);
     setMsg("");
     try {
@@ -121,17 +124,18 @@ export default function Users() {
         <div className="card"><p className="muted">Topilmadi.</p></div>
       ) : (
         <div className="roster-table">
-          <div className="roster-row roster-head" style={{ gridTemplateColumns: "28px 1fr 200px 160px" }}>
+          <div className="roster-row roster-head" style={{ gridTemplateColumns: cols }}>
             <span>#</span>
             <span>Foydalanuvchi</span>
-            <span>Ustoz huquqi</span>
-            <span style={{ textAlign: "right" }}>Parol · Admin</span>
+            <span>Slayd ruxsati</span>
+            {isSuper && <span>Ustoz huquqi</span>}
+            {isSuper && <span style={{ textAlign: "right" }}>Parol · Admin</span>}
           </div>
           {filtered.map((u, i) => {
             const isMe = u.id === me?.id;
             const working = busy === u.id;
             return (
-              <div className="roster-row" key={u.id} style={{ gridTemplateColumns: "28px 1fr 200px 160px", alignItems: "center" }}>
+              <div className="roster-row" key={u.id} style={{ gridTemplateColumns: cols, alignItems: "center" }}>
                 <span className="muted">{i + 1}</span>
                 <span className="roster-name">
                   <span className="side-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>
@@ -143,7 +147,22 @@ export default function Users() {
                   </span>
                 </span>
 
-                {/* Ustoz huquqi */}
+                {/* Slayd qilish ruxsati — har qanday admin boshqaradi */}
+                <span>
+                  <button
+                    className={`btn ${u.canCreate ? "" : "btn-ghost"}`}
+                    style={{ minWidth: 110, height: 36, padding: "0 12px" }}
+                    disabled={working}
+                    onClick={() => patch(u, { canCreate: !u.canCreate })}
+                    title={u.canCreate ? "Slayd qilish ruxsatini olib tashlash" : "Slayd qilish ruxsatini berish"}
+                  >
+                    {working ? "…" : u.canCreate ? "✓ Slaydchi" : "Ruxsat ber"}
+                  </button>
+                </span>
+
+                {/* Ustoz huquqi + Parol/Admin — faqat super admin */}
+                {isSuper && (
+                <>
                 <span>
                   <button
                     className={`btn ${u.approved ? "btn-ghost" : ""}`}
@@ -204,6 +223,8 @@ export default function Users() {
                     </span>
                   </button>
                 </span>
+                </>
+                )}
               </div>
             );
           })}

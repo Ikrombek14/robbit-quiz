@@ -1,7 +1,7 @@
 import { Router, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requireApproved, type AuthedRequest } from "../auth.js";
+import { requireAuth, requireApproved, requireCanCreate, type AuthedRequest } from "../auth.js";
 
 export const curriculumRouter = Router();
 curriculumRouter.use(requireAuth);
@@ -104,6 +104,26 @@ curriculumRouter.put("/:id", requireAdmin, async (req, res) => {
         section: parsed.data.section ?? null,
         quizId: parsed.data.quizId ?? null,
       },
+    });
+    res.json({ lesson });
+  } catch {
+    res.status(404).json({ error: "Dars topilmadi" });
+  }
+});
+
+// Darsga quiz biriktirish/yechish — "slayd qilish" ruxsati bo'lgan ustoz ham qila oladi.
+// Faqat quizId o'zgaradi (darsning boshqa maydonlariga tegmaydi).
+const attachSchema = z.object({ quizId: z.string().nullable() });
+curriculumRouter.patch("/:id/quiz", requireCanCreate, async (req, res) => {
+  const parsed = attachSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
+    return;
+  }
+  try {
+    const lesson = await prisma.lessonPlan.update({
+      where: { id: String(req.params.id) },
+      data: { quizId: parsed.data.quizId },
     });
     res.json({ lesson });
   } catch {

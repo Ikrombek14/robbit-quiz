@@ -28,6 +28,7 @@ export default function ActivityDetail() {
   const navigate = useNavigate();
   const { teacher } = useAuth();
   const isAdmin = teacher?.isAdmin === true;
+  const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati
 
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [error, setError] = useState("");
@@ -147,9 +148,11 @@ export default function ActivityDetail() {
                   {pdfBusy ? "⏳ Tayyorlanmoqda…" : "📥 PDF yuklab olish"}
                 </button>
               )}
-              <button className="btn btn-ghost" onClick={() => navigate(`/quiz/${quiz.id}`)}>
-                ✏️ Tahrirlash
-              </button>
+              {canCreate && (
+                <button className="btn btn-ghost" onClick={() => navigate(`/quiz/${quiz.id}`)}>
+                  ✏️ Tahrirlash
+                </button>
+              )}
               <div style={{ position: "relative" }}>
                 <button className="btn btn-ghost" disabled={slideCount === 0} onClick={() => setShareOpen((o) => !o)}>
                   🔗 Ulashish

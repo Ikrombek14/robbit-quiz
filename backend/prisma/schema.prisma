@@ -18,6 +18,9 @@ model Teacher {
   picture   String? // Google avatar
   isAdmin   Boolean  @default(false)
   approved  Boolean  @default(false) // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa true
+  // "Slayd qilish" ruxsati: quiz yaratish/tahrirlash + slayd generatsiya + darsga quiz biriktirish.
+  // Default false — faqat admin tanlab beradi. (Host/o'yin o'tkazish hamma uchun ochiq, bunga bog'liq emas.)
+  canCreate Boolean  @default(false)
   // Admin qo'lda bergan/olib tashlagan ustoz huquqi. null = avtomatik (roster yoki admin email
   // bo'yicha). true = majburan berilgan, false = majburan olib tashlangan. approved'dan ustun.
   accessOverride Boolean?

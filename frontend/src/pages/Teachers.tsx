@@ -14,7 +14,8 @@ function catLabel(c?: string | null): string {
 
 export default function Teachers() {
   const { teacher } = useAuth();
-  const isAdmin = teacher?.isAdmin === true;
+  // Roster mutatsiyalari (import/qo'shish/tahrir/o'chirish) — faqat super admin
+  const isAdmin = teacher?.isSuperAdmin === true;
 
   const [rows, setRows] = useState<RosterTeacher[]>([]);
   const [loading, setLoading] = useState(true);

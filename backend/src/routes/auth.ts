@@ -11,14 +11,16 @@ export const authRouter = Router();
 
 const googleClient = new OAuth2Client(config.googleClientId);
 
-function publicTeacher(t: { id: string; email: string; name: string; picture?: string | null; isAdmin: boolean; approved: boolean; password?: string | null }) {
+function publicTeacher(t: { id: string; email: string; name: string; picture?: string | null; isAdmin: boolean; approved: boolean; canCreate?: boolean; password?: string | null }) {
   return {
     id: t.id,
     email: t.email,
     name: t.name,
     picture: t.picture ?? null,
     isAdmin: t.isAdmin,
+    isSuperAdmin: isAdminEmail(t.email), // ADMIN_EMAILS env'dagi = super admin (hamma narsa)
     approved: t.approved,
+    canCreate: t.canCreate ?? false, // "slayd qilish" ruxsati
     hasPassword: !!t.password, // parol o'rnatilganmi (Sozlamalar UI uchun)
   };
 }
@@ -126,7 +128,7 @@ authRouter.post("/login", async (req, res) => {
 authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   const teacher = await prisma.teacher.findUnique({
     where: { id: req.teacherId },
-    select: { id: true, email: true, name: true, picture: true, isAdmin: true, approved: true, password: true },
+    select: { id: true, email: true, name: true, picture: true, isAdmin: true, approved: true, canCreate: true, password: true },
   });
   res.json({ teacher: teacher ? publicTeacher(teacher) : null });
 });

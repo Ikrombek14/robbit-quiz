@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, type AuthedRequest } from "../auth.js";
+import { requireAuth, requireCanCreate, type AuthedRequest } from "../auth.js";
 
 export const quizRouter = Router();
 quizRouter.use(requireAuth);
@@ -119,8 +119,8 @@ quizRouter.get("/:id", async (req: AuthedRequest, res) => {
   });
 });
 
-// Yaratish
-quizRouter.post("/", async (req: AuthedRequest, res) => {
+// Yaratish — "slayd qilish" ruxsati kerak
+quizRouter.post("/", requireCanCreate, async (req: AuthedRequest, res) => {
   const parsed = quizSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
@@ -148,8 +148,8 @@ quizRouter.post("/", async (req: AuthedRequest, res) => {
   });
 });
 
-// Yangilash (slaydlar to'liq almashtiriladi)
-quizRouter.put("/:id", async (req: AuthedRequest, res) => {
+// Yangilash (slaydlar to'liq almashtiriladi) — "slayd qilish" ruxsati kerak
+quizRouter.put("/:id", requireCanCreate, async (req: AuthedRequest, res) => {
   const parsed = quizSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
@@ -186,8 +186,8 @@ quizRouter.put("/:id", async (req: AuthedRequest, res) => {
   });
 });
 
-// O'chirish — admin har qanday loyihani o'chira oladi
-quizRouter.delete("/:id", async (req: AuthedRequest, res) => {
+// O'chirish — "slayd qilish" ruxsati kerak (admin har qanday loyihani o'chira oladi)
+quizRouter.delete("/:id", requireCanCreate, async (req: AuthedRequest, res) => {
   const admin = await isAdminUser(req.teacherId);
   const owned = await prisma.quiz.findFirst({
     where: admin ? { id: String(req.params.id) } : { id: String(req.params.id), teacherId: req.teacherId },

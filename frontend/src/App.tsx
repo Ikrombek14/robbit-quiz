@@ -21,10 +21,22 @@ import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Shell from "./components/Shell";
 
-function Protected({ children, approved, admin }: { children: ReactNode; approved?: boolean; admin?: boolean }) {
+function Protected({ children, approved, admin, create }: { children: ReactNode; approved?: boolean; admin?: boolean; create?: boolean }) {
   const { teacher, loading } = useAuth();
   if (loading) return <div className="container">Yuklanmoqda…</div>;
   if (!teacher) return <Navigate to="/admin" replace />;
+  // "slayd qilish" ruxsati talab qilinsa va user'da bo'lmasa — ruxsat yo'q
+  if (create && !(teacher.isAdmin || teacher.canCreate)) {
+    return (
+      <Shell>
+        <div className="card center" style={{ marginTop: 40 }}>
+          <div style={{ fontSize: 44 }}>🔒</div>
+          <h2 style={{ marginTop: 8 }}>Slayd yaratish ruxsati yo'q</h2>
+          <p className="muted">Bu bo'lim faqat slayd qilish ruxsati berilgan ustozlar uchun. Admin bilan bog'laning.</p>
+        </div>
+      </Shell>
+    );
+  }
   // admin talab qilinsa va user admin bo'lmasa — ruxsat yo'q
   if (admin && !teacher.isAdmin) {
     return (
@@ -66,7 +78,7 @@ export default function App() {
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
       <Route path="/library" element={<Protected><Library /></Protected>} />
       <Route path="/activity/:id" element={<Protected><ActivityDetail /></Protected>} />
-      <Route path="/quiz/:id" element={<Protected><QuizEditor /></Protected>} />
+      <Route path="/quiz/:id" element={<Protected create><QuizEditor /></Protected>} />
       <Route path="/host/:quizId" element={<Protected><Host /></Protected>} />
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />

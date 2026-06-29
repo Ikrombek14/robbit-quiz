@@ -3,7 +3,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireSuperAdmin } from "../auth.js";
 import { nameKey } from "../lib/nameKey.js";
 import { resyncAllApproved } from "../lib/approval.js";
 
@@ -31,7 +31,7 @@ const rosterSchema = z.object({
 });
 
 // ---- Qo'shish (admin) ----
-teachersRouter.post("/", requireAdmin, async (req, res) => {
+teachersRouter.post("/", requireSuperAdmin, async (req, res) => {
   const parsed = rosterSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Ism kerak" });
@@ -56,7 +56,7 @@ teachersRouter.post("/", requireAdmin, async (req, res) => {
 });
 
 // ---- Tahrirlash (admin) ----
-teachersRouter.put("/:id", requireAdmin, async (req, res) => {
+teachersRouter.put("/:id", requireSuperAdmin, async (req, res) => {
   const parsed = rosterSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Ism kerak" });
@@ -80,7 +80,7 @@ teachersRouter.put("/:id", requireAdmin, async (req, res) => {
 });
 
 // ---- O'chirish (admin) ----
-teachersRouter.delete("/:id", requireAdmin, async (req, res) => {
+teachersRouter.delete("/:id", requireSuperAdmin, async (req, res) => {
   try {
     await prisma.rosterTeacher.delete({ where: { id: String(req.params.id) } });
     await resyncAllApproved();
@@ -99,7 +99,7 @@ function findCol(header: any[], ...needles: string[]): number {
 }
 
 // ---- CSV import (admin) ----
-teachersRouter.post("/import", requireAdmin, upload.single("file"), async (req, res) => {
+teachersRouter.post("/import", requireSuperAdmin, upload.single("file"), async (req, res) => {
   const file = (req as any).file as { buffer: Buffer } | undefined;
   if (!file) {
     res.status(400).json({ error: "Fayl yuborilmadi" });
@@ -164,7 +164,7 @@ teachersRouter.post("/import", requireAdmin, upload.single("file"), async (req, 
 });
 
 // ---- CSV export (admin) ----
-teachersRouter.get("/export", requireAdmin, async (_req, res) => {
+teachersRouter.get("/export", requireSuperAdmin, async (_req, res) => {
   const teachers = await prisma.rosterTeacher.findMany({ orderBy: [{ order: "asc" }, { name: "asc" }] });
   const esc = (v: any) => {
     const s = String(v ?? "");

@@ -17,6 +17,7 @@ function publicUser(t: {
   picture: string | null;
   isAdmin: boolean;
   approved: boolean;
+  canCreate: boolean;
   accessOverride: boolean | null;
   createdAt: Date;
   _count?: { quizzes: number };
@@ -28,11 +29,19 @@ function publicUser(t: {
     picture: t.picture,
     isAdmin: t.isAdmin,
     approved: t.approved,
+    canCreate: t.canCreate, // "slayd qilish" ruxsati
     accessOverride: t.accessOverride,
-    envAdmin: isAdminEmail(t.email), // env ADMIN_EMAILS'dagi admin — huquqini olib bo'lmaydi
+    envAdmin: isAdminEmail(t.email), // env ADMIN_EMAILS'dagi = super admin — huquqini olib bo'lmaydi
     quizCount: t._count?.quizzes ?? 0,
     createdAt: t.createdAt,
   };
+}
+
+// So'rovchi super admin'mi? (ADMIN_EMAILS env'dagi)
+async function isSuperAdminReq(teacherId?: string): Promise<boolean> {
+  if (!teacherId) return false;
+  const t = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { email: true } });
+  return !!t && isAdminEmail(t.email);
 }
 
 // ---- Ro'yxat ----
@@ -41,7 +50,7 @@ adminRouter.get("/users", async (_req, res) => {
     orderBy: { createdAt: "desc" },
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
-      approved: true, accessOverride: true, createdAt: true,
+      approved: true, canCreate: true, accessOverride: true, createdAt: true,
       _count: { select: { quizzes: true } },
     },
   });
@@ -53,8 +62,9 @@ const patchSchema = z
     // ustoz huquqi: true = ber, false = olib tashla, null = avtomatik (roster bo'yicha)
     accessOverride: z.union([z.boolean(), z.null()]).optional(),
     isAdmin: z.boolean().optional(),
+    canCreate: z.boolean().optional(), // "slayd qilish" ruxsati
   })
-  .refine((d) => d.accessOverride !== undefined || d.isAdmin !== undefined, {
+  .refine((d) => d.accessOverride !== undefined || d.isAdmin !== undefined || d.canCreate !== undefined, {
     message: "Hech qanday o'zgarish yuborilmadi",
   });
 
@@ -72,7 +82,19 @@ adminRouter.patch("/users/:id", async (req: AuthedRequest, res) => {
     return;
   }
 
-  const data: { accessOverride?: boolean | null; approved?: boolean; isAdmin?: boolean } = {};
+  const data: { accessOverride?: boolean | null; approved?: boolean; isAdmin?: boolean; canCreate?: boolean } = {};
+
+  // "Slayd qilish" ruxsati — har qanday admin (super yoki oddiy) bera/olib tashlay oladi
+  if (parsed.data.canCreate !== undefined) {
+    data.canCreate = parsed.data.canCreate;
+  }
+
+  // Quyidagilar (ustoz huquqi + admin huquqi) FAQAT super admin uchun
+  const wantsSuperOnly = parsed.data.accessOverride !== undefined || parsed.data.isAdmin !== undefined;
+  if (wantsSuperOnly && !(await isSuperAdminReq(req.teacherId))) {
+    res.status(403).json({ error: "Ustoz/admin huquqini faqat super admin o'zgartira oladi" });
+    return;
+  }
 
   if (parsed.data.accessOverride !== undefined) {
     const override = parsed.data.accessOverride;
@@ -100,7 +122,7 @@ adminRouter.patch("/users/:id", async (req: AuthedRequest, res) => {
     data,
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
-      approved: true, accessOverride: true, createdAt: true,
+      approved: true, canCreate: true, accessOverride: true, createdAt: true,
       _count: { select: { quizzes: true } },
     },
   });
@@ -112,6 +134,11 @@ adminRouter.patch("/users/:id", async (req: AuthedRequest, res) => {
 // o'rnatib beradi. Foydalanuvchi keyin Sozlamalar orqali o'zgartirishi mumkin.
 const resetPwSchema = z.object({ password: z.string().min(6) });
 adminRouter.post("/users/:id/password", async (req: AuthedRequest, res) => {
+  // Parol tiklash — faqat super admin
+  if (!(await isSuperAdminReq(req.teacherId))) {
+    res.status(403).json({ error: "Parol tiklash faqat super admin uchun" });
+    return;
+  }
   const parsed = resetPwSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Parol kamida 6 belgi bo'lishi kerak" });

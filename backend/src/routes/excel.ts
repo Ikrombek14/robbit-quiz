@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requireCanCreate } from "../auth.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -45,7 +45,7 @@ function parseCorrect(raw: any): Set<number> {
   return out;
 }
 
-excelRouter.post("/import", requireAuth, upload.single("file"), (req, res) => {
+excelRouter.post("/import", requireAuth, requireCanCreate, upload.single("file"), (req, res) => {
   const file = (req as unknown as { file?: { buffer: Buffer; originalname: string } }).file;
   if (!file) {
     res.status(400).json({ error: "Excel fayl yuborilmadi" });

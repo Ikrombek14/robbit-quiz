@@ -54,7 +54,7 @@ export default function Preview({
   );
 }
 
-function SlideView({ slide, showAnswers }: { slide: Slide; showAnswers: boolean }) {
+export function SlideView({ slide, showAnswers }: { slide: Slide; showAnswers: boolean }) {
   const d = slide.data;
 
   if (slide.kind === "CONTENT") {

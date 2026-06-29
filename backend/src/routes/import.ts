@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireCanCreate } from "../auth.js";
+import { requireAuth, requireCanCreate, type AuthedRequest } from "../auth.js";
+import { prisma } from "../prisma.js";
 
 export const importRouter = Router();
 
@@ -327,49 +328,83 @@ export function mapQuizResponse(json: any): { title: string; slides: any[]; summ
   return { title: stripHtml(quiz?.info?.name ?? quiz?.name ?? ""), slides, summary };
 }
 
-importRouter.post("/wayground", requireAuth, requireCanCreate, async (req, res) => {
-  const { url } = (req.body ?? {}) as { url?: string };
+// Havoladan ochiq Wayground quizini olib, bizning {title, slides, summary}
+// formatiga aylantiradi. Xato bo'lsa mos HTTP status + xabar qaytaradi.
+// (Bitta va ommaviy import ham shu yagona mantiqdan foydalanadi.)
+type WgFetch =
+  | { ok: true; title: string; slides: any[]; summary: any }
+  | { ok: false; status: number; error: string };
+
+async function fetchWayground(url: string): Promise<WgFetch> {
   const id = extractQuizId(url ?? "");
   if (!id) {
-    res.status(400).json({ error: "Havoladan quiz ID topilmadi. To'g'ri Wayground havolasini joylang." });
-    return;
+    return { ok: false, status: 400, error: "Havoladan quiz ID topilmadi. To'g'ri Wayground havolasini joylang." };
   }
-
   const apiUrl = `https://wayground.com/_quizserver/main/v2/quiz/${id}`;
   let json: any;
   try {
-    const r = await fetch(apiUrl, {
-      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-    });
+    const r = await fetch(apiUrl, { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" } });
     if (r.status === 403 || r.status === 401) {
-      res.status(403).json({
-        error: "Bu quiz yopiq (private). Wayground'da uni 'public/shared' qilib qo'ying yoki ochiq havola bering.",
-      });
-      return;
+      return { ok: false, status: 403, error: "Bu quiz yopiq (private). Wayground'da 'public/shared' qilib qo'ying." };
     }
     if (!r.ok) {
-      res.status(502).json({ error: `Wayground javob bermadi (HTTP ${r.status}).` });
-      return;
+      return { ok: false, status: 502, error: `Wayground javob bermadi (HTTP ${r.status}).` };
     }
     json = await r.json();
   } catch {
-    res.status(502).json({ error: "Wayground'ga ulanib bo'lmadi. Internet yoki havolani tekshiring." });
-    return;
+    return { ok: false, status: 502, error: "Wayground'ga ulanib bo'lmadi. Internet yoki havolani tekshiring." };
   }
-
   if (json?.success === false) {
-    res.status(403).json({ error: "Quizga kirish ruxsati yo'q yoki havola noto'g'ri." });
-    return;
+    return { ok: false, status: 403, error: "Quizga kirish ruxsati yo'q yoki havola noto'g'ri." };
   }
-
   const result = mapQuizResponse(json);
-  if (!result) {
-    res.status(404).json({ error: "Havolada slayd yoki savol topilmadi." });
-    return;
-  }
+  if (!result) return { ok: false, status: 404, error: "Havolada slayd yoki savol topilmadi." };
   if (result.slides.length === 0) {
-    res.status(422).json({ error: "Slayd/savollarni o'girib bo'lmadi (format mos kelmadi)." });
+    return { ok: false, status: 422, error: "Slayd/savollarni o'girib bo'lmadi (format mos kelmadi)." };
+  }
+  return { ok: true, ...result };
+}
+
+// Slaydlarni DB'ga yoziladigan ko'rinishga keltiradi (data — JSON string)
+function slidesToCreate(slides: any[]) {
+  return slides.map((s, i) => ({
+    order: i,
+    kind: s.kind,
+    type: s.type ?? null,
+    data: JSON.stringify(s.data ?? {}),
+    notes: s.notes ?? null,
+    timeLimit: s.timeLimit ?? 20,
+    points: s.points ?? 0,
+  }));
+}
+
+// Bitta havola → slaydlar ro'yxati (hali saqlanmaydi; muharrir joriy quizga qo'shadi)
+importRouter.post("/wayground", requireAuth, requireCanCreate, async (req, res) => {
+  const r = await fetchWayground((req.body?.url ?? "") as string);
+  if (!r.ok) {
+    res.status(r.status).json({ error: r.error });
     return;
   }
-  res.json(result);
+  res.json({ title: r.title, slides: r.slides, summary: r.summary });
+});
+
+// Ommaviy import yadrosi: bitta havola → to'liq yangi quiz YARATADI va saqlaydi.
+// Frontend buni har bir havola uchun ketma-ket chaqirib, jarayonni ko'rsatadi.
+importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
+  const { url, title } = (req.body ?? {}) as { url?: string; title?: string };
+  const r = await fetchWayground(url ?? "");
+  if (!r.ok) {
+    res.status(r.status).json({ error: r.error });
+    return;
+  }
+  const finalTitle = (title?.trim() || r.title?.trim() || "Import qilingan quiz").slice(0, 200);
+  const quiz = await prisma.quiz.create({
+    data: {
+      title: finalTitle,
+      teacherId: req.teacherId!,
+      slides: { create: slidesToCreate(r.slides) },
+    },
+    select: { id: true },
+  });
+  res.json({ quizId: quiz.id, title: finalTitle, summary: r.summary });
 });

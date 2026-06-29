@@ -19,6 +19,7 @@ import Guide from "./pages/Guide";
 import Teachers from "./pages/Teachers";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
+import BulkImport from "./pages/BulkImport";
 import Shell from "./components/Shell";
 
 function Protected({ children, approved, admin, create }: { children: ReactNode; approved?: boolean; admin?: boolean; create?: boolean }) {
@@ -79,6 +80,7 @@ export default function App() {
       <Route path="/library" element={<Protected><Library /></Protected>} />
       <Route path="/activity/:id" element={<Protected><ActivityDetail /></Protected>} />
       <Route path="/quiz/:id" element={<Protected create><QuizEditor /></Protected>} />
+      <Route path="/bulk-import" element={<Protected create><BulkImport /></Protected>} />
       <Route path="/host/:quizId" element={<Protected><Host /></Protected>} />
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />

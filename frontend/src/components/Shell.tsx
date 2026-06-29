@@ -11,13 +11,15 @@ interface NavItem {
   icon: string;
   path: string;
   mobileHide?: boolean;
-  show?: (t: { isAdmin?: boolean; approved?: boolean } | null) => boolean;
+  show?: (t: { isAdmin?: boolean; approved?: boolean; canCreate?: boolean } | null) => boolean;
 }
 
 // approved (yoki admin) bo'lsagina O'quv dastur / Yo'riqnoma ko'rinadi
 const canApproved = (t: { isAdmin?: boolean; approved?: boolean } | null) => !!(t?.isAdmin || t?.approved);
 // faqat admin ko'radi
 const isAdmin = (t: { isAdmin?: boolean } | null) => !!t?.isAdmin;
+// "slayd qilish" ruxsati bo'lganlar (admin yoki canCreate) ko'radi
+const canCreateNav = (t: { isAdmin?: boolean; canCreate?: boolean } | null) => !!(t?.isAdmin || t?.canCreate);
 
 const NAV: NavItem[] = [
   { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false },
@@ -25,6 +27,7 @@ const NAV: NavItem[] = [
   { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true },
   { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true },
   { key: "users", label: "Foydalanuvchilar", icon: "manage_accounts", path: "/users", mobileHide: true, show: isAdmin },
+  { key: "bulk", label: "Ommaviy import", icon: "cloud_download", path: "/bulk-import", mobileHide: true, show: canCreateNav },
   { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false, show: canApproved },
   { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canApproved },
   { key: "settings", label: "Sozlamalar", icon: "settings", path: "/settings", mobileHide: false },

@@ -225,6 +225,8 @@ export default function QuizEditor() {
         method: "PUT",
         body: JSON.stringify({ title, description, shuffle, slides }),
       });
+      // Saqlangach kutubxonaga o'tamiz
+      navigate("/library");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Saqlashda xatolik");
     } finally {

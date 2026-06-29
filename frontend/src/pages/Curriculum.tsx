@@ -390,8 +390,20 @@ export default function Curriculum() {
 
                   {/* Mavzu va biriktirilgan quiz */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>
+                    <div
+                      style={{
+                        fontWeight: 600, fontSize: 15,
+                        cursor: isAdmin && hasQuiz ? "pointer" : "default",
+                        color: isAdmin && hasQuiz ? "var(--primary)" : undefined,
+                      }}
+                      // Faqat admin: mavzu nomiga bosilganda biriktirilgan slaydni tahrirlash uchun ochiladi
+                      onClick={() => { if (isAdmin && hasQuiz) navigate(`/quiz/${l.quiz!.id}`); }}
+                      title={isAdmin && hasQuiz ? "Slaydni tahrirlash" : undefined}
+                    >
                       {l.order + 1}. {l.title}
+                      {isAdmin && hasQuiz && (
+                        <span className="material-symbols-outlined" style={{ fontSize: 15, marginLeft: 5, verticalAlign: "middle", opacity: 0.7 }}>edit_note</span>
+                      )}
                       {l.isDemo && (
                         <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#22c55e", marginLeft: 8, verticalAlign: "middle" }} />
                       )}

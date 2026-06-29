@@ -64,6 +64,14 @@ const uploadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+// Tashqi quiz import (Wayground'ga chiquvchi so'rov) — suiiste'mol/yukni cheklash
+const importLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // 15 daqiqada IP boshiga 30 import
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Import limiti. Birozdan keyin qayta urinib ko'ring." },
+});
 // /uploads statik fayllarini brute-force yuklab olishdan himoyalash
 // (To'liq auth — S3/MinIO ga o'tganda signed URL bilan hal qilinadi)
 const uploadsStaticLimiter = rateLimit({
@@ -77,6 +85,7 @@ app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/auth/google", authLimiter);
 app.use("/api/pdf", aiLimiter);
+app.use("/api/import", importLimiter);
 app.use("/api/upload", uploadLimiter);
 
 // Yuklangan fayllar (PDF sahifalari rasmlari) — inline, sniff'siz

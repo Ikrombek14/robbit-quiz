@@ -6,6 +6,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Robbit Akademiyasi — a live quiz platform (Quizizz/Kahoot style) for the Uzbek-language education market. Teachers upload a PDF → Claude AI generates questions → students join a live game via a 6-digit PIN. UI text and code comments are in Uzbek; keep that convention.
 
+## ⚠️ IKKI CLAUDE AKKAUNT KOORDINATSIYASI (MUHIM — avval o'qing)
+
+Bu loyihada **ikkita Claude akkaunti** parallel ishlaydi. Bir-birovining ishini buzmaslik
+va **bir xil funksiyani ikki marta yozmaslik** uchun:
+
+- **Ish boshlashdan oldin har doim:** `git fetch origin && git log --oneline -15 origin/master`.
+  Sherik allaqachon qilgan bo'lishi mumkin (bir marta admin paneli ikki akkauntda ham
+  yozilib, to'qnashuv bo'lgan). Lokal commit qilishdan oldin `origin/master` bilan
+  taqqoslang; mumkin bo'lsa fast-forward `git merge --ff-only origin/master`.
+- **Deploy = GitHub Actions** (`.github/workflows/deploy.yml`), `master` ga push → avtomatik.
+  **Bu ishlaydi** (oxirgi tuzatish: `e30b439`). Deploy mexanizmini o'zboshimchalik bilan
+  almashtirmang — foydalanuvchidan so'rang.
+- **Baza = serverdagi LOKAL PostgreSQL**, lekin **port 5435** (5432 EMAS — 5432 ni boshqa
+  narsa egallagan, shu sabab P1000 bo'lardi). Deploy `SHOW port` bilan portni avtomatik
+  aniqlaydi va Prisma'ni **unix socket** (`?host=/var/run/postgresql`) + `local ... trust`
+  orqali ulaydi (parolsiz, port-agnostik). **Neon ishlatilmaydi.**
+- **Admin tizimi:** `ADMIN_EMAILS` (env) dagilar = admin va himoyalangan (panelda huquqini
+  olib bo'lmaydi): `teamlead.robbit@gmail.com`, `ilkhomjon2001@gmail.com`. Har qanday admin
+  `/users` sahifasi (`routes/admin.ts`) orqali boshqalarga `isAdmin` beradi/oladi va
+  `accessOverride` bilan ustoz kirish huquqini boshqaradi. Grant qilingan admin login'da
+  **o'chmaydi** (`auth.ts`: `isAdmin = isAdminEmail || teacher.isAdmin`).
+- **Admin akkaunt:** `teamlead.robbit@gmail.com` / parol `Robbit2026!` (GitHub secret
+  `ADMIN_PASSWORD` + serverda seed qilingan). Parolni o'zgartirish: serverda
+  `cd /root/apps/robbit-quiz && set -a && . ./.env && set +a && node prisma/seed-admin.mjs '<email>' '<parol>'` (DB ga tegmaydi).
+- **`deploy-direct.ps1`** (repo ildizida, `.gitignore` da) — Posh-SSH orqali qo'lda to'g'ridan
+  serverga deploy qiluvchi **ixtiyoriy zaxira** usul (PuTTY shart emas). Ichida maxfiy
+  ma'lumotlar bor — **commit qilmang**. Asosiy usul baribir GitHub Actions.
+- Server: `root@157.173.114.153` · App: `/root/apps/robbit-quiz` · Domen: `robbitquiz.uz`
+  · PM2: `robbit-quiz` (fork, 1 instance — game state in-memory).
+
 ## Commands
 
 Backend (`cd backend`):

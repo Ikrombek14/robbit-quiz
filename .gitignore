@@ -11,6 +11,13 @@ public/
 .env.*
 !.env.example
 
+# To'g'ridan-to'g'ri deploy skripti (server paroli, DB parol, JWT, admin) — commit qilinmaydi
+deploy-direct.ps1
+
+# Deploy artefaktlari
+_deploy/
+robbit-quiz.tgz
+
 # Database (dev SQLite)
 *.db
 *.db-journal

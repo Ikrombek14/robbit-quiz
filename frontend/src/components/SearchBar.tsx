@@ -90,7 +90,7 @@ export default function SearchBar({ scope, onPick, placeholder }: Props) {
           style={{
             width: "100%", padding: "9px 32px 9px 36px", borderRadius: 10,
             border: "2px solid var(--border)", background: "var(--surface)",
-            fontSize: 14, color: "var(--ink)",
+            fontSize: 14, color: "var(--ink)", marginBottom: 0,
           }}
         />
         {q && (

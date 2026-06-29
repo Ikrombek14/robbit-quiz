@@ -48,8 +48,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: |
+          # Parolda URL uchun maxsus belgilar (@ / : # % +) bo'lsa, DATABASE_URL buziladi
+          # va P1000 (auth failed) beradi. Shu sabab parolni percent-encode qilamiz.
+          DB_PASS_ENC=$(jq -rn --arg x "$DB_PASS" '$x|@uri')
           printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=postgresql://robbit:%s@localhost:5432/robbit_quiz\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com,ilkhomjon2001@gmail.com\n' \
-            "$DB_PASS" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" > /tmp/app.env
+            "$DB_PASS_ENC" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" > /tmp/app.env
 
       - name: sshpass o'rnatish
         run: sudo apt-get install -y sshpass

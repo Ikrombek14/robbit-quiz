@@ -23,6 +23,7 @@ const canCreateNav = (t: { isAdmin?: boolean; canCreate?: boolean } | null) => !
 
 const NAV: NavItem[] = [
   { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false },
+  { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false },
   { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library", mobileHide: false },
   { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true },
   { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true },

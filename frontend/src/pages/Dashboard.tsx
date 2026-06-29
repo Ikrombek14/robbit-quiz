@@ -3,21 +3,37 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
-import type { QuizListItem, Quiz } from "../types";
+import { METRICS, TONE_STYLE, ballTone, fmtNum } from "../stats";
+import type { QuizListItem, Quiz, TeacherStat } from "../types";
 
 const EMOJIS = ["🚀", "🌍", "📐", "🔬", "🎨", "📚", "🧮", "🌟", "🦋", "🎯"];
 
 export default function Dashboard() {
   const { teacher } = useAuth();
   const navigate = useNavigate();
-  const [quizzes, setQuizzes] = useState<QuizListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati
 
+  const [quizzes, setQuizzes] = useState<QuizListItem[]>([]);
+  const [loading, setLoading] = useState(canCreate);
+  const [myStat, setMyStat] = useState<TeacherStat | null>(null);
+  const [allStats, setAllStats] = useState<TeacherStat[]>([]);
+  const [statLoading, setStatLoading] = useState(true);
+
+  // Loyihalar — faqat slayd qila oladiganlar uchun (boshqalarda ham bo'sh bo'ladi)
   useEffect(() => {
+    if (!canCreate) return;
     api<{ quizzes: QuizListItem[] }>("/quizzes")
       .then((r) => setQuizzes(r.quizzes))
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, [canCreate]);
+
+  // Statistika
+  useEffect(() => {
+    Promise.all([
+      api<{ stat: TeacherStat | null }>("/stats/me").then((r) => setMyStat(r.stat)).catch(() => {}),
+      api<{ stats: TeacherStat[] }>("/stats/all").then((r) => setAllStats(r.stats)).catch(() => {}),
+    ]).finally(() => setStatLoading(false));
   }, []);
 
   async function createQuiz() {
@@ -29,37 +45,137 @@ export default function Dashboard() {
   }
 
   const recent = quizzes.slice(0, 4);
+  const top = [...allStats]
+    .sort((a, b) => (b.umumiyBall ?? -1) - (a.umumiyBall ?? -1))
+    .slice(0, 6);
 
   return (
     <Shell>
-      <div style={{ display: "flex", gap: 32, alignItems: "flex-start" }}>
-        {/* CHAP — asosiy kontent */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: 28, marginBottom: 2 }}>Salom, {teacher?.name ?? "ustoz"}! 👋</h1>
-          <p className="muted" style={{ marginTop: 0, marginBottom: 24, fontSize: 15 }}>
-            Bugun qanday yangi bilimlar o'rgatamiz?
-          </p>
+      <h1 style={{ fontSize: 28, marginBottom: 2 }}>Salom, {teacher?.name ?? "ustoz"}! 👋</h1>
+      <p className="muted" style={{ marginTop: 0, marginBottom: 24, fontSize: 15 }}>
+        Bugun qanday yangi bilimlar o'rgatamiz?
+      </p>
 
-          {/* Tezkor harakatlar */}
-          <div className="grid-cards" style={{ marginTop: 0, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
-            <button className="quiz-card" style={{ alignItems: "flex-start", cursor: "pointer", textAlign: "left" }} onClick={createQuiz}>
-              <span className="material-symbols-outlined" style={{ fontSize: 30, color: "var(--olive)" }}>add_circle</span>
-              <strong className="font-head" style={{ fontSize: 15 }}>Yangi loyiha</strong>
-              <span className="muted text-sm">Bo'sh slayddan boshlang</span>
-            </button>
-            <button className="quiz-card" style={{ alignItems: "flex-start", cursor: "pointer", textAlign: "left" }} onClick={createQuiz}>
-              <span className="material-symbols-outlined" style={{ fontSize: 30, color: "var(--c3)" }}>upload_file</span>
-              <strong className="font-head" style={{ fontSize: 15 }}>PDF yuklash</strong>
-              <span className="muted text-sm">PDF → slaydga aylantirish</span>
-            </button>
-            <button className="quiz-card" style={{ alignItems: "flex-start", cursor: "pointer", textAlign: "left" }} onClick={() => navigate("/library")}>
-              <span className="material-symbols-outlined" style={{ fontSize: 30, color: "var(--c2)" }}>library_books</span>
-              <strong className="font-head" style={{ fontSize: 15 }}>Kutubxonam</strong>
-              <span className="muted text-sm">Barcha loyihalaringiz</span>
+      {/* O'z statistikasi — katta kataklar */}
+      {myStat ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 12,
+            marginBottom: 28,
+          }}
+        >
+          {METRICS.map((m) => {
+            const v = myStat[m.key] as number | null;
+            const st = TONE_STYLE[m.tone(v)];
+            return (
+              <div
+                key={m.key}
+                style={{
+                  background: st.bg,
+                  border: `1.5px solid ${st.border}`,
+                  borderRadius: 16,
+                  padding: "16px 18px",
+                }}
+              >
+                <div
+                  className="text-sm"
+                  style={{ fontWeight: 700, color: "var(--muted)", lineHeight: 1.2, minHeight: 32 }}
+                >
+                  {m.label}
+                </div>
+                <div style={{ fontSize: 34, fontWeight: 800, color: st.fg, lineHeight: 1.1, marginTop: 6 }}>
+                  {fmtNum(v)}
+                  {v != null && (
+                    <span style={{ fontSize: 15, fontWeight: 700, marginLeft: 3 }}>{m.unit}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : !statLoading && !canCreate ? (
+        <div className="card" style={{ marginBottom: 28 }}>
+          <p className="muted" style={{ margin: 0 }}>
+            Sizning shaxsiy statistikangiz topilmadi. Ism-familiyangiz ro'yxatga mos kelmasa, admin bilan bog'laning.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Tezkor harakatlar — faqat slayd qilish ruxsati bo'lganlar */}
+      {canCreate && (
+        <div className="grid-cards" style={{ marginTop: 0, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
+          <button className="quiz-card" style={{ alignItems: "flex-start", cursor: "pointer", textAlign: "left" }} onClick={createQuiz}>
+            <span className="material-symbols-outlined" style={{ fontSize: 30, color: "var(--olive)" }}>add_circle</span>
+            <strong className="font-head" style={{ fontSize: 15 }}>Yangi loyiha</strong>
+            <span className="muted text-sm">Bo'sh slayddan boshlang</span>
+          </button>
+          <button className="quiz-card" style={{ alignItems: "flex-start", cursor: "pointer", textAlign: "left" }} onClick={createQuiz}>
+            <span className="material-symbols-outlined" style={{ fontSize: 30, color: "var(--c3)" }}>upload_file</span>
+            <strong className="font-head" style={{ fontSize: 15 }}>PDF yuklash</strong>
+            <span className="muted text-sm">PDF → slaydga aylantirish</span>
+          </button>
+          <button className="quiz-card" style={{ alignItems: "flex-start", cursor: "pointer", textAlign: "left" }} onClick={() => navigate("/library")}>
+            <span className="material-symbols-outlined" style={{ fontSize: 30, color: "var(--c2)" }}>library_books</span>
+            <strong className="font-head" style={{ fontSize: 15 }}>Kutubxonam</strong>
+            <span className="muted text-sm">Barcha loyihalaringiz</span>
+          </button>
+        </div>
+      )}
+
+      {/* Ustozlar reytingi — barcha ustozlarga ko'rinadi */}
+      {(statLoading || allStats.length > 0) && (
+        <>
+          <div className="between" style={{ marginTop: 32 }}>
+            <h2 style={{ fontSize: 18, margin: 0 }}>Ustozlar reytingi</h2>
+            <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => navigate("/stats")}>
+              To'liq statistikani ko'rish →
             </button>
           </div>
+          {statLoading ? (
+            <p className="muted" style={{ marginTop: 12 }}>Yuklanmoqda…</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+              {top.map((s, i) => {
+                const st = TONE_STYLE[ballTone(s.umumiyBall)];
+                return (
+                  <div
+                    key={s.nameKey + i}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+                      background: "var(--surface-low)", borderRadius: 12, border: "1px solid var(--border)",
+                    }}
+                  >
+                    <div style={{
+                      width: 28, height: 28, borderRadius: 8, flexShrink: 0, fontWeight: 800, fontSize: 14,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: i < 3 ? "var(--primary-soft)" : "var(--surface-high)",
+                      color: i < 3 ? "var(--primary)" : "var(--muted)",
+                    }}>{i + 1}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.name}
+                      </div>
+                      {s.branch && <div className="muted text-sm" style={{ marginTop: 2 }}>{s.branch}</div>}
+                    </div>
+                    <div style={{
+                      flexShrink: 0, fontWeight: 800, fontSize: 17, color: st.fg,
+                      background: st.bg, border: `1.5px solid ${st.border}`, borderRadius: 10, padding: "4px 12px",
+                    }}>
+                      {fmtNum(s.umumiyBall)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
 
-          {/* So'nggi loyihalar */}
+      {/* So'nggi loyihalar — faqat slayd qilish ruxsati bo'lganlar */}
+      {canCreate && (
+        <>
           <div className="between" style={{ marginTop: 32 }}>
             <h2 style={{ fontSize: 18, margin: 0 }}>So'nggi loyihalar</h2>
             <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => navigate("/library")}>
@@ -84,15 +200,13 @@ export default function Dashboard() {
                   style={{
                     display: "flex", alignItems: "center", gap: 14, padding: "12px 16px",
                     background: "var(--surface-low)", borderRadius: 12,
-                    border: "1px solid var(--border)", cursor: "pointer",
-                    transition: "background 0.12s",
+                    border: "1px solid var(--border)", cursor: "pointer", transition: "background 0.12s",
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-high)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-low)")}
                 >
                   <div style={{
-                    width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                    background: "var(--primary-soft)",
+                    width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: "var(--primary-soft)",
                     display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
                   }}>
                     {EMOJIS[i % EMOJIS.length]}
@@ -111,12 +225,10 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </div>
+        </>
+      )}
 
-      </div>
-
-      <button className="fab" onClick={createQuiz} title="Yangi loyiha">+</button>
+      {canCreate && <button className="fab" onClick={createQuiz} title="Yangi loyiha">+</button>}
     </Shell>
   );
 }
-

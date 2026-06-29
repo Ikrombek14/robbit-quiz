@@ -182,6 +182,19 @@ export interface RosterTeacher {
   order: number;
 }
 
+// Ustoz statistikasi (Google Sheet'dan) — bosh sahifadagi kataklar va reyting uchun
+export interface TeacherStat {
+  name: string;
+  nameKey: string;
+  branch: string | null;
+  davomat: number | null; // o'quvchilar davomati, %
+  uyBajarilishi: number | null; // uy vazifa bajarilishi, %
+  uyTekshirilishi: number | null; // uy vazifa tekshirilishi, %
+  kechikish: number | null; // kechikish, daqiqa
+  guruhlar: number | null; // guruhlar soni
+  umumiyBall: number | null; // umumiy ball
+}
+
 export interface LeaderRow {
   nickname: string;
   score: number;

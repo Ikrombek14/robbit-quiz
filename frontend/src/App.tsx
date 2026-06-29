@@ -18,6 +18,7 @@ import Curriculum from "./pages/Curriculum";
 import Guide from "./pages/Guide";
 import Teachers from "./pages/Teachers";
 import Users from "./pages/Users";
+import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
 import BulkImport from "./pages/BulkImport";
 import Shell from "./components/Shell";
@@ -88,6 +89,7 @@ export default function App() {
       <Route path="/guide" element={<Protected approved><Guide /></Protected>} />
       <Route path="/teachers" element={<Protected><Teachers /></Protected>} />
       <Route path="/users" element={<Protected admin><Users /></Protected>} />
+      <Route path="/stats" element={<Protected><Stats /></Protected>} />
       <Route path="/settings" element={<Protected><Settings /></Protected>} />
 
       <Route path="*" element={<NotFound />} />

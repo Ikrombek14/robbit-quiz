@@ -23,6 +23,8 @@ import { guideRouter } from "./routes/guide.js";
 import { searchRouter } from "./routes/search.js";
 import { teachersRouter } from "./routes/teachers.js";
 import { adminRouter } from "./routes/admin.js";
+import { statsRouter } from "./routes/stats.js";
+import { startStatsScheduler } from "./services/stats.js";
 
 const app = express();
 app.set("trust proxy", 1); // nginx orqasida to'g'ri IP olish uchun
@@ -124,6 +126,7 @@ app.use("/api/guide", guideRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/teachers", teachersRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/stats", statsRouter);
 
 // Production: tayyor frontend'ni (statik) shu serverdan beramiz — bitta port, bitta origin
 if (config.production) {
@@ -186,6 +189,7 @@ io.on("connection", (socket) => {
 
 httpServer.listen(config.port, () => {
   console.log(`✅ Backend ishga tushdi: http://localhost:${config.port}`);
+  startStatsScheduler(); // ustozlar statistikasini har kuni 21:00 da yangilab turadi
 });
 
 // Toza to'xtatish (pm2 reload/restart, deploy) — ochiq so'rovlarni yakunlab, DB ulanishini yopadi.

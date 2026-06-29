@@ -17,6 +17,7 @@ export interface TeacherStat {
   uyBajarilishi: number | null; // uy vazifa bajarilishi, % (100 - topshirmagan)
   uyTekshirilmaganSoni: number | null; // tekshirilmagan uy vazifa SONI (foiz emas)
   kechikish: number | null; // o'qituvchi kechikishi, daqiqa
+  ketganlar: number | null; // ketgan o'quvchilar soni (Sheet E ustun)
   guruhlar: number | null; // guruhlar soni
   umumiyBall: number | null; // umumiy ball
 }
@@ -64,7 +65,7 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
   const rows = parseCSV(text);
 
   // Ustun indekslari — asosiy (ishonchli to'ldirilgan) strukturalangan jadvaldan:
-  // 0=HH ID, 2=O'qituvchi, 3=Filial,
+  // 0=HH ID, 2=O'qituvchi, 3=Filial, 4=Ketganlar SONI,
   // 7=Uy vazifa Tekshirilmagan SONI, 10=Uy vazifa Bajarmagan(%),
   // 12=Kechikish(daqiqa), 14=O'quvchilar davomati(%),
   // 17=Umumiy ball, 20=Guruhlar soni
@@ -84,6 +85,7 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
       uyBajarilishi: bajarmagan == null ? null : Math.max(0, Math.round((100 - bajarmagan) * 10) / 10),
       uyTekshirilmaganSoni: num(r[7]),
       kechikish: num(r[12]),
+      ketganlar: num(r[4]),
       guruhlar: num(r[20]),
       umumiyBall: num(r[17]),
     });

@@ -31,6 +31,13 @@ export function tekshTone(v: number | null): Tone {
   if (v <= 5) return "warn";
   return "bad";
 }
+// Ketgan o'quvchilar soni: kam = yaxshi
+export function ketganTone(v: number | null): Tone {
+  if (v == null) return "neutral";
+  if (v <= 1) return "good";
+  if (v <= 4) return "warn";
+  return "bad";
+}
 // Umumiy ball (0–100 atrofida)
 export function ballTone(v: number | null): Tone {
   if (v == null) return "neutral";
@@ -50,9 +57,10 @@ export interface MetricDef {
 // Bosh sahifadagi katta kataklar tartibi (foydalanuvchi so'ragan 5 ta)
 export const METRICS: MetricDef[] = [
   { key: "davomat", label: "Davomat", short: "Davomat", unit: "%", tone: pctTone },
-  { key: "uyBajarilishi", label: "Uy vazifa bajarilishi", short: "Uy baj.", unit: "%", tone: pctTone },
-  { key: "uyTekshirilmaganSoni", label: "Tekshirilmagan uy vazifa", short: "Tek-magan", unit: "ta", tone: tekshTone },
-  { key: "kechikish", label: "Kechikish", short: "Kechikish", unit: "daq", tone: kechikishTone },
+  { key: "uyBajarilishi", label: "Uy vazifa bajarish", short: "Uy bajarish", unit: "%", tone: pctTone },
+  { key: "uyTekshirilmaganSoni", label: "Tekshirilmagan uy vazifa", short: "Tekshirmagan", unit: "ta", tone: tekshTone },
+  { key: "kechikish", label: "Kech qolish", short: "Kech qolish", unit: "daq", tone: kechikishTone },
+  { key: "ketganlar", label: "Ketganlar", short: "Ketganlar", unit: "ta", tone: ketganTone },
   { key: "guruhlar", label: "Guruhlar soni", short: "Guruh", unit: "ta", tone: () => "neutral" },
 ];
 

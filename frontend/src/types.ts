@@ -191,6 +191,7 @@ export interface TeacherStat {
   uyBajarilishi: number | null; // uy vazifa bajarilishi, %
   uyTekshirilmaganSoni: number | null; // tekshirilmagan uy vazifa soni (H ustun)
   kechikish: number | null; // kechikish, daqiqa
+  ketganlar: number | null; // ketgan o'quvchilar soni
   guruhlar: number | null; // guruhlar soni
   umumiyBall: number | null; // umumiy ball
 }

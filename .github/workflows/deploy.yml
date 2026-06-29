@@ -41,15 +41,17 @@ jobs:
           rm -f _deploy/prisma/dev.db
           tar -czf robbit-quiz.tgz -C _deploy .
 
-      - name: .env fayl tayyorlash
+      - name: .env fayl tayyorlash (Neon DB)
         env:
-          DB_PASS: ${{ secrets.DB_PASS }}
+          DB_URL: ${{ secrets.SERVER_DB_URL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: |
-          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=postgresql://robbit:%s@localhost:5432/robbit_quiz\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com\n' \
-            "$DB_PASS" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" > /tmp/app.env
+          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=%s\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com\n' \
+            "$DB_URL" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" \
+            > /tmp/app.env
+          echo "✅ .env tayyor | DB host: $(echo $DB_URL | sed 's|.*@\([^/]*\)/.*|\1|')"
 
       - name: sshpass o'rnatish
         run: sudo apt-get install -y sshpass
@@ -57,7 +59,6 @@ jobs:
       - name: Serverga yuborish va o'rnatish
         env:
           SSHPASS: ${{ secrets.SERVER_PASS }}
-          DB_PASS: ${{ secrets.DB_PASS }}
           ADMIN_EMAIL: teamlead.robbit@gmail.com
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
@@ -65,8 +66,16 @@ jobs:
           USER=${{ secrets.SERVER_USER }}
           APP=/root/apps/robbit-quiz
           SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=30"
-          SSH="sshpass -e ssh $SSH_OPTS"
-          SCP="sshpass -e scp $SSH_OPTS"
+
+          if [ -n "${{ secrets.SERVER_SSH_KEY }}" ]; then
+            echo "${{ secrets.SERVER_SSH_KEY }}" > /tmp/deploy_key
+            chmod 600 /tmp/deploy_key
+            SCP="scp -i /tmp/deploy_key $SSH_OPTS"
+            SSH="ssh -i /tmp/deploy_key $SSH_OPTS"
+          else
+            SCP="sshpass -e scp $SSH_OPTS"
+            SSH="sshpass -e ssh $SSH_OPTS"
+          fi
 
           $SSH $USER@$HOST "mkdir -p $APP"
           $SCP robbit-quiz.tgz $USER@$HOST:/tmp/robbit-quiz.tgz
@@ -74,43 +83,13 @@ jobs:
 
           $SSH $USER@$HOST "
             set -e
-
-            # PostgreSQL o'rnatish (agar yo'q bo'lsa)
-            if ! command -v psql &>/dev/null; then
-              apt-get update -qq && apt-get install -y postgresql
-            fi
-            systemctl enable postgresql --now 2>/dev/null || true
-
-            # pg_hba.conf — trust auth (localhost, firewall orqasida xavfsiz)
-            PG_HBA=\$(sudo -u postgres psql -tAc 'SHOW hba_file')
-            if ! grep -q 'robbit_quiz.*trust' \"\$PG_HBA\" 2>/dev/null; then
-              sed -i '1s/^/host robbit_quiz robbit 127.0.0.1\/32 trust\nhost robbit_quiz robbit ::1\/128 trust\n/' \"\$PG_HBA\"
-              systemctl reload postgresql
-            fi
-
-            # DB va user yaratish (agar yo'q bo'lsa)
-            sudo -u postgres psql -c \"DO \\\$\\\$ BEGIN
-              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='robbit') THEN
-                CREATE USER robbit WITH PASSWORD '$DB_PASS';
-              END IF;
-            END \\\$\\\$;\"
-            sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE robbit_quiz TO robbit\" 2>/dev/null || true
-            sudo -u postgres psql -tc \"SELECT 1 FROM pg_database WHERE datname='robbit_quiz'\" | grep -q 1 || \
-              sudo -u postgres createdb -O robbit robbit_quiz
-
-            # Eski fayllarni tozalash
-            rm -rf $APP/prisma/migrations $APP/dist $APP/public
+            rm -rf $APP/dist $APP/public $APP/prisma/migrations
             tar -xzf /tmp/robbit-quiz.tgz -C $APP
             rm -f /tmp/robbit-quiz.tgz
-
             cd $APP
             npm install --omit=dev
             npx prisma generate
-
-            # Failed migratsiyalarni tozalash
-            sudo -u postgres psql robbit_quiz -c 'DELETE FROM \"_prisma_migrations\" WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL' 2>/dev/null || true
             npx prisma migrate deploy
-
             node prisma/seed-admin.mjs '$ADMIN_EMAIL' '$ADMIN_PASSWORD' || true
             pm2 restart robbit-quiz 2>/dev/null || pm2 start $APP/ecosystem.config.cjs
             pm2 save

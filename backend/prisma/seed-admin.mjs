@@ -16,7 +16,8 @@ if (!email || !password) {
 }
 
 const { PrismaClient } = await import("@prisma/client");
-const bcrypt = await import("bcryptjs");
+const bcryptMod = await import("bcryptjs");
+const bcrypt = bcryptMod.default ?? bcryptMod;
 
 const prisma = new PrismaClient();
 

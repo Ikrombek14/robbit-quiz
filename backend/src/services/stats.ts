@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import { nameKey } from "../lib/nameKey.js";
 
 // Ustozlar statistikasi — Google Sheet'dan (CSV export) jonli olinadi va keshlanadi.
@@ -16,7 +15,7 @@ export interface TeacherStat {
   branch: string | null;
   davomat: number | null; // o'quvchilar davomati, %
   uyBajarilishi: number | null; // uy vazifa bajarilishi, % (100 - topshirmagan)
-  uyTekshirilishi: number | null; // uy vazifa tekshirilishi, % (100 - tekshirilmagan)
+  uyTekshirilmaganSoni: number | null; // tekshirilmagan uy vazifa SONI (foiz emas)
   kechikish: number | null; // o'qituvchi kechikishi, daqiqa
   guruhlar: number | null; // guruhlar soni
   umumiyBall: number | null; // umumiy ball
@@ -25,11 +24,34 @@ export interface TeacherStat {
 let cache: { data: TeacherStat[]; ts: number } | null = null;
 
 // "96,95%" / "97%" / "5" / "" -> number | null
+// (CSV qo'lda parse qilinadi, shuning uchun qiymatlar har doim matn ko'rinishida keladi —
+//  XLSX foizni 0.97 ga aylantirib yuborardi, shuning uchun XLSX ishlatilmaydi.)
 function num(v: unknown): number | null {
   const t = String(v ?? "").trim().replace("%", "").replace(",", ".");
   if (!t) return null;
   const n = Number(t);
   return Number.isFinite(n) ? n : null;
+}
+
+// Oddiy CSV parser (qo'shtirnoq ichidagi vergul/yangi qatorni hisobga oladi)
+function parseCSV(s: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cur = "";
+  let q = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { cur += '"'; i++; } else q = false;
+      } else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cur); cur = ""; }
+    else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+    else if (c !== "\r") cur += c;
+  }
+  if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+  return rows;
 }
 
 export async function getAllStats(force = false): Promise<TeacherStat[]> {
@@ -39,13 +61,13 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
   if (!res.ok) throw new Error(`Statistika yuklab bo'lmadi (${res.status})`);
   const text = await res.text();
 
-  const wb = XLSX.read(text, { type: "string", raw: false });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false, defval: "" });
+  const rows = parseCSV(text);
 
-  // Ustun indekslari (manba jadval tartibiga mos):
-  // 0=HH ID, 2=O'qituvchi, 3=Filial, 12=Kechikish(daqiqa), 17=Umumiy ball,
-  // 20=Guruhlar soni, 29=Tekshirilmagan(%), 30=Topshirmagan(%), 31=Davomat(%)
+  // Ustun indekslari — asosiy (ishonchli to'ldirilgan) strukturalangan jadvaldan:
+  // 0=HH ID, 2=O'qituvchi, 3=Filial,
+  // 7=Uy vazifa Tekshirilmagan SONI, 10=Uy vazifa Bajarmagan(%),
+  // 12=Kechikish(daqiqa), 14=O'quvchilar davomati(%),
+  // 17=Umumiy ball, 20=Guruhlar soni
   const data: TeacherStat[] = [];
   for (let i = 2; i < rows.length; i++) {
     const r = (rows[i] ?? []) as unknown[];
@@ -53,15 +75,14 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
     const id = String(r[0] ?? "").trim();
     if (!name || !/^\d+$/.test(id)) continue; // faqat haqiqiy ustoz qatorlari
 
-    const topshirmagan = num(r[30]);
-    const tekshirilmagan = num(r[29]);
+    const bajarmagan = num(r[10]); // bajarmaganlar foizi
     data.push({
       name,
       nameKey: nameKey(name),
       branch: String(r[3] ?? "").trim() || null,
-      davomat: num(r[31]),
-      uyBajarilishi: topshirmagan == null ? null : Math.max(0, Math.round((100 - topshirmagan) * 10) / 10),
-      uyTekshirilishi: tekshirilmagan == null ? null : Math.max(0, Math.round((100 - tekshirilmagan) * 10) / 10),
+      davomat: num(r[14]),
+      uyBajarilishi: bajarmagan == null ? null : Math.max(0, Math.round((100 - bajarmagan) * 10) / 10),
+      uyTekshirilmaganSoni: num(r[7]),
       kechikish: num(r[12]),
       guruhlar: num(r[20]),
       umumiyBall: num(r[17]),
@@ -72,11 +93,39 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
   return data;
 }
 
+// Ismlarni moslashtirish (tartibga bog'liq emas + qisqa/to'liq shaklga to'lerant):
+// "Ikrom Bekmurodov" ~ "Bekmurodov Ikromjon" (ikrom -> ikromjon prefiks).
+function nameMatch(a: string, b: string): boolean {
+  const ta = nameKey(a).split(" ").filter(Boolean);
+  const tb = nameKey(b).split(" ").filter(Boolean);
+  if (ta.length < 2 || tb.length < 2) return ta.join(" ") === tb.join(" ");
+  const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  const used = new Set<number>();
+  let matched = 0;
+  for (const t of short) {
+    for (let i = 0; i < long.length; i++) {
+      if (used.has(i)) continue;
+      const u = long[i];
+      // exact yoki biri ikkinchisining prefiksi (kamida 3 harf) — Ikrom/Ikromjon, Aziz/Azizbek
+      if (t === u || (t.length >= 3 && u.startsWith(t)) || (u.length >= 3 && t.startsWith(u))) {
+        used.add(i);
+        matched++;
+        break;
+      }
+    }
+  }
+  return matched === short.length; // qisqa ro'yxatdagi barcha tokenlar mos kelishi kerak
+}
+
 export async function getStatByName(name: string): Promise<TeacherStat | null> {
   const key = nameKey(name);
   if (!key) return null;
   const all = await getAllStats();
-  return all.find((s) => s.nameKey === key) ?? null;
+  // 1) aniq moslik
+  const exact = all.find((s) => s.nameKey === key);
+  if (exact) return exact;
+  // 2) fuzzy moslik (ism tartibi / qisqa-to'liq shakl farqlari)
+  return all.find((s) => nameMatch(s.name, name)) ?? null;
 }
 
 // ---- Rejalashtirilgan yangilash: har kuni 21:00 da Sheet'dan qayta oladi ----

@@ -8,6 +8,34 @@ import type { QuizListItem, Quiz, TeacherStat } from "../types";
 
 const EMOJIS = ["🚀", "🌍", "📐", "🔬", "🎨", "📚", "🧮", "🌟", "🦋", "🎯"];
 
+// Reyting qatori (ixcham) — bosh sahifadagi top 5 / oxirgi 5 uchun
+function RatingRow({ s, rank }: { s: TeacherStat; rank: number }) {
+  const st = TONE_STYLE[ballTone(s.umumiyBall)];
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10, padding: "7px 12px",
+      background: "var(--surface-low)", borderRadius: 10, border: "1px solid var(--border)",
+    }}>
+      <div style={{
+        width: 24, height: 24, borderRadius: 7, flexShrink: 0, fontWeight: 800, fontSize: 13,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: rank <= 3 ? "var(--primary-soft)" : "var(--surface-high)",
+        color: rank <= 3 ? "var(--primary)" : "var(--muted)",
+      }}>{rank}</div>
+      <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {s.name}
+        {s.branch && <span className="muted" style={{ fontWeight: 400, fontSize: 12.5 }}> · {s.branch}</span>}
+      </div>
+      <div style={{
+        flexShrink: 0, fontWeight: 800, fontSize: 14, color: st.fg,
+        background: st.bg, border: `1px solid ${st.border}`, borderRadius: 8, padding: "2px 9px",
+      }}>
+        {fmtNum(s.umumiyBall)}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { teacher } = useAuth();
   const navigate = useNavigate();
@@ -45,9 +73,11 @@ export default function Dashboard() {
   }
 
   const recent = quizzes.slice(0, 4);
-  const top = [...allStats]
-    .sort((a, b) => (b.umumiyBall ?? -1) - (a.umumiyBall ?? -1))
-    .slice(0, 6);
+  const sorted = [...allStats].sort((a, b) => (b.umumiyBall ?? -1) - (a.umumiyBall ?? -1));
+  const n = sorted.length;
+  const topRows = sorted.slice(0, 5).map((s, i) => ({ s, rank: i + 1 }));
+  // Oxirgi 5 o'rin (top bilan ustma-ust tushmasligi uchun faqat 10 tadan ko'p bo'lsa)
+  const bottomRows = n > 10 ? sorted.slice(n - 5).map((s, i) => ({ s, rank: n - 5 + i + 1 })) : [];
 
   return (
     <Shell>
@@ -56,45 +86,47 @@ export default function Dashboard() {
         Bugun qanday yangi bilimlar o'rgatamiz?
       </p>
 
-      {/* O'z statistikasi — katta kataklar */}
+      {/* O'z statistikasi — KATTA kataklar */}
       {myStat ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: 12,
-            marginBottom: 28,
-          }}
-        >
-          {METRICS.map((m) => {
-            const v = myStat[m.key] as number | null;
-            const st = TONE_STYLE[m.tone(v)];
-            return (
-              <div
-                key={m.key}
-                style={{
-                  background: st.bg,
-                  border: `1.5px solid ${st.border}`,
-                  borderRadius: 16,
-                  padding: "16px 18px",
-                }}
-              >
+        <>
+          <h2 style={{ fontSize: 18, margin: "0 0 12px" }}>Mening statistikam</h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 14,
+              marginBottom: 34,
+            }}
+          >
+            {METRICS.map((m) => {
+              const v = myStat[m.key] as number | null;
+              const st = TONE_STYLE[m.tone(v)];
+              return (
                 <div
-                  className="text-sm"
-                  style={{ fontWeight: 700, color: "var(--muted)", lineHeight: 1.2, minHeight: 32 }}
+                  key={m.key}
+                  style={{
+                    background: st.bg,
+                    border: `2px solid ${st.border}`,
+                    borderRadius: 20,
+                    padding: "22px 24px",
+                  }}
                 >
-                  {m.label}
+                  <div
+                    style={{ fontSize: 14, fontWeight: 700, color: "var(--muted)", lineHeight: 1.25, minHeight: 36 }}
+                  >
+                    {m.label}
+                  </div>
+                  <div style={{ fontSize: 48, fontWeight: 800, color: st.fg, lineHeight: 1.05, marginTop: 8 }}>
+                    {fmtNum(v)}
+                    {v != null && (
+                      <span style={{ fontSize: 18, fontWeight: 700, marginLeft: 4 }}>{m.unit}</span>
+                    )}
+                  </div>
                 </div>
-                <div style={{ fontSize: 34, fontWeight: 800, color: st.fg, lineHeight: 1.1, marginTop: 6 }}>
-                  {fmtNum(v)}
-                  {v != null && (
-                    <span style={{ fontSize: 15, fontWeight: 700, marginLeft: 3 }}>{m.unit}</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       ) : !statLoading && !canCreate ? (
         <div className="card" style={{ marginBottom: 28 }}>
           <p className="muted" style={{ margin: 0 }}>
@@ -124,50 +156,24 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Ustozlar reytingi — barcha ustozlarga ko'rinadi */}
+      {/* Ustozlar reytingi — barcha ustozlarga (ixcham: top 5 + oxirgi 5) */}
       {(statLoading || allStats.length > 0) && (
         <>
-          <div className="between" style={{ marginTop: 32 }}>
+          <div className="between" style={{ marginTop: 8 }}>
             <h2 style={{ fontSize: 18, margin: 0 }}>Ustozlar reytingi</h2>
             <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => navigate("/stats")}>
-              To'liq statistikani ko'rish →
+              Hammasini ko'rish →
             </button>
           </div>
           {statLoading ? (
             <p className="muted" style={{ marginTop: 12 }}>Yuklanmoqda…</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-              {top.map((s, i) => {
-                const st = TONE_STYLE[ballTone(s.umumiyBall)];
-                return (
-                  <div
-                    key={s.nameKey + i}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
-                      background: "var(--surface-low)", borderRadius: 12, border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 8, flexShrink: 0, fontWeight: 800, fontSize: 14,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: i < 3 ? "var(--primary-soft)" : "var(--surface-high)",
-                      color: i < 3 ? "var(--primary)" : "var(--muted)",
-                    }}>{i + 1}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {s.name}
-                      </div>
-                      {s.branch && <div className="muted text-sm" style={{ marginTop: 2 }}>{s.branch}</div>}
-                    </div>
-                    <div style={{
-                      flexShrink: 0, fontWeight: 800, fontSize: 17, color: st.fg,
-                      background: st.bg, border: `1.5px solid ${st.border}`, borderRadius: 10, padding: "4px 12px",
-                    }}>
-                      {fmtNum(s.umumiyBall)}
-                    </div>
-                  </div>
-                );
-              })}
+            <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 12 }}>
+              {topRows.map(({ s, rank }) => <RatingRow key={"t" + rank} s={s} rank={rank} />)}
+              {bottomRows.length > 0 && (
+                <div className="muted" style={{ textAlign: "center", fontSize: 20, lineHeight: 1, padding: "0" }}>⋯</div>
+              )}
+              {bottomRows.map(({ s, rank }) => <RatingRow key={"b" + rank} s={s} rank={rank} />)}
             </div>
           )}
         </>

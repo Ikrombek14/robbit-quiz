@@ -24,6 +24,13 @@ export function kechikishTone(v: number | null): Tone {
   if (v <= 20) return "warn";
   return "bad";
 }
+// Tekshirilmagan uy vazifa soni: kam = yaxshi
+export function tekshTone(v: number | null): Tone {
+  if (v == null) return "neutral";
+  if (v <= 0) return "good";
+  if (v <= 5) return "warn";
+  return "bad";
+}
 // Umumiy ball (0–100 atrofida)
 export function ballTone(v: number | null): Tone {
   if (v == null) return "neutral";
@@ -44,7 +51,7 @@ export interface MetricDef {
 export const METRICS: MetricDef[] = [
   { key: "davomat", label: "Davomat", short: "Davomat", unit: "%", tone: pctTone },
   { key: "uyBajarilishi", label: "Uy vazifa bajarilishi", short: "Uy baj.", unit: "%", tone: pctTone },
-  { key: "uyTekshirilishi", label: "Uy vazifa tekshirilishi", short: "Uy tek.", unit: "%", tone: pctTone },
+  { key: "uyTekshirilmaganSoni", label: "Tekshirilmagan uy vazifa", short: "Tek-magan", unit: "ta", tone: tekshTone },
   { key: "kechikish", label: "Kechikish", short: "Kechikish", unit: "daq", tone: kechikishTone },
   { key: "guruhlar", label: "Guruhlar soni", short: "Guruh", unit: "ta", tone: () => "neutral" },
 ];

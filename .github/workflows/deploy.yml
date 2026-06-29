@@ -149,6 +149,8 @@ jobs:
             npx prisma migrate deploy
 
             node prisma/seed-admin.mjs '$ADMIN_EMAIL' '$ADMIN_PASSWORD' || true
+            # Yo'riqnoma: baza bo'sh bo'lsa tayyor kontentni tiklaydi, bor bo'lsa tegmaydi
+            node prisma/seed-guide-if-empty.mjs || true
             pm2 restart robbit-quiz 2>/dev/null || pm2 start $APP/ecosystem.config.cjs
             pm2 save
             echo '✅ Deploy tugadi'

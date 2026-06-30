@@ -119,6 +119,10 @@ function leaderboard(game: GameState) {
 function connectedPlayers(game: GameState) {
   return [...game.players.values()].filter((p) => p.connected);
 }
+// Host ro'yxati uchun — id bilan (kick qilish imkoni uchun)
+function lobbyPlayers(game: GameState) {
+  return connectedPlayers(game).map((p) => ({ id: p.playerId, nickname: p.nickname }));
+}
 
 // ----- TEST rejimi yordamchilari -----
 function testScore(p: GamePlayer, total: number): number {
@@ -440,7 +444,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       status: game.status,
       mode: game.mode,
       settings: game.settings,
-      players: connectedPlayers(game).map((p) => ({ nickname: p.nickname })),
+      players: lobbyPlayers(game),
       slide:
         game.mode === "LIVE" && (game.status === "active" || game.status === "reveal") ? publicSlide(game) : null,
     });
@@ -453,13 +457,15 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       cb?.({ error: "Bunday kod topilmadi" });
       return;
     }
-    if (game.status !== "lobby") {
-      cb?.({ error: "O'yin allaqachon boshlangan" });
+    // O'yin yakunlangan bo'lsagina qo'shilishni rad etamiz.
+    // Lobby YOKI boshlangan (active/reveal) o'yinga ham kechikib qo'shilsa bo'ladi.
+    if (game.status === "ended") {
+      cb?.({ error: "O'yin yakunlangan" });
       return;
     }
     const nickname = (data.nickname ?? "").trim().slice(0, 20) || "O'quvchi";
     const playerId = genId();
-    game.players.set(playerId, {
+    const player: GamePlayer = {
       playerId,
       socketId: socket.id,
       nickname,
@@ -476,15 +482,24 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       finishedAt: 0,
       qStartedAt: 0,
       testDetails: [],
-    });
+    };
+    game.players.set(playerId, player);
     socket.join(data.pin);
     socket.data.role = "player";
     socket.data.pin = data.pin;
     socket.data.playerId = playerId;
-    cb?.({ ok: true, playerId, settings: clientSettings(game) });
-    io.to(game.hostSocketId).emit("lobby:update", {
-      players: connectedPlayers(game).map((p) => ({ nickname: p.nickname })),
-    });
+    cb?.({ ok: true, playerId, settings: clientSettings(game), status: game.status, mode: game.mode });
+    io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
+    // Kech qo'shilgan o'quvchini darhol jonli o'yinga/testga tushiramiz
+    if (game.status !== "lobby") {
+      if (game.mode === "TEST") {
+        player.qStartedAt = Date.now();
+        socket.emit("test:begin", { total: game.questionIndices.length });
+        emitTestProgress(game);
+      } else {
+        socket.emit("slide:show", publicSlide(game));
+      }
+    }
   });
 
   // O'quvchi qayta ulanishi
@@ -510,9 +525,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       mode: game.mode,
       settings: clientSettings(game),
     });
-    io.to(game.hostSocketId).emit("lobby:update", {
-      players: connectedPlayers(game).map((p) => ({ nickname: p.nickname })),
-    });
+    io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
     if (game.status === "active") {
       if (game.mode === "TEST") socket.emit("test:begin", { total: game.questionIndices.length });
       else socket.emit("slide:show", publicSlide(game));
@@ -583,6 +596,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     io.to(game.hostSocketId).emit("test:progress", {
       total,
       players: [...game.players.values()].map((p) => ({
+        id: p.playerId,
         nickname: p.nickname,
         answered: Math.min(p.testIndex, total),
         score: testScore(p, total),
@@ -720,6 +734,27 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     showCurrent(game);
   });
 
+  // Host o'quvchini o'yindan chiqaradi (kick)
+  socket.on("host:kick", (data: { pin: string; playerId: string }) => {
+    const game = games.get(data?.pin);
+    if (!game || game.hostSocketId !== socket.id) return;
+    const player = game.players.get(data?.playerId);
+    if (!player) return;
+    const kickedSocketId = player.socketId;
+    game.players.delete(data.playerId);
+    // Chiqarilgan o'quvchiga xabar beramiz va o'yindan uzamiz
+    io.to(kickedSocketId).emit("player:kicked");
+    const ks = io.sockets.sockets.get(kickedSocketId);
+    if (ks) {
+      ks.leave(game.pin);
+      ks.data.pin = undefined;
+      ks.data.playerId = undefined;
+    }
+    // Ro'yxatlarni yangilaymiz (jonli va test rejimi)
+    io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
+    if (game.mode === "TEST") emitTestProgress(game);
+  });
+
   socket.on("host:reveal", (data: { pin: string }) => {
     const game = games.get(data?.pin);
     if (!game || game.hostSocketId !== socket.id) return;
@@ -824,7 +859,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         await persistGame(game);
         io.to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game), hostLeft: true });
         games.delete(game.pin);
-      }, 60000); // 60 soniya kutamiz
+      }, 30 * 60 * 1000); // 30 daqiqa kutamiz — ustoz internet uzilsa ham dars o'chmaydi,
+      // qaytib kirsa kelgan joyidan davom ettiradi
       return;
     }
     if (socket.data.role === "player") {
@@ -835,9 +871,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       } else {
         player.connected = false;
       }
-      io.to(game.hostSocketId).emit("lobby:update", {
-        players: connectedPlayers(game).map((p) => ({ nickname: p.nickname })),
-      });
+      io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
     }
   });
 }

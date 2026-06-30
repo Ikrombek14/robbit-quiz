@@ -5,7 +5,7 @@ import type { LeaderRow, SlideData } from "../types";
 import SlideScene from "../components/SlideScene";
 import TestRunner from "../components/TestRunner";
 
-type Phase = "form" | "lobby" | "content" | "question" | "answered" | "reveal" | "ended" | "test";
+type Phase = "form" | "lobby" | "content" | "question" | "answered" | "reveal" | "ended" | "test" | "kicked";
 
 interface PublicSlide {
   id: string;
@@ -83,6 +83,11 @@ export default function Join() {
       document.documentElement.requestFullscreen?.().catch(() => {});
     };
     const onSettings = (s: { antiCheat: boolean; disableRightClick: boolean; serious: boolean }) => setStuSettings(s);
+    const onKicked = () => {
+      localStorage.removeItem("player");
+      setError("Sizni o'qituvchi o'yindan chiqardi");
+      setPhase("kicked");
+    };
     const onTestBegin = () => {
       setGameMode("TEST");
       setPhase("test");
@@ -95,6 +100,7 @@ export default function Join() {
     socket.on("game:ended", onEnded);
     socket.on("present:fullscreen", onFs);
     socket.on("game:settings", onSettings);
+    socket.on("player:kicked", onKicked);
     return () => {
       socket.off("slide:show", onSlide);
       socket.off("answer:received", onReceived);
@@ -104,6 +110,7 @@ export default function Join() {
       socket.off("present:fullscreen", onFs);
       socket.off("game:settings", onSettings);
       socket.off("test:begin", onTestBegin);
+      socket.off("player:kicked", onKicked);
     };
   }, []);
 
@@ -237,6 +244,16 @@ export default function Join() {
         <div className="card card-narrow center">
           <h2>✅ Qo'shildingiz!</h2>
           <p className="muted">Salom, {nickname}! Boshlanishini kuting…</p>
+        </div>
+      </div>
+    );
+
+  if (phase === "kicked")
+    return (
+      <div className="center-screen">
+        <div className="card card-narrow center">
+          <h1>🚪 O'yindan chiqarildingiz</h1>
+          <p className="muted">{error || "Sizni o'qituvchi o'yindan chiqardi"}</p>
         </div>
       </div>
     );

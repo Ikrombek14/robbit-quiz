@@ -39,7 +39,12 @@ interface GameSettings {
   antiCheat: boolean;
   disableRightClick: boolean;
 }
+interface PlayerRow {
+  id: string;
+  nickname: string;
+}
 interface TestProgRow {
+  id: string;
   nickname: string;
   answered: number;
   score: number;
@@ -59,7 +64,7 @@ export default function Host() {
   const [phase, setPhase] = useState<Phase>("connecting");
   const [pin, setPin] = useState("");
   const [title, setTitle] = useState("");
-  const [players, setPlayers] = useState<string[]>([]);
+  const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [slide, setSlide] = useState<PublicSlide | null>(null);
   const [progress, setProgress] = useState({ answered: 0, total: 0 });
   const [answeredNames, setAnsweredNames] = useState<string[]>([]);
@@ -122,7 +127,7 @@ export default function Host() {
       setTitle(r.title ?? "");
       if (r.settings) setSettings(r.settings);
       if (r.mode) setMode(r.mode);
-      if (r.players) setPlayers(r.players.map((p: { nickname: string }) => p.nickname));
+      if (r.players) setPlayers(r.players as PlayerRow[]);
       if (r.status === "ended") setPhase("ended");
       else if (r.mode === "TEST" && r.status === "active") setPhase("active");
       else if ((r.status === "active" || r.status === "reveal") && r.slide) {
@@ -140,7 +145,7 @@ export default function Host() {
       // Har safar boshlashda avval 1-eslatma chiqadi; o'yin shundan keyin yaratiladi/davom ettiriladi
       setReminder1(true);
     }
-    const onLobby = (d: { players: { nickname: string }[] }) => setPlayers(d.players.map((p) => p.nickname));
+    const onLobby = (d: { players: PlayerRow[] }) => setPlayers(d.players);
     const onSlide = (s: PublicSlide) => {
       setSlide(s);
       setResults(null);
@@ -203,6 +208,20 @@ export default function Host() {
   // 40-daqiqalik eslatma taymerini tozalash
   useEffect(() => () => { if (reminder3Timer.current) clearTimeout(reminder3Timer.current); }, []);
 
+  // Klaviatura strelkalari bilan slaydlarni boshqarish (jonli rejim):
+  //   → keyingi slayd, ← oldingi slayd. Matn maydonida yozayotganda ishlamaydi.
+  useEffect(() => {
+    if (mode !== "LIVE" || (phase !== "active" && phase !== "reveal")) return;
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement | null;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (e.key === "ArrowRight") { e.preventDefault(); getSocket().emit("host:next", { pin }); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); getSocket().emit("host:prev", { pin }); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, phase, pin]);
+
   const socket = getSocket();
   const remaining = endsAt ? Math.max(0, endsAt - now) : 0;
   const secs = Math.ceil(remaining / 1000);
@@ -219,6 +238,12 @@ export default function Host() {
 
   function endPresentation() {
     socket.emit("host:end", { pin });
+  }
+
+  // O'quvchini o'yindan chiqarish (kick)
+  function kickPlayer(playerId: string, name: string) {
+    if (!window.confirm(`"${name}" o'yindan chiqarilsinmi?`)) return;
+    socket.emit("host:kick", { pin, playerId });
   }
 
   function startGame() {
@@ -307,9 +332,16 @@ export default function Host() {
                 <div className="players-empty">O'quvchilar qo'shilishini kutmoqda…</div>
               ) : (
                 players.map((p, i) => (
-                  <span className="player-pill" key={i}>
-                    <span className="pp-ava">{initial(dispName(p, i))}</span>
-                    {dispName(p, i)}
+                  <span className="player-pill" key={p.id}>
+                    <span className="pp-ava">{initial(dispName(p.nickname, i))}</span>
+                    {dispName(p.nickname, i)}
+                    <button
+                      className="kick-btn"
+                      title="O'yindan chiqarish"
+                      onClick={() => kickPlayer(p.id, dispName(p.nickname, i))}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
                   </span>
                 ))
               )}
@@ -464,6 +496,14 @@ export default function Host() {
                     {settings.antiCheat && fl > 0 && (
                       <span className="cheat-flag"><span className="material-symbols-outlined">warning</span>{fl}</span>
                     )}
+                    <button
+                      className="kick-btn"
+                      style={{ marginLeft: 8 }}
+                      title="O'yindan chiqarish"
+                      onClick={() => kickPlayer(p.id, name)}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
                   </span>
                   <span className="tm-prog">
                     <span className="tm-bar"><span style={{ width: `${prog}%` }} /></span>
@@ -577,11 +617,11 @@ export default function Host() {
                 <div className="attendee-list">
                   {players.length === 0 && <span className="muted" style={{ fontSize: 13 }}>O'quvchi yo'q</span>}
                   {players.map((p, i) => {
-                    const done = answeredNames.includes(p);
-                    const name = showNames && !settings.anonymous ? p : `O'quvchi ${i + 1}`;
-                    const fl = flags[p] ?? 0;
+                    const done = answeredNames.includes(p.nickname);
+                    const name = showNames && !settings.anonymous ? p.nickname : `O'quvchi ${i + 1}`;
+                    const fl = flags[p.nickname] ?? 0;
                     return (
-                      <div className={`attendee ${done ? "done" : ""}`} key={i}>
+                      <div className={`attendee ${done ? "done" : ""}`} key={p.id}>
                         <span className="at-dot" />
                         {name}
                         {settings.antiCheat && fl > 0 && (
@@ -589,7 +629,15 @@ export default function Host() {
                             <span className="material-symbols-outlined">warning</span>{fl}
                           </span>
                         )}
-                        {done && <span style={{ marginLeft: settings.antiCheat && fl > 0 ? 6 : "auto" }} className="material-symbols-outlined">check</span>}
+                        {done && <span style={{ marginLeft: "auto" }} className="material-symbols-outlined">check</span>}
+                        <button
+                          className="kick-btn"
+                          style={{ marginLeft: done ? 6 : "auto" }}
+                          title="O'yindan chiqarish"
+                          onClick={() => kickPlayer(p.id, name)}
+                        >
+                          <span className="material-symbols-outlined">close</span>
+                        </button>
                       </div>
                     );
                   })}
@@ -635,7 +683,7 @@ export default function Host() {
         </div>
 
         {showWheel && (
-          <SpinWheel players={players.map((p, i) => dispName(p, i))} onClose={() => setShowWheel(false)} />
+          <SpinWheel players={players.map((p, i) => dispName(p.nickname, i))} onClose={() => setShowWheel(false)} />
         )}
         {showBoard && results && (
           <LeaderboardOverlay rows={results.leaderboard} anonymous={settings.anonymous} onClose={() => setShowBoard(false)} />

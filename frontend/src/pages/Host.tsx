@@ -288,7 +288,7 @@ export default function Host() {
         confirmLabel="Ha"
         cancelLabel="Yo'q"
         onConfirm={() => { setReminder1(false); beginSession(); }}
-        onCancel={() => { window.location.href = ADMIN_SIGNIN; }}
+        onCancel={() => { window.open(ADMIN_SIGNIN, "_blank", "noopener"); }}
       />
     );
 
@@ -447,7 +447,7 @@ export default function Host() {
             confirmLabel="Ha"
             cancelLabel="Yo'q"
             onConfirm={confirmStart}
-            onCancel={() => { window.location.href = ADMIN_SIGNIN; }}
+            onCancel={() => { window.open(ADMIN_SIGNIN, "_blank", "noopener"); }}
           />
         )}
       </div>

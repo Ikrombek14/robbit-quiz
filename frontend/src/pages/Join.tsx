@@ -46,6 +46,7 @@ export default function Join() {
   const [stuSettings, setStuSettings] = useState({ antiCheat: false, disableRightClick: false, serious: false });
   const [warn, setWarn] = useState("");
   const [gameMode, setGameMode] = useState<"LIVE" | "TEST">("LIVE");
+  const [practiceEndsAt, setPracticeEndsAt] = useState(0); // amaliyot (mashq) taymeri
 
   // interaktiv javob holatlari
   const [selected, setSelected] = useState<string[]>([]);
@@ -61,8 +62,10 @@ export default function Join() {
       setResult(null);
       setResults(null);
       setEndsAt(s.endsAt ?? 0);
+      setPracticeEndsAt(0); // yangi slaydda amaliyot taymeri tugaydi
       setPhase(s.kind === "CONTENT" ? "content" : "question");
     };
+    const onPractice = (d: { endsAt: number }) => setPracticeEndsAt(d.endsAt || 0);
     const onReceived = (r: { correct: boolean; points: number; score: number }) => {
       setResult(r);
       setScore(r.score);
@@ -101,6 +104,7 @@ export default function Join() {
     socket.on("present:fullscreen", onFs);
     socket.on("game:settings", onSettings);
     socket.on("player:kicked", onKicked);
+    socket.on("practice:timer", onPractice);
     return () => {
       socket.off("slide:show", onSlide);
       socket.off("answer:received", onReceived);
@@ -111,6 +115,7 @@ export default function Join() {
       socket.off("game:settings", onSettings);
       socket.off("test:begin", onTestBegin);
       socket.off("player:kicked", onKicked);
+      socket.off("practice:timer", onPractice);
     };
   }, []);
 
@@ -212,6 +217,17 @@ export default function Join() {
     else document.exitFullscreen?.().catch(() => {});
   }
 
+  // Amaliyot (mashq) taymeri bannerini barcha ekranlarda ko'rsatamiz
+  const pracLeft = practiceEndsAt ? Math.max(0, practiceEndsAt - now) : 0;
+  const pracSecs = Math.ceil(pracLeft / 1000);
+  const pracBanner =
+    practiceEndsAt > 0 && pracLeft > 0 ? (
+      <div className={`stu-prac-banner ${pracSecs <= 5 ? "low" : ""}`}>
+        <span className="material-symbols-outlined">timer</span>
+        {Math.floor(pracSecs / 60)}:{String(pracSecs % 60).padStart(2, "0")}
+      </div>
+    ) : null;
+
   // ---------- Form ----------
   if (phase === "form")
     return (
@@ -241,6 +257,7 @@ export default function Join() {
   if (phase === "lobby")
     return (
       <div className="center-screen">
+        {pracBanner}
         <div className="card card-narrow center">
           <h2>✅ Qo'shildingiz!</h2>
           <p className="muted">Salom, {nickname}! Boshlanishini kuting…</p>
@@ -269,6 +286,7 @@ export default function Join() {
   if (phase === "content" && slide)
     return (
       <div className="stu-present">
+        {pracBanner}
         {warn && <div className="cheat-warn">{warn}</div>}
         <div className="stu-top">
           <div className="stu-top-left">
@@ -313,6 +331,7 @@ export default function Join() {
     const low = tpct <= 25;
     const qTimer = (
       <>
+        {pracBanner}
         {warn && <div className="cheat-warn">{warn}</div>}
         {endsAt ? (
           <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 6, background: "var(--surface-2)", zIndex: 50 }}>

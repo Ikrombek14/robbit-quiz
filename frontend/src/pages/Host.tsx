@@ -5,6 +5,7 @@ import { getSocket } from "../socket";
 import { getToken } from "../api";
 import type { LeaderRow, SlideData } from "../types";
 import SlideScene from "../components/SlideScene";
+import { unlockAudio, startMusic, stopMusic, playTick, playTimeUp } from "../sound";
 
 type Phase = "connecting" | "lobby" | "active" | "reveal" | "ended";
 
@@ -25,12 +26,18 @@ interface PublicSlide {
   rights?: { id: string; text: string }[];
   items?: { id: string; text: string }[];
 }
+interface AnswerLists {
+  correct: string[];
+  wrong: string[];
+  noAnswer: string[];
+}
 interface Results {
   correctOptionIds?: string[];
   correctText?: string;
   voteCounts?: Record<string, number>;
   poll?: boolean;
   leaderboard: LeaderRow[];
+  answers?: AnswerLists;
 }
 interface GameSettings {
   questionTimer: boolean;
@@ -80,6 +87,20 @@ export default function Host() {
   const [showBoard, setShowBoard] = useState(false);
   const [showNames, setShowNames] = useState(true);
 
+  // ovoz/musiqa (host ekranida sinf uchun chalinadi)
+  const [soundOn, setSoundOn] = useState(true);
+
+  // amaliyot (mashq) taymeri
+  const [practiceEndsAt, setPracticeEndsAt] = useState(0);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
+  // ovoz/avto-reyting yordamchi ref'lari (qayta chalinmaslik uchun)
+  const lbTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTick = useRef(0); // savol taymeri: oxirgi tiklangan soniya
+  const endPlayed = useRef(false); // savol taymeri: tugash ovozi chalindimi
+  const lastPracTick = useRef(0); // amaliyot taymeri: oxirgi tik soniya
+  const pracEndPlayed = useRef(false); // amaliyot taymeri: tugash ovozi
+
   // start oldidan sozlamalar
   const [settings, setSettings] = useState<GameSettings>({
     questionTimer: true,
@@ -128,6 +149,7 @@ export default function Host() {
       if (r.settings) setSettings(r.settings);
       if (r.mode) setMode(r.mode);
       if (r.players) setPlayers(r.players as PlayerRow[]);
+      if (r.practiceEndsAt) setPracticeEndsAt(r.practiceEndsAt); // amaliyot taymeri davom etsa, tiklaymiz
       if (r.status === "ended") setPhase("ended");
       else if (r.mode === "TEST" && r.status === "active") setPhase("active");
       else if ((r.status === "active" || r.status === "reveal") && r.slide) {
@@ -153,6 +175,10 @@ export default function Host() {
       setAnsweredNames([]);
       setEndsAt(s.endsAt ?? 0);
       setShowBoard(false);
+      setPracticeEndsAt(0); // yangi slaydda amaliyot taymeri ham tugaydi
+      if (lbTimer.current) { clearTimeout(lbTimer.current); lbTimer.current = null; }
+      lastTick.current = 0;
+      endPlayed.current = false;
       setPhase("active");
     };
     const onProgress = (d: { answered: number; total: number; answeredNames?: string[] }) => {
@@ -164,11 +190,22 @@ export default function Host() {
       setResults(d);
       setEndsAt(0);
       setPhase("reveal");
+      stopMusic();
+      // Har bir savoldan keyin reyting 5 soniyaga ko'rinadi
+      if (lbTimer.current) clearTimeout(lbTimer.current);
+      setShowBoard(true);
+      lbTimer.current = setTimeout(() => setShowBoard(false), 5000);
+    };
+    const onPractice = (d: { endsAt: number }) => {
+      setPracticeEndsAt(d.endsAt || 0);
+      lastPracTick.current = 0;
+      pracEndPlayed.current = false;
     };
     const onEnded = (d: { leaderboard: LeaderRow[] }) => {
       setResults({ leaderboard: d.leaderboard });
       setEndsAt(0);
       setPhase("ended");
+      stopMusic();
       localStorage.removeItem(`host:${quizId}`);
     };
     const onFlag = (d: { nickname: string; count: number }) =>
@@ -186,6 +223,7 @@ export default function Host() {
     socket.on("slide:results", onResults);
     socket.on("game:ended", onEnded);
     socket.on("host:flag", onFlag);
+    socket.on("practice:timer", onPractice);
     return () => {
       socket.off("lobby:update", onLobby);
       socket.off("slide:show", onSlide);
@@ -195,6 +233,7 @@ export default function Host() {
       socket.off("game:ended", onEnded);
       socket.off("host:flag", onFlag);
       socket.off("test:progress", onTestProg);
+      socket.off("practice:timer", onPractice);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quizId]);
@@ -222,10 +261,52 @@ export default function Host() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, phase, pin]);
 
+  // Komponent yopilganda taymerlarni tozalash
+  useEffect(() => () => { if (lbTimer.current) clearTimeout(lbTimer.current); stopMusic(); }, []);
+
+  // Musobaqa fon musiqasi — faqat jonli savol faol bo'lganda (jiddiy rejimda emas)
+  useEffect(() => {
+    const isQuestion = mode === "LIVE" && phase === "active" && slide != null && slide.kind !== "CONTENT";
+    if (isQuestion && soundOn && !settings.serious) startMusic();
+    else stopMusic();
+  }, [mode, phase, slide, soundOn, settings.serious]);
+
+  // Savol taymeri ovozi: oxirgi 5 soniyada tik, tugaganda signal
+  useEffect(() => {
+    if (!soundOn || phase !== "active" || !endsAt) return;
+    const rem = endsAt - now;
+    if (rem <= 0) {
+      if (!endPlayed.current) { endPlayed.current = true; playTimeUp(); }
+      return;
+    }
+    const sec = Math.ceil(rem / 1000);
+    if (sec <= 5 && sec !== lastTick.current) {
+      lastTick.current = sec;
+      playTick();
+    }
+  }, [now, endsAt, phase, soundOn]);
+
   const socket = getSocket();
   const remaining = endsAt ? Math.max(0, endsAt - now) : 0;
   const secs = Math.ceil(remaining / 1000);
   const pct = slide?.timeLimit ? Math.min(100, (remaining / (slide.timeLimit * 1000)) * 100) : 0;
+
+  // Amaliyot (mashq) taymeri qoldig'i + tugash ovozi
+  const pracRemaining = practiceEndsAt ? Math.max(0, practiceEndsAt - now) : 0;
+  const pracSecs = Math.ceil(pracRemaining / 1000);
+  useEffect(() => {
+    if (!practiceEndsAt) return;
+    const rem = practiceEndsAt - now;
+    if (rem <= 0) {
+      if (!pracEndPlayed.current) { pracEndPlayed.current = true; if (soundOn) playTimeUp(); setPracticeEndsAt(0); }
+      return;
+    }
+    const sec = Math.ceil(rem / 1000);
+    if (soundOn && sec <= 5 && sec !== lastPracTick.current) {
+      lastPracTick.current = sec;
+      playTick();
+    }
+  }, [now, practiceEndsAt, soundOn]);
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -246,7 +327,18 @@ export default function Host() {
     socket.emit("host:kick", { pin, playerId });
   }
 
+  // Amaliyot taymerini boshlash (sekundlarda) — o'quvchilarga vazifa uchun vaqt
+  function startPractice(seconds: number) {
+    unlockAudio();
+    setShowTimePicker(false);
+    socket.emit("host:practiceTimer", { pin, seconds });
+  }
+  function stopPractice() {
+    socket.emit("host:practiceStop", { pin });
+  }
+
   function startGame() {
+    unlockAudio();
     socket.emit("host:start", { pin, mode });
     if (mode === "TEST") setPhase("active"); // test'da slide:show kelmaydi
     // 3-eslatma: 40 daqiqadan keyin ota-onalar guruhiga video eslatmasi
@@ -287,7 +379,7 @@ export default function Host() {
         message="ERP tizimida rasmga tushdingizmi va davomat qildingizmi?"
         confirmLabel="Ha"
         cancelLabel="Yo'q"
-        onConfirm={() => { setReminder1(false); beginSession(); }}
+        onConfirm={() => { unlockAudio(); setReminder1(false); beginSession(); }}
         onCancel={() => { window.open(ADMIN_SIGNIN, "_blank", "noopener"); }}
       />
     );
@@ -391,6 +483,14 @@ export default function Host() {
                 </select>
               </div>
               )}
+
+              <div className="setting-row">
+                <div className="setting-info">
+                  <div className="setting-name">Musiqa va ovoz</div>
+                  <div className="setting-desc">Quiz vaqtida musobaqa musiqasi va taymer signali</div>
+                </div>
+                <Toggle on={soundOn} onChange={(v) => { setSoundOn(v); if (!v) stopMusic(); else unlockAudio(); }} />
+              </div>
 
               <div className="setting-row">
                 <div className="setting-info">
@@ -535,6 +635,7 @@ export default function Host() {
     const isContent = slide.kind === "CONTENT";
     const last = slide.index + 1 >= slide.total;
     const isPoll = slide.type === "POLL";
+    const ans = phase === "reveal" ? results?.answers : undefined; // kim to'g'ri/xato belgilagani
 
     return (
       <div className="live-wrap">
@@ -614,14 +715,24 @@ export default function Host() {
                     </button>
                   )}
                 </div>
+                {phase === "reveal" && ans && (
+                  <div className="ans-summary">
+                    <span className="ans-chip ans-correct"><span className="material-symbols-outlined">check_circle</span>{ans.correct.length} to'g'ri</span>
+                    <span className="ans-chip ans-wrong"><span className="material-symbols-outlined">cancel</span>{ans.wrong.length} xato</span>
+                  </div>
+                )}
                 <div className="attendee-list">
                   {players.length === 0 && <span className="muted" style={{ fontSize: 13 }}>O'quvchi yo'q</span>}
                   {players.map((p, i) => {
                     const done = answeredNames.includes(p.nickname);
                     const name = showNames && !settings.anonymous ? p.nickname : `O'quvchi ${i + 1}`;
                     const fl = flags[p.nickname] ?? 0;
+                    // Reveal vaqtida: kim to'g'ri / xato belgilagani
+                    const st = phase === "reveal" && ans
+                      ? ans.correct.includes(p.nickname) ? "correct" : ans.wrong.includes(p.nickname) ? "wrong" : "none"
+                      : null;
                     return (
-                      <div className={`attendee ${done ? "done" : ""}`} key={p.id}>
+                      <div className={`attendee ${done ? "done" : ""} ${st === "correct" ? "ans-correct" : st === "wrong" ? "ans-wrong" : ""}`} key={p.id}>
                         <span className="at-dot" />
                         {name}
                         {settings.antiCheat && fl > 0 && (
@@ -629,10 +740,12 @@ export default function Host() {
                             <span className="material-symbols-outlined">warning</span>{fl}
                           </span>
                         )}
-                        {done && <span style={{ marginLeft: "auto" }} className="material-symbols-outlined">check</span>}
+                        {st === "correct" && <span style={{ marginLeft: "auto", color: "var(--olive)" }} className="material-symbols-outlined">check_circle</span>}
+                        {st === "wrong" && <span style={{ marginLeft: "auto", color: "var(--danger, #e5484d)" }} className="material-symbols-outlined">cancel</span>}
+                        {st == null && done && <span style={{ marginLeft: "auto" }} className="material-symbols-outlined">check</span>}
                         <button
                           className="kick-btn"
-                          style={{ marginLeft: done ? 6 : "auto" }}
+                          style={{ marginLeft: (st != null || done) ? 6 : "auto" }}
                           title="O'yindan chiqarish"
                           onClick={() => kickPlayer(p.id, name)}
                         >
@@ -659,6 +772,28 @@ export default function Host() {
                 <span className="material-symbols-outlined">leaderboard</span> Reyting
               </button>
             )}
+            {/* Amaliyot (mashq) taymeri — o'quvchilarga vazifa uchun vaqt */}
+            <div className="prac-timer-wrap">
+              {practiceEndsAt ? (
+                <button className="tool-btn danger" onClick={stopPractice}>
+                  <span className="material-symbols-outlined">timer_off</span>
+                  Taymer: {Math.floor(pracSecs / 60)}:{String(pracSecs % 60).padStart(2, "0")}
+                </button>
+              ) : (
+                <button className="tool-btn" onClick={() => setShowTimePicker((v) => !v)}>
+                  <span className="material-symbols-outlined">timer</span> Vaqt berish
+                </button>
+              )}
+              {showTimePicker && !practiceEndsAt && (
+                <div className="prac-picker">
+                  {[30, 60, 120, 180, 300, 600].map((s) => (
+                    <button key={s} className="prac-opt" onClick={() => startPractice(s)}>
+                      {s < 60 ? `${s}s` : `${s / 60} daq`}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="lb-center">
@@ -681,6 +816,15 @@ export default function Host() {
             </button>
           </div>
         </div>
+
+        {/* Amaliyot taymeri — katta sanagich (proyektorda ko'rinadi) */}
+        {practiceEndsAt > 0 && (
+          <div className={`prac-banner ${pracSecs <= 5 ? "low" : ""}`}>
+            <span className="material-symbols-outlined">timer</span>
+            <span className="prac-time">{Math.floor(pracSecs / 60)}:{String(pracSecs % 60).padStart(2, "0")}</span>
+            <span className="prac-lbl">Amaliyot vaqti</span>
+          </div>
+        )}
 
         {showWheel && (
           <SpinWheel players={players.map((p, i) => dispName(p.nickname, i))} onClose={() => setShowWheel(false)} />

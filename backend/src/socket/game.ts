@@ -19,6 +19,7 @@ interface GamePlayer {
   score: number;
   lastGain: number;
   answeredCurrent: boolean;
+  currentCorrect: boolean; // joriy savolga to'g'ri javob berdimi (kim to'g'ri/xato belgilaganini ko'rsatish uchun)
   connected: boolean;
   correctCount: number;
   totalAnswered: number;
@@ -80,6 +81,7 @@ interface GameState {
   players: Map<string, GamePlayer>;
   questionStartedAt: number;
   timerEndsAt: number; // savol taymeri tugash vaqti (ms epoch); 0 = taymer yo'q
+  practiceEndsAt: number; // amaliyot (mashq) taymeri tugash vaqti (ms epoch); 0 = yo'q
   timer: ReturnType<typeof setTimeout> | null;
   hostGraceTimer: ReturnType<typeof setTimeout> | null; // host uzilganda kutish (sahifa yangilash uchun)
   votes: Record<string, number>;
@@ -391,6 +393,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       players: new Map(),
       questionStartedAt: 0,
       timerEndsAt: 0,
+      practiceEndsAt: 0,
       timer: null,
       hostGraceTimer: null,
       votes: {},
@@ -447,6 +450,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       players: lobbyPlayers(game),
       slide:
         game.mode === "LIVE" && (game.status === "active" || game.status === "reveal") ? publicSlide(game) : null,
+      practiceEndsAt: game.practiceEndsAt > Date.now() ? game.practiceEndsAt : 0,
     });
     if (game.mode === "TEST" && game.status === "active") emitTestProgress(game);
   });
@@ -472,6 +476,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       score: 0,
       lastGain: 0,
       answeredCurrent: false,
+      currentCorrect: false,
       connected: true,
       correctCount: 0,
       totalAnswered: 0,
@@ -490,6 +495,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     socket.data.playerId = playerId;
     cb?.({ ok: true, playerId, settings: clientSettings(game), status: game.status, mode: game.mode });
     io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
+    if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt });
     // Kech qo'shilgan o'quvchini darhol jonli o'yinga/testga tushiramiz
     if (game.status !== "lobby") {
       if (game.mode === "TEST") {
@@ -526,6 +532,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       settings: clientSettings(game),
     });
     io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
+    // Amaliyot taymeri davom etayotgan bo'lsa, qaytgan o'quvchiga ham ko'rsatamiz
+    if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt });
     if (game.status === "active") {
       if (game.mode === "TEST") socket.emit("test:begin", { total: game.questionIndices.length });
       else socket.emit("slide:show", publicSlide(game));
@@ -555,7 +563,12 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     game.status = "active";
     game.questionStartedAt = Date.now();
     game.votes = {};
-    game.players.forEach((p) => (p.answeredCurrent = false));
+    // Yangi slaydda amaliyot taymeri ham bekor bo'ladi (savol/slayd taymeriga aralashmasin)
+    game.practiceEndsAt = 0;
+    game.players.forEach((p) => {
+      p.answeredCurrent = false;
+      p.currentCorrect = false;
+    });
     const s = game.slides[game.currentIndex];
     if (s.kind === "QUESTION") {
       if (!game.stats.has(game.currentIndex)) {
@@ -585,9 +598,20 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     game.timerEndsAt = 0;
     game.status = "reveal";
     const s = game.slides[game.currentIndex];
+    // Kim to'g'ri/xato belgilagani (POLL'da to'g'ri/xato yo'q — faqat ovoz)
+    const conn = connectedPlayers(game);
+    const answers =
+      s.kind === "QUESTION" && s.type !== "POLL"
+        ? {
+            correct: conn.filter((p) => p.answeredCurrent && p.currentCorrect).map((p) => p.nickname),
+            wrong: conn.filter((p) => p.answeredCurrent && !p.currentCorrect).map((p) => p.nickname),
+            noAnswer: conn.filter((p) => !p.answeredCurrent).map((p) => p.nickname),
+          }
+        : undefined;
     io.to(game.pin).emit("slide:results", {
       ...correctSummary(s, game.votes),
       leaderboard: leaderboard(game),
+      answers,
     });
   }
 
@@ -761,6 +785,24 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     revealCurrent(game);
   });
 
+  // Amaliyot (mashq) taymeri — ustoz o'quvchilarga vazifa uchun vaqt beradi.
+  // Savol taymeridan mustaqil: slaydni o'zgartirmaydi, faqat sanagichni ko'rsatadi.
+  socket.on("host:practiceTimer", (data: { pin: string; seconds: number }) => {
+    const game = games.get(data?.pin);
+    if (!game || game.hostSocketId !== socket.id) return;
+    const secs = Math.min(Math.max(Math.round(Number(data?.seconds) || 0), 5), 3600); // 5s..60min
+    game.practiceEndsAt = Date.now() + secs * 1000;
+    io.to(game.pin).emit("practice:timer", { endsAt: game.practiceEndsAt });
+  });
+
+  // Amaliyot taymerini to'xtatish
+  socket.on("host:practiceStop", (data: { pin: string }) => {
+    const game = games.get(data?.pin);
+    if (!game || game.hostSocketId !== socket.id) return;
+    game.practiceEndsAt = 0;
+    io.to(game.pin).emit("practice:timer", { endsAt: 0 });
+  });
+
   // Taymerni boshqarish — vaqt qo'shish (+/- soniya)
   socket.on("host:addTime", (data: { pin: string; seconds: number }) => {
     const game = games.get(data?.pin);
@@ -796,11 +838,13 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     // Bu savolga avval javob bergan bo'lsa — ball qayta qo'shilmaydi
     if (player.answeredIndices.includes(idx)) {
       player.answeredCurrent = true;
+      player.currentCorrect = correct;
       socket.emit("answer:received", { correct, points: 0, score: player.score });
       return;
     }
     player.answeredIndices.push(idx);
     player.answeredCurrent = true;
+    player.currentCorrect = correct;
     player.lastGain = points;
     player.score += points;
     player.totalAnswered += 1;

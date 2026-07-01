@@ -78,7 +78,7 @@ const uploadLimiter = rateLimit({
 // Tashqi quiz import (Wayground'ga chiquvchi so'rov) — suiiste'mol/yukni cheklash
 const importLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, // 15 daqiqada IP boshiga 30 import
+  max: 600, // ommaviy import 300+ havolani birdan ko'chiradi — limit yetarli baland bo'lsin
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Import limiti. Birozdan keyin qayta urinib ko'ring." },

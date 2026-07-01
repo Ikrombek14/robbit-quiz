@@ -335,17 +335,31 @@ type WgFetch =
   | { ok: true; title: string; slides: any[]; summary: any }
   | { ok: false; status: number; error: string };
 
-async function fetchWayground(url: string): Promise<WgFetch> {
+async function fetchWayground(url: string, cookie?: string): Promise<WgFetch> {
   const id = extractQuizId(url ?? "");
   if (!id) {
     return { ok: false, status: 400, error: "Havoladan quiz ID topilmadi. To'g'ri Wayground havolasini joylang." };
   }
   const apiUrl = `https://wayground.com/_quizserver/main/v2/quiz/${id}`;
+  // Ixtiyoriy Wayground login cookie — private quizlarni o'qish uchun (saqlanmaydi).
+  const headers: Record<string, string> = { "User-Agent": "Mozilla/5.0", Accept: "application/json" };
+  const ck = String(cookie ?? "").trim();
+  if (ck) {
+    headers.Cookie = ck;
+    const m = ck.match(/x-csrf-token=([^;]+)/i); // API ba'zan csrf header'ini talab qiladi
+    if (m) headers["x-csrf-token"] = m[1].trim();
+  }
   let json: any;
   try {
-    const r = await fetch(apiUrl, { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" } });
+    const r = await fetch(apiUrl, { headers });
     if (r.status === 403 || r.status === 401) {
-      return { ok: false, status: 403, error: "Bu quiz yopiq (private). Wayground'da 'public/shared' qilib qo'ying." };
+      return {
+        ok: false,
+        status: 403,
+        error: ck
+          ? "Bu quizga kirish ruxsati yo'q (cookie eskirgan yoki quiz boshqa akkauntники)."
+          : "Bu quiz yopiq (private). Wayground login cookie'ingizni kiriting yoki quizni public qiling.",
+      };
     }
     if (!r.ok) {
       return { ok: false, status: 502, error: `Wayground javob bermadi (HTTP ${r.status}).` };
@@ -380,7 +394,7 @@ function slidesToCreate(slides: any[]) {
 
 // Bitta havola → slaydlar ro'yxati (hali saqlanmaydi; muharrir joriy quizga qo'shadi)
 importRouter.post("/wayground", requireAuth, requireCanCreate, async (req, res) => {
-  const r = await fetchWayground((req.body?.url ?? "") as string);
+  const r = await fetchWayground((req.body?.url ?? "") as string, req.body?.cookie as string | undefined);
   if (!r.ok) {
     res.status(r.status).json({ error: r.error });
     return;
@@ -391,10 +405,10 @@ importRouter.post("/wayground", requireAuth, requireCanCreate, async (req, res) 
 // Ommaviy import yadrosi: bitta havola → to'liq yangi quiz YARATADI va saqlaydi.
 // Frontend buni har bir havola uchun ketma-ket chaqirib, jarayonni ko'rsatadi.
 importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
-  const { url, title, folderId, sortTs } = (req.body ?? {}) as {
-    url?: string; title?: string; folderId?: string | null; sortTs?: number;
+  const { url, title, folderId, sortTs, cookie } = (req.body ?? {}) as {
+    url?: string; title?: string; folderId?: string | null; sortTs?: number; cookie?: string;
   };
-  const r = await fetchWayground(url ?? "");
+  const r = await fetchWayground(url ?? "", cookie);
   if (!r.ok) {
     res.status(r.status).json({ error: r.error });
     return;

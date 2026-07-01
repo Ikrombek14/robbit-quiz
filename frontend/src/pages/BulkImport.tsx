@@ -32,6 +32,8 @@ export default function BulkImport() {
   const [text, setText] = useState("");
   const [rows, setRows] = useState<RowResult[]>([]);
   const [running, setRunning] = useState(false);
+  // Ixtiyoriy Wayground login cookie — private quizlarni import qilish uchun (saqlanmaydi)
+  const [wgCookie, setWgCookie] = useState("");
 
   // Qaysi papkaga joylash:
   //   "NEW"  → yangi "<ism> — <sana>" papkasi yaratiladi
@@ -114,7 +116,7 @@ export default function BulkImport() {
         try {
           const r = await api<{ quizId: string; title: string; summary: { total: number } }>(
             "/import/wayground/save",
-            { method: "POST", body: JSON.stringify({ url, folderId: targetFolderId, sortTs }) },
+            { method: "POST", body: JSON.stringify({ url, folderId: targetFolderId, sortTs, cookie: wgCookie.trim() || undefined }) },
           );
           setRows((rs) =>
             rs.map((x, i) =>
@@ -137,8 +139,9 @@ export default function BulkImport() {
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <h1 style={{ fontSize: 28, marginBottom: 4 }}>Ommaviy import</h1>
         <p className="muted" style={{ marginTop: 0, fontSize: 15 }}>
-          Wayground (Quizizz) ochiq quiz havolalarini joylang — har biridan avtomatik quiz yaratiladi
-          (dars slaydlari va savollar birga ko'chiriladi). Havolalar <b>public/shared</b> bo'lishi shart.
+          Wayground (Quizizz) quiz havolalarini joylang — har biridan avtomatik quiz yaratiladi
+          (dars slaydlari va savollar birga ko'chiriladi). Public quizlar shundoq ishlaydi;
+          <b> private (maxfiy) quizlar</b> uchun pastdagi "Wayground login" bo'limini to'ldiring.
         </p>
 
         <label style={{ fontWeight: 700 }}>Havolalar (har bir qatorga bittadan)</label>
@@ -180,6 +183,26 @@ export default function BulkImport() {
             <option value="NONE">— Papkasiz —</option>
           </select>
         </div>
+
+        {/* Private quizlar uchun ixtiyoriy Wayground login cookie (saqlanmaydi) */}
+        <details style={{ marginTop: 10, padding: "10px 12px", background: "var(--surface-low)", borderRadius: 10, border: "1px solid var(--border)" }}>
+          <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: 14 }}>
+            🔒 Maxfiy (private) quizlar uchun — Wayground login {wgCookie.trim() ? "✅" : "(ixtiyoriy)"}
+          </summary>
+          <p className="muted" style={{ fontSize: 13, margin: "8px 0" }}>
+            Quizlaringiz private bo'lsa, Wayground login cookie'ingizni qo'ying. Olish: wayground.com ga
+            kirgan holatda <b>F12 → Network</b> → istalgan so'rov → <b>Request Headers → Cookie</b> qatorini
+            to'liq nusxalab, shu yerga joylang. <b>Cookie saqlanmaydi</b> — faqat shu import uchun ishlatiladi.
+          </p>
+          <textarea
+            value={wgCookie}
+            onChange={(e) => setWgCookie(e.target.value)}
+            rows={3}
+            disabled={running}
+            placeholder="quizizz_uid=…; _sid=…; x-csrf-token=…"
+            style={{ fontFamily: "monospace", fontSize: 12, width: "100%" }}
+          />
+        </details>
 
         <div className="between" style={{ alignItems: "center", marginTop: 10 }}>
           <span className="muted" style={{ fontSize: 13 }}>

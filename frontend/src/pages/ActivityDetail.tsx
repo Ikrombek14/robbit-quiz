@@ -125,8 +125,8 @@ export default function ActivityDetail() {
 
   return (
     <Shell>
-      <button className="btn btn-ghost" onClick={() => navigate("/library")}>
-        ← Kutubxonam
+      <button className="btn btn-ghost" onClick={() => navigate(-1)}>
+        ← Orqaga
       </button>
 
       {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}

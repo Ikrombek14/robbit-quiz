@@ -246,7 +246,7 @@ export default function QuizEditor() {
       {/* Top bar */}
       <div className="topbar">
         <div className="row">
-          <button className="icon-btn" onClick={() => navigate("/dashboard")} title="Orqaga">
+          <button className="icon-btn" onClick={() => navigate(-1)} title="Orqaga">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <input

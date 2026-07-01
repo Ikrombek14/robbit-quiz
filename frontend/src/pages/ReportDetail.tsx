@@ -50,8 +50,8 @@ export default function ReportDetail() {
 
   return (
     <Shell>
-      <button className="btn btn-ghost" onClick={() => navigate("/sessions")}>
-        ← Sessiyalar
+      <button className="btn btn-ghost" onClick={() => navigate(-1)}>
+        ← Orqaga
       </button>
       <div style={{ marginTop: 16 }}>
         {error && <div className="error">{error}</div>}

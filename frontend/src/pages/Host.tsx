@@ -365,7 +365,7 @@ export default function Host() {
       <div className="center-screen">
         <div className="card card-narrow center">
           <div className="error">{error}</div>
-          <button className="btn" onClick={() => navigate("/dashboard")}>Panelga qaytish</button>
+          <button className="btn" onClick={() => navigate(-1)}>Orqaga qaytish</button>
         </div>
       </div>
     );
@@ -852,7 +852,7 @@ export default function Host() {
         rows={results?.leaderboard ?? []}
         anonymous={settings.anonymous}
         serious={settings.serious}
-        onBack={() => navigate("/dashboard")}
+        onBack={() => navigate(-1)}
       />
     );
 

@@ -148,6 +148,7 @@ export interface QuizListItem {
 export interface FolderItem {
   id: string;
   name: string;
+  parentId?: string | null;
   createdAt: string;
   count: number;
   owner?: { id: string; name: string };

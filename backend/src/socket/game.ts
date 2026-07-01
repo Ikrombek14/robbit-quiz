@@ -862,12 +862,24 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     else if (typeof data.answer === "string" || typeof data.answer === "number") tally(String(data.answer));
 
     socket.emit("answer:received", { correct, points, score: player.score });
-    const answeredList = connectedPlayers(game).filter((p) => p.answeredCurrent);
+    const conn = connectedPlayers(game);
+    const answeredList = conn.filter((p) => p.answeredCurrent);
     io.to(game.hostSocketId).emit("question:progress", {
       answered: answeredList.length,
-      total: connectedPlayers(game).length,
+      total: conn.length,
       answeredNames: answeredList.map((p) => p.nickname),
     });
+
+    // Hamma ulangan o'quvchi javob berib bo'lsa — berilgan vaqt tugamagan bo'lsa ham
+    // savolni yopamiz (30s berilib, 10s da hamma javob bersa bekorga kutilmasin).
+    // Oxirgi javob natijasini ko'rsatish uchun qisqa (700ms) kutish beramiz.
+    if (conn.length > 0 && answeredList.length === conn.length) {
+      clearGameTimer(game);
+      game.timer = setTimeout(() => {
+        game.timer = null;
+        if (game.status === "active") revealCurrent(game);
+      }, 700);
+    }
   });
 
   // Anti-cheat: o'quvchi fullscreen'dan chiqdi / boshqa tabga o'tdi

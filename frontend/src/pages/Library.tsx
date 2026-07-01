@@ -43,6 +43,7 @@ export default function Library() {
   const [folderFilter, setFolderFilter] = useState<FolderFilter>(searchParams.get("folder") || "ALL");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [showFolderMove, setShowFolderMove] = useState(false); // papkani boshqa papkaga ko'chirish modali
 
   function toggleSelect(id: string) {
     setSelected((s) => {
@@ -91,18 +92,34 @@ export default function Library() {
     setQuizzes((qs) => qs.filter((x) => x.id !== id));
   }
 
-  // Yangi papka yaratish
+  // Joriy joylashuv: papka ichida bo'lsak — o'sha papka id, aks holda null (ildiz)
+  const currentFolderId = folderFilter !== "ALL" && folderFilter !== "NONE" ? folderFilter : null;
+
+  // Yangi papka yaratish — joriy papka ichida bo'lsak, uning ichiga (parentId) tushadi
   async function createFolder() {
     const name = newFolderName.trim();
     if (!name) return;
     const r = await api<{ folder: FolderItem }>("/folders", {
       method: "POST",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, parentId: currentFolderId }),
     });
-    setFolders((fs) => [{ ...r.folder, count: 0, mine: true }, ...fs]);
+    setFolders((fs) => [{ ...r.folder, count: 0, mine: true, parentId: currentFolderId }, ...fs]);
     setNewFolderName("");
     setCreatingFolder(false);
     setFolderFilter(r.folder.id);
+  }
+
+  // Papkani boshqa papka ichiga (yoki ildizga: parentId=null) ko'chirish
+  async function moveFolderTo(parentId: string | null) {
+    if (!currentFolderId) return;
+    await api(`/folders/${currentFolderId}/parent`, {
+      method: "PATCH",
+      body: JSON.stringify({ parentId }),
+    });
+    setFolders((fs) => fs.map((f) => (f.id === currentFolderId ? { ...f, parentId } : f)));
+    setShowFolderMove(false);
+    // Ko'chirilgandan keyin manzil papkaga o'tamiz (yo'q bo'lsa ildizga)
+    setFolderFilter(parentId ?? "ALL");
   }
 
   // Joriy papka nomini o'zgartirish
@@ -118,7 +135,8 @@ export default function Library() {
   async function deleteFolder(id: string) {
     if (!confirm("Papkani o'chirasizmi? Ichidagi loyihalar o'chmaydi, papkadan chiqariladi.")) return;
     await api(`/folders/${id}`, { method: "DELETE" });
-    setFolders((fs) => fs.filter((f) => f.id !== id));
+    // Ichki papkalar o'chmaydi — ildizga chiqadi (backend FK SetNull)
+    setFolders((fs) => fs.filter((f) => f.id !== id).map((f) => (f.parentId === id ? { ...f, parentId: null } : f)));
     setQuizzes((qs) => qs.map((x) => (x.folderId === id ? { ...x, folderId: null } : x)));
     setFolderFilter("ALL");
   }
@@ -154,6 +172,49 @@ export default function Library() {
   });
 
   const activeFolderObj = folders.find((f) => f.id === folderFilter);
+
+  // Joriy darajadagi papkalar: joriy papkaning bevosita ichki papkalari
+  // (ildizda — parentId yo'q papkalar). Ichma-ich navigatsiya shu bilan ishlaydi.
+  const visibleFolders = useMemo(
+    () => folders.filter((f) => (f.parentId ?? null) === currentFolderId),
+    [folders, currentFolderId],
+  );
+
+  // Har bir papkaning bevosita ichki papkalari soni (chipda 📁 sifatida ko'rsatamiz)
+  const childCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const f of folders) if (f.parentId) m.set(f.parentId, (m.get(f.parentId) ?? 0) + 1);
+    return m;
+  }, [folders]);
+
+  // Breadcrumb: joriy papkadan ildizgacha yo'l (Kutubxona > A > B)
+  const folderPath = useMemo(() => {
+    const path: FolderItem[] = [];
+    let cur = activeFolderObj;
+    let guard = 0;
+    while (cur && guard++ < 50) {
+      path.unshift(cur);
+      cur = cur.parentId ? folders.find((f) => f.id === cur!.parentId) : undefined;
+    }
+    return path;
+  }, [activeFolderObj, folders]);
+
+  // Joriy papkaning barcha avlodlari (o'ziga ko'chirish taqiqlash uchun)
+  const currentDescendants = useMemo(() => {
+    const set = new Set<string>();
+    if (!currentFolderId) return set;
+    const stack = [currentFolderId];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      for (const f of folders) {
+        if (f.parentId === cur && !set.has(f.id)) {
+          set.add(f.id);
+          stack.push(f.id);
+        }
+      }
+    }
+    return set;
+  }, [currentFolderId, folders]);
 
   return (
     <Shell>
@@ -191,7 +252,36 @@ export default function Library() {
         </p>
       )}
 
-      {/* Papkalar paneli */}
+      {/* Breadcrumb — ichma-ich papkada joylashuvni ko'rsatadi (Kutubxona > A > B) */}
+      {folderPath.length > 0 && (
+        <div className="row" style={{ gap: 4, flexWrap: "wrap", marginTop: 12, alignItems: "center", fontSize: 14 }}>
+          <button
+            type="button"
+            onClick={() => setFolderFilter("ALL")}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--primary)", fontWeight: 600, padding: 0 }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18, verticalAlign: "middle" }}>home</span> Kutubxona
+          </button>
+          {folderPath.map((f, i) => (
+            <span key={f.id} className="row" style={{ gap: 4, alignItems: "center" }}>
+              <span className="muted">/</span>
+              <button
+                type="button"
+                onClick={() => setFolderFilter(f.id)}
+                style={{
+                  background: "none", border: "none", cursor: "pointer", padding: 0,
+                  color: i === folderPath.length - 1 ? "var(--ink)" : "var(--primary)",
+                  fontWeight: i === folderPath.length - 1 ? 700 : 600,
+                }}
+              >
+                📁 {f.name}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Papkalar paneli — joriy darajadagi papkalar */}
       <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
         <FolderChip
           label="Hammasi"
@@ -200,17 +290,18 @@ export default function Library() {
           active={folderFilter === "ALL"}
           onClick={() => setFolderFilter("ALL")}
         />
-        {folders.map((f) => (
+        {visibleFolders.map((f) => (
           <FolderChip
             key={f.id}
             label={f.name}
             icon="folder"
             count={folderCounts.get(f.id) ?? f.count}
+            childCount={childCounts.get(f.id) ?? 0}
             active={folderFilter === f.id}
             onClick={() => setFolderFilter(f.id)}
           />
         ))}
-        {noFolderCount > 0 && (
+        {currentFolderId === null && noFolderCount > 0 && (
           <FolderChip
             label="Papkasiz"
             icon="folder_off"
@@ -263,6 +354,9 @@ export default function Library() {
             <>
               <button className="btn btn-ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => renameFolder(activeFolderObj.id)}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span> Nomi
+              </button>
+              <button className="btn btn-ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => setShowFolderMove(true)}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>drive_file_move</span> Boshqa papkaga
               </button>
               <button className="btn btn-ghost" style={{ padding: "3px 8px", fontSize: 12, color: "var(--error)" }} onClick={() => deleteFolder(activeFolderObj.id)}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span> O'chirish
@@ -390,14 +484,26 @@ export default function Library() {
           setNewFolderName={setNewFolderName}
         />
       )}
+
+      {showFolderMove && activeFolderObj && (
+        <FolderMoveModal
+          folderName={activeFolderObj.name}
+          // O'ziga va o'z avlodlariga ko'chirib bo'lmaydi
+          options={folders.filter(
+            (f) => f.id !== currentFolderId && !currentDescendants.has(f.id) && (f.mine || isAdmin),
+          )}
+          onClose={() => setShowFolderMove(false)}
+          onPick={moveFolderTo}
+        />
+      )}
     </Shell>
   );
 }
 
 /* ============ Papka chipi ============ */
 function FolderChip({
-  label, icon, count, active, onClick,
-}: { label: string; icon: string; count: number; active: boolean; onClick: () => void }) {
+  label, icon, count, active, onClick, childCount = 0,
+}: { label: string; icon: string; count: number; active: boolean; onClick: () => void; childCount?: number }) {
   return (
     <button
       type="button"
@@ -414,6 +520,11 @@ function FolderChip({
       <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{icon}</span>
       {label}
       <span style={{ opacity: 0.7, fontWeight: 700 }}>{count}</span>
+      {childCount > 0 && (
+        <span style={{ opacity: 0.7, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 2 }}>
+          · <span className="material-symbols-outlined" style={{ fontSize: 15 }}>folder</span>{childCount}
+        </span>
+      )}
     </button>
   );
 }
@@ -472,6 +583,45 @@ function MoveModal({
             <span className="material-symbols-outlined">create_new_folder</span> Yangi papka yaratish
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ============ Papkani boshqa papka ichiga ko'chirish ============ */
+// Joriy papkani boshqa papka ichiga (yoki ildizga) ko'chiradi. O'ziga va
+// o'z ichki papkalariga ko'chirish ro'yxatda ko'rsatilmaydi (sikl bo'lmasin).
+function FolderMoveModal({
+  folderName, options, onClose, onPick,
+}: {
+  folderName: string;
+  options: FolderItem[];
+  onClose: () => void;
+  onPick: (parentId: string | null) => void;
+}) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="card card-narrow" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "82vh", overflowY: "auto" }}>
+        <div className="between">
+          <h3 style={{ margin: 0 }}>📂 "{folderName}" papkasini ko'chirish</h3>
+          <button className="btn btn-ghost" onClick={onClose}>✕</button>
+        </div>
+        <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+          Qaysi papka ichiga joylaymiz?
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+          <button className="btn btn-ghost" style={{ justifyContent: "flex-start" }} onClick={() => onPick(null)}>
+            <span className="material-symbols-outlined">home</span> Asosiy (ildizga chiqarish)
+          </button>
+          {options.map((f) => (
+            <button key={f.id} className="btn btn-ghost" style={{ justifyContent: "flex-start" }} onClick={() => onPick(f.id)}>
+              <span className="material-symbols-outlined">folder</span> {f.name}
+            </button>
+          ))}
+          {options.length === 0 && (
+            <p className="muted" style={{ fontSize: 13 }}>Boshqa mos papka yo'q.</p>
+          )}
+        </div>
       </div>
     </div>
   );

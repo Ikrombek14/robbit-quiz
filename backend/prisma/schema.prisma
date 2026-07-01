@@ -36,10 +36,15 @@ model Folder {
   name      String
   teacherId String
   teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  // Ichma-ich papka: bir papka boshqa papka ichida tura oladi. parentId null → ildiz (yuqori daraja).
+  parentId  String?
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Folder[] @relation("FolderTree")
   createdAt DateTime @default(now())
   quizzes   Quiz[]
 
   @@index([teacherId])
+  @@index([parentId])
 }
 
 // Rasmiy ustozlar ro'yxati (CSV'dan import qilinadi). Admin boshqaradi.

@@ -4,6 +4,9 @@ node_modules/
 # Build outputs
 dist/
 public/
+# ...lekin frontend/public — bu manba (statik) fayllar, build chiqishi emas
+!frontend/public/
+!frontend/public/**
 *.tsbuildinfo
 
 # Env / secrets

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2f6fed"/>
+      <stop offset="1" stop-color="#1b4bd8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <text x="600" y="250" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="120" font-weight="800" fill="#ffffff">Robbit 🚀</text>
+  <text x="600" y="345" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="600" fill="#dbe6ff">Interaktiv ta'lim va jonli quiz platformasi</text>
+  <text x="600" y="470" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="500" fill="#ffffff">6 xonali kod bilan darsga qo'shiling · robbitquiz.uz</text>
+</svg>

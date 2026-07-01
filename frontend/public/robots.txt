@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /$
+Allow: /join
+Disallow: /dashboard
+Disallow: /library
+Disallow: /quiz/
+Disallow: /host/
+Disallow: /sessions
+Disallow: /curriculum
+Disallow: /guide
+Disallow: /users
+Disallow: /stats
+Disallow: /settings
+Disallow: /activity/
+Disallow: /bulk-import
+Disallow: /api/
+
+Sitemap: https://robbitquiz.uz/sitemap.xml

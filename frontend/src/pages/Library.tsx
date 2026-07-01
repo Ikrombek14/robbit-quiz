@@ -141,6 +141,16 @@ export default function Library() {
     setFolderFilter("ALL");
   }
 
+  // Tanlangan loyihalarni o'chirish
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!confirm(`${ids.length} ta loyihani o'chirishni tasdiqlaysizmi? Bu amalni qaytarib bo'lmaydi.`)) return;
+    await Promise.all(ids.map((id) => api(`/quizzes/${id}`, { method: "DELETE" })));
+    setQuizzes((qs) => qs.filter((x) => !selected.has(x.id)));
+    setSelected(new Set());
+  }
+
   // Bir nechta loyihani papkaga ko'chirish (yoki papkadan chiqarish: folderId=null)
   async function moveSelected(folderId: string | null) {
     const ids = [...selected];
@@ -241,6 +251,18 @@ export default function Library() {
             >
               <span className="material-symbols-outlined">playlist_add</span>
               O'quv rejaga qo'shish{selected.size > 0 ? ` (${selected.size})` : ""}
+            </button>
+          )}
+          {canCreate && (
+            <button
+              className="btn btn-ghost"
+              disabled={selected.size === 0}
+              onClick={deleteSelected}
+              title="Tanlangan loyihalarni o'chirish"
+              style={{ color: selected.size > 0 ? "var(--error)" : undefined }}
+            >
+              <span className="material-symbols-outlined">delete</span>
+              O'chirish{selected.size > 0 ? ` (${selected.size})` : ""}
             </button>
           )}
           {canCreate && <button className="btn" onClick={createQuiz}>+ Yangi loyiha</button>}

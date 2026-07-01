@@ -72,6 +72,29 @@ curriculumRouter.get("/for-quiz/:quizId", requireAdmin, async (req, res) => {
   res.json({ lessons });
 });
 
+// Darslar tartibini qayta joylash (drag&drop) — faqat admin.
+// Kelgan `ids` ketma-ketligi bo'yicha har bir darsning `order` maydoni
+// 0..n-1 qilib yangilanadi. Bir filtr (yo'nalish/yosh/yil/bo'lim) ichidagi
+// darslar ro'yxati yuboriladi.
+const reorderSchema = z.object({ ids: z.array(z.string()).min(1) });
+curriculumRouter.patch("/reorder", requireAdmin, async (req, res) => {
+  const parsed = reorderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
+    return;
+  }
+  try {
+    await prisma.$transaction(
+      parsed.data.ids.map((id, i) =>
+        prisma.lessonPlan.update({ where: { id }, data: { order: i } }),
+      ),
+    );
+    res.json({ ok: true });
+  } catch {
+    res.status(400).json({ error: "Tartibni saqlab bo'lmadi" });
+  }
+});
+
 // Yaratish — faqat admin
 curriculumRouter.post("/", requireAdmin, async (req, res) => {
   const parsed = lessonSchema.safeParse(req.body);

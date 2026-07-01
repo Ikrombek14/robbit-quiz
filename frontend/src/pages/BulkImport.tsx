@@ -100,16 +100,21 @@ export default function BulkImport() {
     setFolderId(targetFolderId);
     setFolderLabel(targetLabel);
 
+    // Papkada havolalar kiritilgan tartibda tursin: kutubxona `updatedAt desc`
+    // bo'yicha saralaydi, shuning uchun 1-havolaga eng katta (eng yangi) vaqt
+    // tamg'asini beramiz. Parallel import ham tartibni buzmaydi.
+    const baseTs = Date.now();
     let idx = 0;
     async function worker() {
       while (idx < parsed.length) {
         const myIdx = idx++;
         const url = parsed[myIdx];
+        const sortTs = baseTs - myIdx * 1000; // myIdx=0 → eng yangi → papkada birinchi
         setRows((rs) => rs.map((x, i) => (i === myIdx ? { ...x, status: "running" } : x)));
         try {
           const r = await api<{ quizId: string; title: string; summary: { total: number } }>(
             "/import/wayground/save",
-            { method: "POST", body: JSON.stringify({ url, folderId: targetFolderId }) },
+            { method: "POST", body: JSON.stringify({ url, folderId: targetFolderId, sortTs }) },
           );
           setRows((rs) =>
             rs.map((x, i) =>

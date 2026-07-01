@@ -391,7 +391,9 @@ importRouter.post("/wayground", requireAuth, requireCanCreate, async (req, res) 
 // Ommaviy import yadrosi: bitta havola → to'liq yangi quiz YARATADI va saqlaydi.
 // Frontend buni har bir havola uchun ketma-ket chaqirib, jarayonni ko'rsatadi.
 importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
-  const { url, title, folderId } = (req.body ?? {}) as { url?: string; title?: string; folderId?: string | null };
+  const { url, title, folderId, sortTs } = (req.body ?? {}) as {
+    url?: string; title?: string; folderId?: string | null; sortTs?: number;
+  };
   const r = await fetchWayground(url ?? "");
   if (!r.ok) {
     res.status(r.status).json({ error: r.error });
@@ -404,12 +406,19 @@ importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: 
     if (folder) useFolderId = folder.id;
   }
   const finalTitle = (title?.trim() || r.title?.trim() || "Import qilingan quiz").slice(0, 200);
+  // Kutubxona ro'yxati `updatedAt desc` bo'yicha saralanadi. Ommaviy import
+  // parallel (concurrency) ishlagani uchun yaratilish tartibi aralashib, papkada
+  // havolalar teskari chiqardi. Klient har havolaga tartibli `sortTs` (ms) beradi:
+  // 1-havola eng katta → papkada birinchi turadi. Shu bilan tartib kafolatlanadi.
+  const ts = Number(sortTs);
+  const stamp = Number.isFinite(ts) && ts > 0 ? new Date(ts) : undefined;
   const quiz = await prisma.quiz.create({
     data: {
       title: finalTitle,
       teacherId: req.teacherId!,
       folderId: useFolderId,
       slides: { create: slidesToCreate(r.slides) },
+      ...(stamp ? { createdAt: stamp, updatedAt: stamp } : {}),
     },
     select: { id: true },
   });

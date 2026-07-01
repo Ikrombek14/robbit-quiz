@@ -78,6 +78,10 @@ export default function Curriculum() {
   const [editState, setEditState] = useState<EditState>({ title: "", author: "", isDemo: false, quizId: "", order: 0 });
   const [editSaving, setEditSaving] = useState(false);
 
+  // Drag&drop bilan tartibni o'zgartirish (faqat admin)
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
   const allFiltersSet = ageGroup !== null && year !== null;
 
   // Qidiruvdan dars tanlanganda — filtrlarni o'rnatib, darsni belgilash uchun id saqlaymiz
@@ -199,6 +203,30 @@ export default function Curriculum() {
     if (!confirm("Darsni o'chirishni tasdiqlaysizmi?")) return;
     await api(`/curriculum/${id}`, { method: "DELETE" });
     setLessons((ls) => ls.filter((l) => l.id !== id));
+  }
+
+  // Drag&drop: sudralgan darsni nishon dars o'rniga qo'yamiz, tartibni 0..n-1
+  // qilib qayta hisoblab, serverga saqlaymiz. Xato bo'lsa ro'yxatni qaytaramiz.
+  async function dropOnLesson(targetId: string) {
+    const from = lessons.findIndex((l) => l.id === dragId);
+    const to = lessons.findIndex((l) => l.id === targetId);
+    setDragId(null);
+    setDragOverId(null);
+    if (from < 0 || to < 0 || from === to) return;
+    const prev = lessons;
+    const next = [...lessons];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    const reIndexed = next.map((l, i) => ({ ...l, order: i }));
+    setLessons(reIndexed);
+    try {
+      await api("/curriculum/reorder", {
+        method: "PATCH",
+        body: JSON.stringify({ ids: reIndexed.map((l) => l.id) }),
+      });
+    } catch {
+      setLessons(prev); // saqlanmasa — eski holatga qaytaramiz
+    }
   }
 
   // canCreate ustoz (admin emas) darsga o'z quizini biriktiradi — faqat quizId o'zgaradi
@@ -377,10 +405,24 @@ export default function Curriculum() {
 
               // ---- KO'RISH REJIMI ----
               return (
-                <div key={l.id} id={`lesson-${l.id}`} style={{
+                <div key={l.id} id={`lesson-${l.id}`}
+                  draggable={isAdmin}
+                  onDragStart={isAdmin ? () => setDragId(l.id) : undefined}
+                  onDragEnd={isAdmin ? () => { setDragId(null); setDragOverId(null); } : undefined}
+                  onDragOver={isAdmin ? (e) => { e.preventDefault(); if (dragId && dragId !== l.id) setDragOverId(l.id); } : undefined}
+                  onDragLeave={isAdmin ? () => setDragOverId((cur) => (cur === l.id ? null : cur)) : undefined}
+                  onDrop={isAdmin ? (e) => { e.preventDefault(); dropOnLesson(l.id); } : undefined}
+                  style={{
                   display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
-                  background: "var(--surface-low)", borderRadius: 12, border: "1px solid var(--border)",
+                  background: "var(--surface-low)", borderRadius: 12,
+                  border: dragOverId === l.id ? "2px solid var(--primary)" : "1px solid var(--border)",
+                  opacity: dragId === l.id ? 0.4 : 1,
                 }}>
+                  {/* Sudrash uchun dastak — faqat admin */}
+                  {isAdmin && (
+                    <span className="material-symbols-outlined" title="Sudrab tartibini o'zgartiring"
+                      style={{ color: "var(--muted)", fontSize: 20, cursor: "grab", flexShrink: 0 }}>drag_indicator</span>
+                  )}
                   {/* Holat belgisi */}
                   {hasQuiz ? (
                     <span className="material-symbols-outlined" style={{ color: "#22c55e", fontSize: 22, flexShrink: 0 }}>task_alt</span>

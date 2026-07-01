@@ -37,6 +37,11 @@ app.use(
     contentSecurityPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginEmbedderPolicy: false,
+    // Google Sign-In popup (accounts.google.com) credential'ni window.opener orqali
+    // qaytaradi. helmet default COOP "same-origin" bu bog'lanishni uzib, popup'ni
+    // oq holda qotirib qo'yadi (login yakunlanmaydi). "same-origin-allow-popups"
+    // ochilgan popup bilan aloqani saqlaydi — Google login shu bilan ishlaydi.
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   }),
 );
 

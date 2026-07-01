@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import SearchBar, { type LessonHit } from "../components/SearchBar";
-import type { QuizListItem } from "../types";
+import QuizPicker from "../components/QuizPicker";
+import type { QuizListItem, FolderItem } from "../types";
+
+// Dars sarlavhasi boshidagi tartib prefiksini tozalaydi ("1-dars. ", "12. ", "3) ")
+function cleanTitle(raw: string): string {
+  const t = String(raw ?? "").trim();
+  const stripped = t.replace(/^\s*\d+\s*[-.)]?\s*(dars\s*[.:]?)?\s*/i, "").trim();
+  return stripped || t;
+}
 
 type Subject = "ROBOTEXNIKA" | "DASTURLASH";
 type AgeGroup = "MIDDLE" | "SENIOR";
@@ -72,6 +80,17 @@ export default function Curriculum() {
   const [newQuizId, setNewQuizId] = useState<string>("");
   const [newOrder, setNewOrder] = useState<number>(1);
   const [saving, setSaving] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  // Ommaviy qo'shish — papkadan
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [showFolderAdd, setShowFolderAdd] = useState(false);
+  const [folderPickId, setFolderPickId] = useState<string>("");
+  const [stripPrefix, setStripPrefix] = useState(true);
+
+  // Ommaviy qo'shish — mavzular ro'yxatidan
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
+  const [bulkText, setBulkText] = useState("");
 
   // Tahrirlash
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -116,16 +135,30 @@ export default function Curriculum() {
       .catch(() => {});
   }, [canCreate]);
 
+  // Papkalar (faqat admin — papkadan ommaviy dars yaratish uchun)
   useEffect(() => {
+    if (!isAdmin) return;
+    api<{ folders: FolderItem[] }>("/folders")
+      .then((r) => setFolders(r.folders.filter((f) => f.mine)))
+      .catch(() => {});
+  }, [isAdmin]);
+
+  const loadLessons = useCallback(async () => {
     if (!allFiltersSet) { setLessons([]); return; }
     setLoading(true);
     const params = new URLSearchParams({ subject, ageGroup: ageGroup!, year: String(year) });
     if (subject === "ROBOTEXNIKA") params.set("section", section);
-    api<{ lessons: LessonPlan[] }>(`/curriculum?${params}`)
-      .then((r) => setLessons(r.lessons))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    try {
+      const r = await api<{ lessons: LessonPlan[] }>(`/curriculum?${params}`);
+      setLessons(r.lessons);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
   }, [subject, ageGroup, year, section, allFiltersSet]);
+
+  useEffect(() => { loadLessons(); }, [loadLessons]);
 
   function changeSubject(s: Subject) {
     setSubject(s); setAgeGroup(null); setYear(null); setSection("DESIGN");
@@ -138,7 +171,17 @@ export default function Curriculum() {
   function openAdd() {
     setNewOrder(lessons.length + 1);
     setNewTitle(""); setNewAuthor(""); setNewIsDemo(false); setNewQuizId("");
-    setShowAdd(true); setEditingId(null);
+    setShowAdd(true); setEditingId(null); setShowFolderAdd(false); setShowBulkAdd(false);
+  }
+
+  function openFolderAdd() {
+    setFolderPickId(""); setStripPrefix(true);
+    setShowFolderAdd(true); setShowAdd(false); setShowBulkAdd(false); setEditingId(null);
+  }
+
+  function openBulkAdd() {
+    setBulkText("");
+    setShowBulkAdd(true); setShowAdd(false); setShowFolderAdd(false); setEditingId(null);
   }
 
   function openEdit(l: LessonPlan) {
@@ -171,7 +214,53 @@ export default function Curriculum() {
       });
       const lesson = { ...r.lesson, quiz: newQuizId ? quizForId(newQuizId) : null };
       setLessons((ls) => [...ls, lesson].sort((a, b) => a.order - b.order));
-      setShowAdd(false);
+      // #4: forma ochiq qoladi — ketma-ket tez kiritish (tartib +1, fokus mavzuga)
+      setNewTitle(""); setNewAuthor(""); setNewIsDemo(false); setNewQuizId("");
+      setNewOrder((o) => o + 1);
+      titleRef.current?.focus();
+    } finally { setSaving(false); }
+  }
+
+  // Ommaviy: papkadagi har quizdan dars yaratadi (quiz avtomatik biriktiriladi)
+  async function addFromFolder() {
+    if (!folderPickId || !allFiltersSet) return;
+    setSaving(true);
+    try {
+      const r = await api<{ created: number; skipped: number }>("/curriculum/from-folder", {
+        method: "POST",
+        body: JSON.stringify({
+          subject, ageGroup, year,
+          section: subject === "ROBOTEXNIKA" ? section : null,
+          folderId: folderPickId, stripPrefix,
+        }),
+      });
+      await loadLessons();
+      setShowFolderAdd(false);
+      alert(`${r.created} ta dars qo'shildi${r.skipped ? `, ${r.skipped} ta allaqachon mavjud edi` : ""}.`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Xatolik");
+    } finally { setSaving(false); }
+  }
+
+  // Ommaviy: mavzular ro'yxatidan bo'sh darslar yaratadi (quiz keyin biriktiriladi)
+  async function addBulkTitles() {
+    const titles = bulkText.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (titles.length === 0 || !allFiltersSet) return;
+    setSaving(true);
+    try {
+      const r = await api<{ created: number }>("/curriculum/bulk-titles", {
+        method: "POST",
+        body: JSON.stringify({
+          subject, ageGroup, year,
+          section: subject === "ROBOTEXNIKA" ? section : null,
+          titles,
+        }),
+      });
+      await loadLessons();
+      setShowBulkAdd(false); setBulkText("");
+      alert(`${r.created} ta dars qo'shildi.`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Xatolik");
     } finally { setSaving(false); }
   }
 
@@ -372,18 +461,11 @@ export default function Curriculum() {
                           placeholder="Ixtiyoriy"
                         />
                       </div>
-                      {/* Quiz */}
+                      {/* Quiz — yozib qidiriladigan */}
                       <div style={{ flex: 1, minWidth: 180 }}>
                         <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Slayd biriktirish</label>
-                        <select value={editState.quizId}
-                          onChange={(e) => setEditState((s) => ({ ...s, quizId: e.target.value }))}
-                          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "2px solid var(--border)", background: "var(--surface)", fontSize: 14, color: "var(--ink)" }}
-                        >
-                          <option value="">— Biriktirilmagan —</option>
-                          {quizList.map((q) => (
-                            <option key={q.id} value={q.id}>{q.title} ({q._count.slides} slayd)</option>
-                          ))}
-                        </select>
+                        <QuizPicker quizzes={quizList} value={editState.quizId}
+                          onChange={(id) => setEditState((s) => ({ ...s, quizId: id }))} />
                       </div>
                       {/* Demo Day */}
                       <label style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 10, cursor: "pointer", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap" }}>
@@ -474,22 +556,12 @@ export default function Curriculum() {
                     </button>
                   )}
 
-                  {/* canCreate ustoz (admin emas) — o'z slaydini biriktirish */}
+                  {/* canCreate ustoz (admin emas) — o'z slaydini biriktirish (yozib qidiriladigan) */}
                   {!isAdmin && canCreate && (
-                    <select
-                      value={l.quizId ?? ""}
-                      onChange={(e) => attachQuiz(l, e.target.value)}
-                      title="Darsga o'z slaydingizni biriktirish"
-                      style={{
-                        flexShrink: 0, maxWidth: 200, padding: "6px 10px", borderRadius: 8,
-                        border: "2px solid var(--border)", background: "var(--surface)", fontSize: 13, color: "var(--ink)",
-                      }}
-                    >
-                      <option value="">— Slayd biriktirish —</option>
-                      {quizList.map((q) => (
-                        <option key={q.id} value={q.id}>{q.title} ({q._count.slides} slayd)</option>
-                      ))}
-                    </select>
+                    <div style={{ flexShrink: 0, width: 200 }} title="Darsga o'z slaydingizni biriktirish">
+                      <QuizPicker quizzes={quizList} value={l.quizId ?? ""}
+                        onChange={(id) => attachQuiz(l, id)} placeholder="Slayd biriktirish…" />
+                    </div>
                   )}
 
                   {/* Admin tugmalari */}
@@ -510,9 +582,10 @@ export default function Curriculum() {
             })}
           </div>
 
-          {/* Admin — qo'shish formasi */}
+          {/* Admin — qo'shish (bitta / papkadan / ro'yxatdan) */}
           {isAdmin && (
-            showAdd ? (
+            <>
+            {showAdd && (
               <div style={{ marginTop: 12, padding: 16, background: "var(--surface-low)", borderRadius: 12, border: "2px dashed var(--border)" }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                   {/* Tartib raqami */}
@@ -526,7 +599,7 @@ export default function Curriculum() {
                   {/* Mavzu */}
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Dars mavzusi *</label>
-                    <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
+                    <input ref={titleRef} value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
                       placeholder="Masalan: Google Docs bilan ishlash"
                       autoFocus onKeyDown={(e) => e.key === "Enter" && addLesson()}
                     />
@@ -536,16 +609,18 @@ export default function Curriculum() {
                     <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Muallif</label>
                     <input value={newAuthor} onChange={(e) => setNewAuthor(e.target.value)} placeholder="Ixtiyoriy" />
                   </div>
-                  {/* Quiz */}
+                  {/* Quiz — yozib qidiriladigan; tanlanганда mavzu bo'sh bo'lsa avtomatik to'ladi */}
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Slayd biriktirish</label>
-                    <select value={newQuizId} onChange={(e) => setNewQuizId(e.target.value)}
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "2px solid var(--border)", background: "var(--surface)", fontSize: 14, color: "var(--ink)" }}>
-                      <option value="">— Ixtiyoriy, keyinroq ham qo'shsa bo'ladi —</option>
-                      {quizList.map((q) => (
-                        <option key={q.id} value={q.id}>{q.title} ({q._count.slides} slayd)</option>
-                      ))}
-                    </select>
+                    <QuizPicker quizzes={quizList} value={newQuizId}
+                      placeholder="— Ixtiyoriy —"
+                      onChange={(id) => {
+                        setNewQuizId(id);
+                        if (id && !newTitle.trim()) {
+                          const q = quizList.find((x) => x.id === id);
+                          if (q) setNewTitle(cleanTitle(q.title));
+                        }
+                      }} />
                   </div>
                   {/* Demo Day */}
                   <label style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 10, cursor: "pointer", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap" }}>
@@ -557,15 +632,75 @@ export default function Curriculum() {
                     <button className="btn" onClick={addLesson} disabled={saving || !newTitle.trim()}>
                       {saving ? "Saqlanmoqda…" : "Qo'shish"}
                     </button>
-                    <button className="btn btn-ghost" onClick={() => setShowAdd(false)}>Bekor</button>
+                    <button className="btn btn-ghost" onClick={() => setShowAdd(false)}>Yopish</button>
                   </div>
                 </div>
               </div>
-            ) : (
-              <button className="btn btn-ghost" onClick={openAdd} style={{ marginTop: 12 }}>
-                + Dars qo'shish
-              </button>
-            )
+            )}
+
+            {/* Papkadan ommaviy dars yaratish */}
+            {showFolderAdd && (
+              <div style={{ marginTop: 12, padding: 16, background: "var(--surface-low)", borderRadius: 12, border: "2px dashed var(--border)" }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>📁 Papkadan darslar yaratish</div>
+                <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+                  Tanlangan papkadagi <b>har quizdan avtomatik dars</b> yaratiladi (kutubxona tartibida,
+                  quiz biriktirilgan holda). Bu bo'limda allaqachon bo'lgan quizlar o'tkazib yuboriladi.
+                </p>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={folderPickId} onChange={(e) => setFolderPickId(e.target.value)}
+                    style={{ flex: 1, minWidth: 240, padding: "8px 12px", borderRadius: 8, border: "2px solid var(--border)", background: "var(--surface)", fontSize: 14, color: "var(--ink)" }}>
+                    <option value="">— Papkani tanlang —</option>
+                    {folders.map((f) => (
+                      <option key={f.id} value={f.id}>📁 {f.name} ({f.count})</option>
+                    ))}
+                  </select>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap" }}>
+                    <input type="checkbox" checked={stripPrefix} onChange={(e) => setStripPrefix(e.target.checked)} />
+                    "1-dars." prefiksini olib tashlash
+                  </label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn" onClick={addFromFolder} disabled={saving || !folderPickId}>
+                      {saving ? "Yaratilmoqda…" : "Yaratish"}
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => setShowFolderAdd(false)}>Bekor</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mavzular ro'yxatidan ommaviy qo'shish */}
+            {showBulkAdd && (
+              <div style={{ marginTop: 12, padding: 16, background: "var(--surface-low)", borderRadius: 12, border: "2px dashed var(--border)" }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>📋 Ro'yxatdan darslar qo'shish</div>
+                <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+                  Har qatorga bitta dars mavzusi. Quizni keyinroq biriktirasiz. Boshidagi "1." kabi raqamlar avtomatik olib tashlanadi.
+                </p>
+                <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)} rows={8}
+                  placeholder={"1. Komputerning ichki va tashqi qurilmalari\n2. Google Docs bilan ishlash\n3. Google Sheets bilan tanishuv"}
+                  style={{ fontSize: 14, width: "100%" }}
+                />
+                <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                  <span className="muted" style={{ fontSize: 13 }}>
+                    {bulkText.split("\n").map((s) => s.trim()).filter(Boolean).length} ta mavzu
+                  </span>
+                  <div style={{ flex: 1 }} />
+                  <button className="btn" onClick={addBulkTitles} disabled={saving || !bulkText.trim()}>
+                    {saving ? "Qo'shilmoqda…" : "Qo'shish"}
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => { setShowBulkAdd(false); setBulkText(""); }}>Bekor</button>
+                </div>
+              </div>
+            )}
+
+            {/* Qo'shish tugmalari */}
+            {!showAdd && !showFolderAdd && !showBulkAdd && (
+              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                <button className="btn btn-ghost" onClick={openAdd}>+ Dars qo'shish</button>
+                <button className="btn btn-ghost" onClick={openFolderAdd}>📁 Papkadan qo'shish</button>
+                <button className="btn btn-ghost" onClick={openBulkAdd}>📋 Ro'yxatdan qo'shish</button>
+              </div>
+            )}
+            </>
           )}
         </div>
       )}

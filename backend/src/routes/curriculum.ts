@@ -28,6 +28,14 @@ const lessonSchema = z.object({
   quizId: z.string().nullable().optional(),
 });
 
+// Dars sarlavhasi boshidagi tartib prefiksini tozalaydi ("1-dars. ", "12. ",
+// "3) ") — ro'yxatда/dastur ko'rinishida raqam allaqachon qo'yiladi, takror bo'lmasin.
+function cleanTitle(raw: string): string {
+  const t = String(raw ?? "").trim();
+  const stripped = t.replace(/^\s*\d+\s*[-.)]?\s*(dars\s*[.:]?)?\s*/i, "").trim();
+  return (stripped || t).slice(0, 200);
+}
+
 // Ro'yxat — filter bilan (faqat roster'da tasdiqlangan / admin)
 curriculumRouter.get("/", requireApproved, async (req, res) => {
   const { subject, ageGroup, year, section } = req.query;
@@ -110,6 +118,114 @@ curriculumRouter.post("/", requireAdmin, async (req, res) => {
     },
   });
   res.json({ lesson });
+});
+
+// Ommaviy: PAPKADAN darslar yaratish — faqat admin.
+// Tanlangan papkadagi har quizdan bitta dars yaratiladi (quiz avtomatik
+// biriktiriladi), kutubxona tartibida (updatedAt desc → 1-dars birinchi).
+// Shu bo'limda o'sha quiz allaqachon dars bo'lsa — o'tkazib yuboriladi (dedup).
+const fromFolderSchema = z.object({
+  subject: z.enum(["ROBOTEXNIKA", "DASTURLASH"]),
+  ageGroup: z.enum(["MIDDLE", "SENIOR"]),
+  year: z.number().int().min(1).max(4),
+  section: z.string().nullable().optional(),
+  folderId: z.string().min(1),
+  stripPrefix: z.boolean().default(true),
+});
+curriculumRouter.post("/from-folder", requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = fromFolderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
+    return;
+  }
+  const { subject, ageGroup, year, folderId, stripPrefix } = parsed.data;
+  const section = subject === "ROBOTEXNIKA" ? (parsed.data.section ?? null) : null;
+
+  // Papka joriy adminniki bo'lishi kerak
+  const folder = await prisma.folder.findFirst({ where: { id: folderId, teacherId: req.teacherId } });
+  if (!folder) {
+    res.status(404).json({ error: "Papka topilmadi" });
+    return;
+  }
+  const quizzes = await prisma.quiz.findMany({
+    where: { folderId },
+    orderBy: { updatedAt: "desc" }, // kutubxona tartibi: 1-dars birinchi
+    select: { id: true, title: true },
+  });
+  if (quizzes.length === 0) {
+    res.status(400).json({ error: "Papkada quiz yo'q" });
+    return;
+  }
+
+  // Shu bo'limdagi mavjud darslar: dedup (quizId) + joriy eng katta order
+  const existing = await prisma.lessonPlan.findMany({
+    where: { subject, ageGroup, year, section },
+    select: { order: true, quizId: true },
+  });
+  const usedQuizIds = new Set(existing.map((e) => e.quizId).filter(Boolean));
+  let nextOrder = existing.length ? Math.max(...existing.map((e) => e.order)) + 1 : 0;
+
+  const toCreate = quizzes.filter((q) => !usedQuizIds.has(q.id));
+  const skipped = quizzes.length - toCreate.length;
+
+  if (toCreate.length > 0) {
+    await prisma.$transaction(
+      toCreate.map((q) =>
+        prisma.lessonPlan.create({
+          data: {
+            subject,
+            ageGroup,
+            year,
+            section,
+            order: nextOrder++,
+            title: stripPrefix ? cleanTitle(q.title) : q.title.trim().slice(0, 200),
+            quizId: q.id,
+            isDemo: false,
+          },
+        }),
+      ),
+    );
+  }
+  res.json({ created: toCreate.length, skipped });
+});
+
+// Ommaviy: MAVZULAR RO'YXATIDAN darslar qo'shish — faqat admin.
+// Har qatorga bitta mavzu; quiz keyinroq biriktiriladi.
+const bulkTitlesSchema = z.object({
+  subject: z.enum(["ROBOTEXNIKA", "DASTURLASH"]),
+  ageGroup: z.enum(["MIDDLE", "SENIOR"]),
+  year: z.number().int().min(1).max(4),
+  section: z.string().nullable().optional(),
+  titles: z.array(z.string()).min(1),
+});
+curriculumRouter.post("/bulk-titles", requireAdmin, async (req, res) => {
+  const parsed = bulkTitlesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
+    return;
+  }
+  const { subject, ageGroup, year } = parsed.data;
+  const section = subject === "ROBOTEXNIKA" ? (parsed.data.section ?? null) : null;
+  const titles = parsed.data.titles.map((t) => cleanTitle(t)).filter(Boolean);
+  if (titles.length === 0) {
+    res.status(400).json({ error: "Mavzu topilmadi" });
+    return;
+  }
+
+  const agg = await prisma.lessonPlan.aggregate({
+    where: { subject, ageGroup, year, section },
+    _max: { order: true },
+  });
+  let nextOrder = agg._max.order != null ? agg._max.order + 1 : 0;
+
+  await prisma.$transaction(
+    titles.map((title) =>
+      prisma.lessonPlan.create({
+        data: { subject, ageGroup, year, section, order: nextOrder++, title, isDemo: false },
+      }),
+    ),
+  );
+  res.json({ created: titles.length });
 });
 
 // Yangilash — faqat admin

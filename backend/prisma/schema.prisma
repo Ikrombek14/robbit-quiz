@@ -72,6 +72,9 @@ model Quiz {
   shuffle     Boolean  @default(false) // savollar tartibini aralashtirish
   folderId    String?  // kutubxona papkasi (ixtiyoriy)
   folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  // Tashqi manba (Wayground/Quizizz) quiz ID — ommaviy importda takrorni aniqlash uchun.
+  // Bir xil manba ID (yoki sarlavha) topilsa qayta yaratilmaydi, papkaga ko'chiriladi.
+  sourceId    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   slides      Slide[]
@@ -79,6 +82,7 @@ model Quiz {
   @@index([teacherId])
   @@index([createdAt])
   @@index([folderId])
+  @@index([teacherId, sourceId])
 }
 
 // Universal "slayd" — ham kontent slayd, ham savol bo'lishi mumkin.

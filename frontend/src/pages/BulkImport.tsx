@@ -16,6 +16,7 @@ interface RowResult {
   count?: number;
   quizId?: string;
   error?: string;
+  existed?: boolean; // avval mavjud bo'lgan → qayta import qilinmadi, papkaga ko'chirildi
 }
 
 const CONCURRENCY = 3; // Wayground'ni ortiqcha yuklamaslik uchun bir vaqtda 3 ta
@@ -70,8 +71,10 @@ export default function BulkImport() {
 
   const done = rows.filter((r) => r.status === "ok" || r.status === "error").length;
   const okCount = rows.filter((r) => r.status === "ok").length;
+  const movedCount = rows.filter((r) => r.status === "ok" && r.existed).length; // mavjud → papkaga ko'chirildi
+  const newCount = okCount - movedCount; // haqiqatan yangi yaratilgan
   const errCount = rows.filter((r) => r.status === "error").length;
-  const totalSlides = rows.reduce((a, r) => a + (r.count ?? 0), 0);
+  const totalSlides = rows.reduce((a, r) => a + (r.existed ? 0 : r.count ?? 0), 0);
 
   async function start() {
     if (parsed.length === 0 || running) return;
@@ -114,13 +117,13 @@ export default function BulkImport() {
         const sortTs = baseTs - myIdx * 1000; // myIdx=0 → eng yangi → papkada birinchi
         setRows((rs) => rs.map((x, i) => (i === myIdx ? { ...x, status: "running" } : x)));
         try {
-          const r = await api<{ quizId: string; title: string; summary: { total: number } }>(
+          const r = await api<{ quizId: string; title: string; summary: { total: number }; existed?: boolean }>(
             "/import/wayground/save",
             { method: "POST", body: JSON.stringify({ url, folderId: targetFolderId, sortTs, cookie: wgCookie.trim() || undefined }) },
           );
           setRows((rs) =>
             rs.map((x, i) =>
-              i === myIdx ? { ...x, status: "ok", title: r.title, count: r.summary.total, quizId: r.quizId } : x,
+              i === myIdx ? { ...x, status: "ok", title: r.title, count: r.summary.total, quizId: r.quizId, existed: r.existed } : x,
             ),
           );
         } catch (e) {
@@ -142,6 +145,9 @@ export default function BulkImport() {
           Wayground (Quizizz) quiz havolalarini joylang — har biridan avtomatik quiz yaratiladi
           (dars slaydlari va savollar birga ko'chiriladi). Public quizlar shundoq ishlaydi;
           <b> private (maxfiy) quizlar</b> uchun pastdagi "Wayground login" bo'limini to'ldiring.
+          <br />
+          <b>Takror import bo'lmaydi:</b> avval import qilingan dars qayta yaratilmaydi — mavjudi
+          tanlangan papkaga ko'chiriladi. Xohlagancha qayta ishga tushiraverishingiz mumkin.
         </p>
 
         <label style={{ fontWeight: 700 }}>Havolalar (har bir qatorga bittadan)</label>
@@ -224,7 +230,9 @@ export default function BulkImport() {
               }} />
             </div>
             <div className="muted" style={{ fontSize: 13, margin: "8px 0 12px" }}>
-              {done}/{rows.length} tugadi · ✅ {okCount} · ❌ {errCount} · jami {totalSlides} slayd
+              {done}/{rows.length} tugadi · ✅ {newCount} yangi
+              {movedCount > 0 && <> · ♻️ {movedCount} mavjud (papkaga ko'chirildi)</>}
+              {errCount > 0 && <> · ❌ {errCount}</>} · jami {totalSlides} slayd
               {!running && done === rows.length && (
                 <> — <Link to={folderId ? `/library?folder=${folderId}` : "/library"} style={{ color: "var(--primary)", fontWeight: 600 }}>
                   {folderId ? `"${folderLabel}" papkasini ochish →` : "Kutubxonaga o'tish →"}
@@ -239,13 +247,17 @@ export default function BulkImport() {
                   background: "var(--surface-low)", borderRadius: 8, border: "1px solid var(--border)",
                 }}>
                   <span style={{ fontSize: 16, width: 20, textAlign: "center", flexShrink: 0 }}>
-                    {r.status === "ok" ? "✅" : r.status === "error" ? "❌" : r.status === "running" ? "⏳" : "•"}
+                    {r.status === "ok" ? (r.existed ? "♻️" : "✅") : r.status === "error" ? "❌" : r.status === "running" ? "⏳" : "•"}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {r.title || r.url}
                     </div>
-                    {r.status === "ok" && <div className="muted" style={{ fontSize: 12 }}>{r.count} ta slayd qo'shildi</div>}
+                    {r.status === "ok" && (
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {r.existed ? "Avval mavjud — papkaga ko'chirildi (qayta yaratilmadi)" : `${r.count} ta slayd qo'shildi`}
+                      </div>
+                    )}
                     {r.status === "error" && <div style={{ fontSize: 12, color: "var(--error)" }}>{r.error}</div>}
                   </div>
                   {r.status === "ok" && r.quizId && (

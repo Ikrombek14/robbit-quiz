@@ -426,15 +426,51 @@ importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: 
   // 1-havola eng katta → papkada birinchi turadi. Shu bilan tartib kafolatlanadi.
   const ts = Number(sortTs);
   const stamp = Number.isFinite(ts) && ts > 0 ? new Date(ts) : undefined;
+
+  // --- Takrorni aniqlash (o'z kutubxonasida): avval manba ID, keyin sarlavha bo'yicha ---
+  // Bir marta import qilingan dars qayta import bo'lmasin — mavjudi papkaga ko'chiriladi.
+  const sourceId = extractQuizId(url ?? "");
+  let existing: { id: string } | null = null;
+  if (sourceId) {
+    existing = await prisma.quiz.findFirst({
+      where: { teacherId: req.teacherId!, sourceId },
+      select: { id: true },
+    });
+  }
+  if (!existing) {
+    // Ilgari (manba ID'siz) import qilinganlar — sarlavha bo'yicha (harf registriga befarq)
+    existing = await prisma.quiz.findFirst({
+      where: { teacherId: req.teacherId!, title: { equals: finalTitle, mode: "insensitive" } },
+      select: { id: true },
+    });
+  }
+
+  if (existing) {
+    // Qayta import qilmaymiz. Mavjud quizni tanlangan papkaga ko'chiramiz,
+    // manba ID'ni to'ldiramiz (keyingi importlar ID bo'yicha aniq topsin) va tartib
+    // tamg'asini yangilaymiz. Papka tanlanmagan bo'lsa quiz joyida qoladi.
+    await prisma.quiz.update({
+      where: { id: existing.id },
+      data: {
+        ...(useFolderId ? { folderId: useFolderId } : {}),
+        ...(sourceId ? { sourceId } : {}),
+        ...(stamp ? { updatedAt: stamp } : {}),
+      },
+    });
+    res.json({ quizId: existing.id, title: finalTitle, summary: r.summary, existed: true });
+    return;
+  }
+
   const quiz = await prisma.quiz.create({
     data: {
       title: finalTitle,
       teacherId: req.teacherId!,
       folderId: useFolderId,
+      sourceId: sourceId ?? null,
       slides: { create: slidesToCreate(r.slides) },
       ...(stamp ? { createdAt: stamp, updatedAt: stamp } : {}),
     },
     select: { id: true },
   });
-  res.json({ quizId: quiz.id, title: finalTitle, summary: r.summary });
+  res.json({ quizId: quiz.id, title: finalTitle, summary: r.summary, existed: false });
 });

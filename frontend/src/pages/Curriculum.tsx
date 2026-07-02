@@ -138,6 +138,37 @@ export default function Curriculum() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
+  // Belgilash rejimi — bir nechta darsni tanlab ommaviy o'chirish (faqat admin)
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  function toggleSelect(id: string) {
+    setSelectedIds((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+  async function removeSelected() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`${selectedIds.size} ta darsni o'chirishni tasdiqlaysizmi?`)) return;
+    try {
+      const r = await api<{ deleted: number }>("/curriculum/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      setLessons((ls) => ls.filter((l) => !selectedIds.has(l.id)));
+      loadCounts();
+      exitSelectMode();
+      showToast(`🗑️ ${r.deleted} ta dars o'chirildi.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Xatolik");
+    }
+  }
+
   const allFiltersSet = ageGroup !== null && year !== null;
 
   // Filtrlar o'zgarganda localStorage'ga saqlaymiz
@@ -507,6 +538,30 @@ export default function Curriculum() {
               </span>
               <div className="bar"><div className="bar-fill" style={{ width: `${progressPct}%` }} /></div>
               <span className="muted" style={{ whiteSpace: "nowrap" }}>{progressPct}%</span>
+              {isAdmin && !selectMode && (
+                <button className="cur-mini-btn edit" style={{ marginLeft: "auto" }}
+                  onClick={() => setSelectMode(true)} title="Bir nechta darsni belgilab o'chirish">
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>checklist</span>
+                  Belgilash
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Belgilash rejimi paneli */}
+          {isAdmin && selectMode && (
+            <div className="cur-select-bar">
+              <span style={{ fontWeight: 700 }}>{selectedIds.size} ta tanlandi</span>
+              <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 13 }}
+                onClick={() => setSelectedIds(selectedIds.size === lessons.length ? new Set() : new Set(lessons.map((l) => l.id)))}>
+                {selectedIds.size === lessons.length ? "Bekor qilish" : "Hammasini tanlash"}
+              </button>
+              <div style={{ flex: 1 }} />
+              <button className="cur-mini-btn del" onClick={removeSelected} disabled={selectedIds.size === 0}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+                O'chirish ({selectedIds.size})
+              </button>
+              <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 13 }} onClick={exitSelectMode}>Yopish</button>
             </div>
           )}
 
@@ -571,16 +626,22 @@ export default function Curriculum() {
               // ---- KO'RISH REJIMI ----
               return (
                 <div key={l.id} id={`lesson-${l.id}`}
-                  draggable={isAdmin}
+                  draggable={isAdmin && !selectMode}
                   onDragStart={isAdmin ? () => setDragId(l.id) : undefined}
                   onDragEnd={isAdmin ? () => { setDragId(null); setDragOverId(null); } : undefined}
                   onDragOver={isAdmin ? (e) => { e.preventDefault(); if (dragId && dragId !== l.id) setDragOverId(l.id); } : undefined}
                   onDragLeave={isAdmin ? () => setDragOverId((cur) => (cur === l.id ? null : cur)) : undefined}
                   onDrop={isAdmin ? (e) => { e.preventDefault(); dropOnLesson(l.id); } : undefined}
-                  className={`cur-row ${dragOverId === l.id ? "drag-over" : ""} ${dragId === l.id ? "dragging" : ""}`}
+                  className={`cur-row ${dragOverId === l.id ? "drag-over" : ""} ${dragId === l.id ? "dragging" : ""} ${selectMode && selectedIds.has(l.id) ? "selected" : ""}`}
+                  onClick={selectMode ? () => toggleSelect(l.id) : undefined}
+                  style={selectMode ? { cursor: "pointer" } : undefined}
                 >
-                  {/* Sudrash uchun dastak — faqat admin */}
-                  {isAdmin && (
+                  {/* Belgilash rejimida — checkbox; oddiy rejimda — sudrash dastagi */}
+                  {isAdmin && selectMode && (
+                    <input type="checkbox" checked={selectedIds.has(l.id)} readOnly
+                      style={{ width: 18, height: 18, flexShrink: 0, cursor: "pointer" }} />
+                  )}
+                  {isAdmin && !selectMode && (
                     <span className="material-symbols-outlined" title="Sudrab tartibini o'zgartiring"
                       style={{ color: "var(--muted)", fontSize: 20, cursor: "grab", flexShrink: 0 }}>drag_indicator</span>
                   )}
@@ -602,7 +663,7 @@ export default function Curriculum() {
                         color: isAdmin && hasQuiz ? "var(--primary)" : undefined,
                       }}
                       // Faqat admin: mavzu nomiga bosilganda biriktirilgan slaydni tahrirlash uchun ochiladi
-                      onClick={() => { if (isAdmin && hasQuiz) navigate(`/quiz/${l.quiz!.id}`); }}
+                      onClick={(e) => { if (selectMode) return; if (isAdmin && hasQuiz) { e.stopPropagation(); navigate(`/quiz/${l.quiz!.id}`); } }}
                       title={isAdmin && hasQuiz ? "Slaydni tahrirlash" : undefined}
                     >
                       {l.order + 1}. {l.title}
@@ -627,7 +688,7 @@ export default function Curriculum() {
                   )}
 
                   {/* Ko'rish (preview) + Boshlash — faqat quiz biriktirilganda */}
-                  {hasQuiz && (
+                  {hasQuiz && !selectMode && (
                     <>
                       <button className="cur-mini-btn view" onClick={() => navigate(`/activity/${l.quiz!.id}`)}
                         title="Slaydlarni oldindan ko'rish">
@@ -643,7 +704,7 @@ export default function Curriculum() {
                   )}
 
                   {/* canCreate ustoz (admin emas) — o'z slaydini biriktirish (yozib qidiriladigan) */}
-                  {!isAdmin && canCreate && (
+                  {!isAdmin && canCreate && !selectMode && (
                     <div className="cur-picker" style={{ flexShrink: 0, width: 200 }} title="Darsga o'z slaydingizni biriktirish">
                       <QuizPicker quizzes={quizList} value={l.quizId ?? ""}
                         onChange={(id) => attachQuiz(l, id)} placeholder="Slayd biriktirish…" />
@@ -651,7 +712,7 @@ export default function Curriculum() {
                   )}
 
                   {/* Admin tugmalari */}
-                  {isAdmin && (
+                  {isAdmin && !selectMode && (
                     <>
                       <button className="cur-mini-btn edit" onClick={() => openEdit(l)} title="Tahrirlash">
                         <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>

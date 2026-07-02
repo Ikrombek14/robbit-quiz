@@ -300,6 +300,17 @@ curriculumRouter.patch("/:id/quiz", requireCanCreate, async (req, res) => {
   }
 });
 
+// Ommaviy o'chirish — faqat admin (belgilangan darslar)
+curriculumRouter.post("/bulk-delete", requireAdmin, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).map(String) : [];
+  if (ids.length === 0) {
+    res.status(400).json({ error: "ids bo'sh" });
+    return;
+  }
+  const r = await prisma.lessonPlan.deleteMany({ where: { id: { in: ids } } });
+  res.json({ deleted: r.count });
+});
+
 // O'chirish — faqat admin
 curriculumRouter.delete("/:id", requireAdmin, async (req, res) => {
   try {

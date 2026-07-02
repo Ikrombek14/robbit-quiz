@@ -32,13 +32,14 @@ export default function Register() {
         {error && <div className="error">{error}</div>}
         <form onSubmit={handleSubmit}>
           <label>Ism</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} required />
+          <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoFocus required />
           <label>Email</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="email@robbit.uz"
+            autoComplete="email"
             required
           />
           <label>Parol (kamida 6 belgi)</label>
@@ -46,6 +47,7 @@ export default function Register() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
             minLength={6}
             required
           />

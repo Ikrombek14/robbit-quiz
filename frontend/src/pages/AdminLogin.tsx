@@ -50,9 +50,9 @@ export default function AdminLogin() {
 
         <form onSubmit={handleSubmit}>
           <label>Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@robbit.uz" required />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@robbit.uz" autoComplete="email" required />
           <label>Parol</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
           <button className="btn btn-block" type="submit" disabled={busy}>
             {busy ? "Kirilmoqda…" : "Kirish"}
           </button>

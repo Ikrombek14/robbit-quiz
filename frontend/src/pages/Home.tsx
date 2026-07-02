@@ -46,8 +46,12 @@ export default function Home() {
           className="pin-input"
           value={pin}
           onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onKeyDown={(e) => { if (e.key === "Enter" && pin.length === 6) navigate(`/join?pin=${pin}`); }}
           placeholder="------"
           inputMode="numeric"
+          enterKeyHint="go"
+          autoComplete="off"
+          autoFocus
           aria-label="Dars kodi"
         />
         <button

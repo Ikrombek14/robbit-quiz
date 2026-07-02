@@ -200,16 +200,10 @@ export default function Dashboard() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
               {recent.map((q, i) => (
-                <div
+                <button
                   key={q.id}
+                  className="list-row"
                   onClick={() => navigate(`/activity/${q.id}`)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 14, padding: "12px 16px",
-                    background: "var(--surface-low)", borderRadius: 12,
-                    border: "1px solid var(--border)", cursor: "pointer", transition: "background 0.12s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-high)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-low)")}
                 >
                   <div style={{
                     width: 44, height: 44, borderRadius: 10, flexShrink: 0, background: "var(--primary-soft)",
@@ -227,7 +221,7 @@ export default function Dashboard() {
                     {new Date(q.updatedAt).toLocaleDateString("uz-UZ")}
                   </div>
                   <span className="material-symbols-outlined" style={{ fontSize: 18, color: "var(--muted)" }}>chevron_right</span>
-                </div>
+                </button>
               ))}
             </div>
           )}

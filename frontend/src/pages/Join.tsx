@@ -243,9 +243,11 @@ export default function Join() {
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="------"
               inputMode="numeric"
+              autoComplete="off"
             />
             <label>Ismingiz</label>
-            <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={20} />
+            <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={20}
+              autoComplete="off" enterKeyHint="go" placeholder="Masalan: Ali" />
             <button className="btn btn-block" type="submit" disabled={pin.length !== 6 || !nickname.trim()}>
               Kirish
             </button>

@@ -53,13 +53,14 @@ export default function Shell({ children }: { children: ReactNode }) {
     <div className="shell-wrapper">
     <div className="shell">
       <aside className="sidebar">
-        <div
+        <button
           className="brand-logo"
-          style={{ padding: "8px 12px", cursor: "pointer" }}
+          style={{ padding: "8px 12px" }}
           onClick={() => navigate("/dashboard")}
+          aria-label="Bosh sahifa"
         >
           Robbit
-        </div>
+        </button>
         {canCreate && (
           <button className="side-create" onClick={createQuiz}>
             <span className="material-symbols-outlined">add</span>
@@ -75,6 +76,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                 className={`side-link ${active ? "active" : ""} ${n.mobileHide ? "side-link-hide-mobile" : ""}`}
                 onClick={() => navigate(n.path)}
                 title={n.label}
+                aria-current={active ? "page" : undefined}
               >
                 <span className="material-symbols-outlined">{n.icon}</span>
                 <span>{n.label}</span>
@@ -99,6 +101,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           <button
             className="icon-btn"
             title={theme === "dark" ? "Yorug' rejim" : "Qorong'u rejim"}
+            aria-label={theme === "dark" ? "Yorug' rejimga o'tish" : "Qorong'u rejimga o'tish"}
             onClick={() => setThemeState(toggleTheme())}
           >
             <span className="material-symbols-outlined">

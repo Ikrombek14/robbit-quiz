@@ -77,11 +77,33 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--surface-2); color: var(--ink); min-height: 100vh; }
+body { margin: 0; background: var(--surface-2); color: var(--ink); min-height: 100vh; -webkit-text-size-adjust: 100%; }
 h1, h2, h3, h4, .font-head { font-family: "Inter", sans-serif; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
 a { color: var(--olive); }
+/* button/select o'z shrifti bilan kelmasin — sayt shriftiga bo'ysunsin */
+button, input, select, textarea { font-family: inherit; }
+select { cursor: pointer; }
 .material-symbols-outlined { font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24; user-select: none; vertical-align: middle; }
 .text-sm { font-size: 14px; }
+
+/* ---------- Klaviatura foydalanuvchisi uchun ko'rinадиган fokus halqasi ----------
+   Sichqoncha bosishда ko'rinmайди (:focus-visible), Tab bilan yurganda ko'rinади. */
+button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px var(--focus); border-radius: 8px;
+}
+.btn:focus-visible, .icon-btn:focus-visible, .chip:focus-visible, .cur-chip:focus-visible,
+.cur-mini-btn:focus-visible, .tool-btn:focus-visible, .tc-btn:focus-visible,
+.answer-card:focus-visible, .mode-opt:focus-visible, .switch:focus-visible, .fab:focus-visible {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+/* ---------- Harakat kamaytirilgan rejim (bosh aylanishi/charchash oldini olish) ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+  }
+}
 
 /* ---------- Layout ---------- */
 .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
@@ -95,7 +117,10 @@ a { color: var(--olive); }
   padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 40;
 }
-.brand-logo { font-weight: 800; font-size: 22px; color: var(--ink); text-decoration: none; }
+.brand-logo {
+  font-weight: 800; font-size: 22px; color: var(--ink); text-decoration: none;
+  background: transparent; border: none; text-align: left; cursor: pointer; font-family: inherit;
+}
 
 /* ---------- Card ---------- */
 .card {
@@ -118,13 +143,16 @@ a { color: var(--olive); }
 .btn-block { width: 100%; }
 .btn-ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
 .btn-ghost:hover:not(:disabled) { background: var(--surface-2); }
+/* Variant hover'lari o'z fonini aniq qaytaradi — aks holda .btn:hover (yuqoriroq
+   spesifiklik) ularni hover'da apelsin rangga o'girib yuborardi. */
 .btn-secondary { background: var(--navy); color: #fff; }
-.btn-secondary:hover:not(:disabled) { background: #2c2f3d; }
+.btn-secondary:hover:not(:disabled) { background: var(--navy); filter: brightness(1.18); }
 .btn-pink { background: var(--c1); color: #fff; }
-.btn-pink:hover:not(:disabled) { filter: brightness(1.06); }
+.btn-pink:hover:not(:disabled) { background: var(--c1); filter: brightness(1.06); }
 .btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: var(--danger); filter: brightness(0.92); }
 .btn-create { background: var(--olive); color: var(--on-olive); }
-.btn-create:hover:not(:disabled) { filter: brightness(1.12); }
+.btn-create:hover:not(:disabled) { background: var(--olive); filter: brightness(1.12); }
 .icon-btn {
   width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--ink); display: inline-flex; align-items: center; justify-content: center;
@@ -152,6 +180,11 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 
 /* ---------- Javob kartalari (oq + rangli A/B/C/D) ---------- */
 .answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+/* Telefonda javoblar bitta ustun — matn siqilib qolmasin, barmoq bilan oson bosilsin */
+@media (max-width: 480px) {
+  .answers-grid { grid-template-columns: 1fr; gap: 10px; }
+  .answer-card { min-height: 60px; padding: 14px 16px; font-size: 16px; }
+}
 .answer-card {
   display: flex; align-items: center; gap: 16px;
   background: var(--surface); border: 2px solid var(--border); border-radius: 16px;
@@ -227,6 +260,18 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
   background: var(--surface); border-radius: var(--r); padding: 18px; border: 1px solid var(--border);
   box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 8px;
 }
+/* Bosiladigan kartalar (tezkor harakatlar) — hover'da yengil ko'tarilish */
+button.quiz-card { transition: border-color 0.12s, box-shadow 0.15s, transform 0.12s; }
+button.quiz-card:hover { border-color: var(--primary); box-shadow: 0 6px 18px rgba(0,0,0,0.08); transform: translateY(-2px); }
+button.quiz-card:active { transform: translateY(0); }
+
+/* Umumiy bosiladigan ro'yxat qatori (Dashboard so'nggi loyihalar va h.k.) */
+.list-row {
+  display: flex; align-items: center; gap: 14px; padding: 12px 16px; width: 100%; text-align: left;
+  background: var(--surface-low); border-radius: 12px; border: 1px solid var(--border);
+  cursor: pointer; transition: background 0.12s, border-color 0.12s;
+}
+.list-row:hover { background: var(--surface-high); border-color: var(--primary); }
 .badge {
   display: inline-block; background: var(--olive-soft); color: var(--olive);
   border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600; width: fit-content;
@@ -273,7 +318,8 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
   cursor: pointer; text-align: left; width: 100%;
 }
 .side-link:hover:not(:disabled) { background: var(--surface-2); }
-.side-link.active { background: var(--primary-soft); color: var(--ink); }
+.side-link.active { background: var(--primary-soft); color: var(--ink); box-shadow: inset 3px 0 0 var(--primary); }
+.side-link.active .material-symbols-outlined { color: var(--primary); }
 .side-link:disabled { opacity: 0.5; cursor: not-allowed; }
 .soon-badge { margin-left: auto; font-size: 10px; background: var(--surface-2); color: var(--muted); border-radius: 6px; padding: 1px 6px; font-weight: 600; }
 .side-profile { display: flex; align-items: center; gap: 10px; padding: 10px; border-top: 1px solid var(--border); }
@@ -307,7 +353,9 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .lib-row {
   display: flex; align-items: center; gap: 16px; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r); padding: 14px 16px; margin-bottom: 10px;
+  transition: border-color 0.12s, box-shadow 0.15s;
 }
+.lib-row:hover { border-color: var(--primary); box-shadow: 0 3px 12px rgba(0,0,0,0.06); }
 .lib-thumb {
   width: 64px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
   font-size: 26px; flex-shrink: 0; background: var(--primary-soft);
@@ -420,7 +468,10 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
   position: fixed; right: 28px; bottom: 28px; width: 58px; height: 58px; border-radius: 999px;
   background: var(--olive); color: var(--on-olive); border: none; font-size: 28px; cursor: pointer;
   box-shadow: 0 8px 22px rgba(88,91,24,0.4); z-index: 30;
+  transition: transform 0.12s, box-shadow 0.15s, filter 0.12s;
 }
+.fab:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 12px 28px rgba(88,91,24,0.45); }
+.fab:active { transform: translateY(0) scale(0.96); }
 
 /* ============================================================
    LIVE HOST — lobby, taqdimot, taymer, spin wheel, podium
@@ -1076,6 +1127,24 @@ img, svg, video { max-width: 100%; height: auto; }
   .container { padding: 16px; }
   /* Sarlavha + amallar ustun bo'lib joylashsin */
   .between { gap: 10px; }
+  /* iOS Safari input fokusда avtomatik zoom qilmasin (shrift >= 16px bo'lsa zoom yo'q) */
+  input, textarea, select { font-size: 16px; }
+  /* Barmoq bilan bosish qulay bo'lsin — teginish maydoni kattaroq */
+  .cur-mini-btn { padding: 9px 14px; font-size: 14px; }
+  .kick-btn { width: 30px; height: 30px; }
+  .fab { right: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* Ingichka, chiroyli skrollbar — yon panellar va ro'yxatlar uchun */
+.wg-rail, .thumb-list, .attendee-list, .gs-page-list, .gs-tpl-list, .add-menu {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.wg-rail::-webkit-scrollbar, .thumb-list::-webkit-scrollbar, .attendee-list::-webkit-scrollbar,
+.gs-page-list::-webkit-scrollbar, .gs-tpl-list::-webkit-scrollbar, .add-menu::-webkit-scrollbar { width: 8px; height: 8px; }
+.wg-rail::-webkit-scrollbar-thumb, .thumb-list::-webkit-scrollbar-thumb, .attendee-list::-webkit-scrollbar-thumb,
+.gs-page-list::-webkit-scrollbar-thumb, .gs-tpl-list::-webkit-scrollbar-thumb, .add-menu::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: 999px;
 }
 
 /* Statistika jadvali (To'liq statistika sahifasi) */
@@ -1092,6 +1161,11 @@ img, svg, video { max-width: 100%; height: auto; }
   color: var(--muted);
   padding: 6px 8px;
   white-space: nowrap;
+  /* uzun ro'yxatda pastga tushganda ustun nomlari ko'rinib turadi */
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 2;
 }
 .stats-table td {
   padding: 10px 8px;
@@ -1144,9 +1218,20 @@ img, svg, video { max-width: 100%; height: auto; }
 .cur-row {
   display: flex; align-items: center; gap: 12px; padding: 12px 16px;
   background: var(--surface-low); border-radius: 12px; border: 1px solid var(--border);
+  transition: border-color 0.12s, background 0.12s;
 }
+.cur-row:hover { border-color: var(--primary); }
 .cur-row.drag-over { border: 2px solid var(--primary); padding: 11px 15px; }
 .cur-row.dragging { opacity: 0.4; }
+.cur-row.selected { border-color: var(--primary); background: var(--primary-soft); }
+
+/* Belgilash rejimi paneli — nechta tanlangani + ommaviy amallar */
+.cur-select-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; margin-bottom: 12px;
+  background: var(--primary-soft); border: 1px solid var(--primary); border-radius: 12px;
+  font-size: 14px; position: sticky; top: 8px; z-index: 20;
+}
 
 .cur-badge-demo {
   font-size: 11px; font-weight: 800; background: var(--success-soft); color: var(--success);

@@ -36,6 +36,8 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="email@robbit.uz"
+            autoComplete="email"
+            autoFocus
             required
           />
           <label>Parol</label>
@@ -43,6 +45,7 @@ export default function Login() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
             required
           />
           <button className="btn btn-block" type="submit" disabled={busy}>

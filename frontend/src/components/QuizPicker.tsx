@@ -43,6 +43,15 @@ export default function QuizPicker({
           setQ("");
           setOpen(true);
         }}
+        onKeyDown={(e) => {
+          // Klaviatura: Escape — yopish, Enter — birinchi topilganni tanlash
+          if (e.key === "Escape") { setOpen(false); (e.target as HTMLInputElement).blur(); }
+          if (e.key === "Enter" && open && filtered.length > 0) {
+            e.preventDefault();
+            onChange(filtered[0].id);
+            setOpen(false);
+          }
+        }}
         placeholder={selected ? selected.title : placeholder ?? "Slayd qidirish…"}
         style={{
           width: "100%", padding: "8px 12px", borderRadius: 8,

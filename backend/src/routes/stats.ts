@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { prisma } from "../prisma.js";
-import { getAllStats, getStatByName } from "../services/stats.js";
+import { getAllStats, getStatByName, statsUpdatedAt } from "../services/stats.js";
 
 // Ustozlar statistikasi (Google Sheet'dan). Barcha kirgan ustozlar ko'ra oladi.
 export const statsRouter = Router();
@@ -26,7 +26,22 @@ statsRouter.get("/me", async (req: AuthedRequest, res) => {
 statsRouter.get("/all", async (_req, res) => {
   try {
     const stats = await getAllStats();
-    res.json({ stats });
+    res.json({ stats, updatedAt: statsUpdatedAt() });
+  } catch {
+    res.status(502).json({ error: "Statistikani yuklab bo'lmadi" });
+  }
+});
+
+// Majburiy yangilash (keshni chetlab Sheet'dan qayta oladi) — faqat admin
+statsRouter.post("/refresh", async (req: AuthedRequest, res) => {
+  const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { isAdmin: true } });
+  if (!teacher?.isAdmin) {
+    res.status(403).json({ error: "Bu amal faqat admin uchun" });
+    return;
+  }
+  try {
+    const stats = await getAllStats(true);
+    res.json({ stats, updatedAt: statsUpdatedAt() });
   } catch {
     res.status(502).json({ error: "Statistikani yuklab bo'lmadi" });
   }

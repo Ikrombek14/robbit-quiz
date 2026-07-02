@@ -1,22 +1,42 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import { METRICS, TONE_STYLE, ballTone, fmtNum } from "../stats";
 import type { TeacherStat } from "../types";
 
 export default function Stats() {
+  const { teacher } = useAuth();
+  const isAdmin = teacher?.isAdmin === true;
   const [rows, setRows] = useState<TeacherStat[]>([]);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [branch, setBranch] = useState("");
 
   useEffect(() => {
-    api<{ stats: TeacherStat[] }>("/stats/all")
-      .then((r) => setRows(r.stats))
+    api<{ stats: TeacherStat[]; updatedAt?: number | null }>("/stats/all")
+      .then((r) => { setRows(r.stats); setUpdatedAt(r.updatedAt ?? null); })
       .catch((e) => setErr(e instanceof Error ? e.message : "Xatolik"))
       .finally(() => setLoading(false));
   }, []);
+
+  // Admin: keshni chetlab Sheet'dan hoziroq qayta olish
+  async function refresh() {
+    setRefreshing(true);
+    setErr("");
+    try {
+      const r = await api<{ stats: TeacherStat[]; updatedAt?: number | null }>("/stats/refresh", { method: "POST" });
+      setRows(r.stats);
+      setUpdatedAt(r.updatedAt ?? null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Xatolik");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const branches = useMemo(
     () => [...new Set(rows.map((r) => r.branch).filter(Boolean))].sort() as string[],
@@ -47,7 +67,18 @@ export default function Stats() {
       >
         <div>
           <h1 style={{ fontSize: 26, margin: 0 }}>Ustozlar statistikasi</h1>
-          <p className="muted" style={{ margin: "4px 0 0" }}>To'liq reyting · {rows.length} ta ustoz</p>
+          <p className="muted" style={{ margin: "4px 0 0" }}>
+            To'liq reyting · {rows.length} ta ustoz
+            {updatedAt && <> · Yangilangan: {new Date(updatedAt).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })}</>}
+            {isAdmin && (
+              <button className="btn btn-ghost" onClick={refresh} disabled={refreshing}
+                title="Sheet'dan hoziroq qayta olish"
+                style={{ padding: "3px 10px", fontSize: 12.5, marginLeft: 8, verticalAlign: "middle" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 15 }}>refresh</span>
+                {refreshing ? "Yangilanmoqda…" : "Yangilash"}
+              </button>
+            )}
+          </p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, width: 300, maxWidth: "100%" }}>
           <input

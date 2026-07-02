@@ -4,10 +4,10 @@ import { nameKey } from "../lib/nameKey.js";
 // Manba jadval ikki qatorli sarlavhaga ega; ma'lumot 3-qatordan boshlanadi.
 const SHEET_ID = "1asJpws1tN-3YJNl15IQEeBTl8iIEePXjNy5Ri769fis";
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-// Ma'lumot har kuni 21:00 (Asia/Tashkent) da scheduler orqali yangilanadi.
-// TTL — zaxira: agar scheduler o'tkazib yuborsa, 25 soatdan keyin so'rovda qayta olinadi.
-const TTL_MS = 25 * 60 * 60 * 1000;
-const REFRESH_HOUR = 21; // kechki 21:00 (server vaqti = Asia/Tashkent, +05)
+// Sheet kun davomida tahrirlanadi — kesh qisqa (10 daqiqa): sayt deyarli jonli
+// ko'rsatadi, Sheet'ga yuk esa baribir minimal (10 daqiqada ko'pi bilan 1 so'rov).
+const TTL_MS = 10 * 60 * 1000;
+const REFRESH_HOUR = 21; // kechki 21:00 kafolatli yangilash (server vaqti = Asia/Tashkent)
 
 export interface TeacherStat {
   name: string;
@@ -55,11 +55,25 @@ function parseCSV(s: string): string[][] {
   return rows;
 }
 
+// Kesh oxirgi marta qachon yangilangani (frontend "Yangilangan: ..." uchun)
+export function statsUpdatedAt(): number | null {
+  return cache?.ts ?? null;
+}
+
 export async function getAllStats(force = false): Promise<TeacherStat[]> {
   if (!force && cache && Date.now() - cache.ts < TTL_MS) return cache.data;
 
-  const res = await fetch(CSV_URL);
-  if (!res.ok) throw new Error(`Statistika yuklab bo'lmadi (${res.status})`);
+  let res: Response;
+  try {
+    res = await fetch(CSV_URL);
+  } catch (e) {
+    if (cache) return cache.data; // tarmoq xatosi — eski kesh yangisidan yaxshi
+    throw e;
+  }
+  if (!res.ok) {
+    if (cache) return cache.data; // Sheet vaqtincha javob bermasa — eski keshni beramiz
+    throw new Error(`Statistika yuklab bo'lmadi (${res.status})`);
+  }
   const text = await res.text();
 
   const rows = parseCSV(text);

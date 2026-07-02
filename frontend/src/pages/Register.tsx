@@ -28,6 +28,7 @@ export default function Register() {
   return (
     <div className="center-screen">
       <div className="card card-narrow">
+        <img src="/logo.svg" alt="Robbit" style={{ height: 30, display: "block", margin: "0 auto 14px" }} />
         <h2 style={{ marginTop: 0 }}>Ro'yxatdan o'tish</h2>
         {error && <div className="error">{error}</div>}
         <form onSubmit={handleSubmit}>

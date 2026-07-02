@@ -33,8 +33,11 @@ export default function Home() {
   return (
     <div className="center-screen">
       <header style={{ textAlign: "center" }}>
-        <h1 style={{ fontSize: 48, margin: 0, color: "var(--ink)" }}>Robbit 🚀</h1>
-        <p className="muted" style={{ marginBottom: 28, fontSize: 18 }}>
+        <h1 style={{ margin: 0, display: "flex", justifyContent: "center" }}>
+          <img src="/logo.svg" alt="Robbit — interaktiv ta'lim va jonli quiz platformasi"
+            style={{ height: 52, display: "block" }} />
+        </h1>
+        <p className="muted" style={{ marginBottom: 28, marginTop: 12, fontSize: 18 }}>
           Interaktiv ta'lim va jonli quiz platformasi
         </p>
       </header>

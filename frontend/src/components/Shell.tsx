@@ -59,7 +59,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           onClick={() => navigate("/dashboard")}
           aria-label="Bosh sahifa"
         >
-          Robbit
+          <img src="/logo.svg" alt="Robbit" style={{ height: 26, display: "block" }} />
         </button>
         {canCreate && (
           <button className="side-create" onClick={createQuiz}>

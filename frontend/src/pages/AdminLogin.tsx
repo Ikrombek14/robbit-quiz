@@ -38,6 +38,7 @@ export default function AdminLogin() {
   return (
     <div className="center-screen">
       <div className="card card-narrow">
+        <img src="/logo.svg" alt="Robbit" style={{ height: 30, display: "block", margin: "0 auto 14px" }} />
         <h2 style={{ marginTop: 0 }}>Admin kirish</h2>
         <p className="muted" style={{ marginTop: 0 }}>O'qituvchilar uchun</p>
         {error && <div className="error">{error}</div>}

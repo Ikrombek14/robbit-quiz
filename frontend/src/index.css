@@ -112,6 +112,24 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: var(--bg); padding: 24px;
 }
+
+/* Landing birinchi ekrani — aniq bitta ekran (scroll'siz), o'quvchi faqat PIN ni ko'radi */
+.home-hero {
+  min-height: 100vh;
+  min-height: 100svh; /* mobil brauzer paneli hisobga olinadi */
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; background: var(--bg);
+}
+/* Yuqori o'ng burchak — ustoz kirishi + tema almashtirgich */
+.home-corner {
+  position: absolute; top: 14px; right: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+@media (max-width: 480px) {
+  /* Telefonda matn qisqaradi — faqat ikonka bilan ixcham */
+  .home-corner .btn { padding: 8px 10px !important; }
+}
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border);

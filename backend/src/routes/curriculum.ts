@@ -68,6 +68,36 @@ curriculumRouter.get("/", requireApproved, async (req, res) => {
   });
 });
 
+// Guruhlangan hisob — filtr tugmalari va tablarда dars sonini ko'rsatish uchun.
+// Har (subject, ageGroup, year, section) guruh bo'yicha: jami darslar va
+// slayd (quiz) biriktirilganlari soni.
+curriculumRouter.get("/counts", requireApproved, async (_req, res) => {
+  const [all, withQuiz] = await Promise.all([
+    prisma.lessonPlan.groupBy({
+      by: ["subject", "ageGroup", "year", "section"],
+      _count: { _all: true },
+    }),
+    prisma.lessonPlan.groupBy({
+      by: ["subject", "ageGroup", "year", "section"],
+      where: { quizId: { not: null } },
+      _count: { _all: true },
+    }),
+  ]);
+  const key = (g: { subject: string; ageGroup: string; year: number; section: string | null }) =>
+    `${g.subject}|${g.ageGroup}|${g.year}|${g.section ?? ""}`;
+  const quizMap = new Map(withQuiz.map((g) => [key(g), g._count._all]));
+  res.json({
+    groups: all.map((g) => ({
+      subject: g.subject,
+      ageGroup: g.ageGroup,
+      year: g.year,
+      section: g.section,
+      total: g._count._all,
+      withQuiz: quizMap.get(key(g)) ?? 0,
+    })),
+  });
+});
+
 // Bitta quizga biriktirilgan barcha o'quv-reja joylashuvlari (faqat admin).
 // Muharrirdagi "Sozlamalar → O'quv rejaga qo'shish" paneli shu orqali joriy
 // holatni ko'rsatadi. Bir quiz bir nechta yo'nalish/bo'lim/yilda — har biri

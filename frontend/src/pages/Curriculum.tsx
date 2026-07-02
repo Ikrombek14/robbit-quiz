@@ -37,6 +37,16 @@ interface LessonPlan {
   quiz: LinkedQuiz | null;
 }
 
+// Guruh bo'yicha hisob — filtr tugmalarida son ko'rsatish uchun (/curriculum/counts)
+interface CountGroup {
+  subject: Subject;
+  ageGroup: AgeGroup;
+  year: number;
+  section: string | null;
+  total: number;
+  withQuiz: number;
+}
+
 const AGE_GROUPS: { key: AgeGroup; label: string }[] = [
   { key: "MIDDLE", label: "Middle (9–11 yosh)" },
   { key: "SENIOR", label: "Senior (12–15 yosh)" },
@@ -56,21 +66,48 @@ interface EditState {
   order: number;
 }
 
+// Oxirgi tanlangan filtrlar — sahifa qayta ochilganda tiklanadi
+const STORAGE_KEY = "robbit_curriculum_filters";
+interface SavedFilters {
+  subject?: Subject;
+  ageGroup?: AgeGroup | null;
+  year?: number | null;
+  section?: string;
+}
+function loadSaved(): SavedFilters {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as SavedFilters;
+  } catch {
+    return {};
+  }
+}
+
 export default function Curriculum() {
   const { teacher } = useAuth();
   const navigate = useNavigate();
   const isAdmin = teacher?.isAdmin === true;
   const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati (quizni biriktira oladi)
 
-  const [subject, setSubject] = useState<Subject>("ROBOTEXNIKA");
-  const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(null);
-  const [year, setYear] = useState<number | null>(null);
-  const [section, setSection] = useState<string>("DESIGN");
+  const saved = useRef(loadSaved()).current;
+  const [subject, setSubject] = useState<Subject>(saved.subject === "DASTURLASH" ? "DASTURLASH" : "ROBOTEXNIKA");
+  const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(saved.ageGroup ?? null);
+  const [year, setYear] = useState<number | null>(saved.year ?? null);
+  const [section, setSection] = useState<string>(saved.section ?? "DESIGN");
   const [lessons, setLessons] = useState<LessonPlan[]>([]);
+  const [counts, setCounts] = useState<CountGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const [quizList, setQuizList] = useState<QuizListItem[]>([]);
+
+  // Toast — brauzer alert() o'rniga
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showToast(msg: string) {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
+  }
 
   // Qo'shish
   const [showAdd, setShowAdd] = useState(false);
@@ -102,6 +139,37 @@ export default function Curriculum() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const allFiltersSet = ageGroup !== null && year !== null;
+
+  // Filtrlar o'zgarganda localStorage'ga saqlaymiz
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ subject, ageGroup, year, section }));
+    } catch {
+      /* ignore */
+    }
+  }, [subject, ageGroup, year, section]);
+
+  // Guruh hisoblari — tanlashdan oldin qaysi bo'limda nechta dars borligini ko'rsatadi
+  const loadCounts = useCallback(() => {
+    api<{ groups: CountGroup[] }>("/curriculum/counts")
+      .then((r) => setCounts(r.groups))
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadCounts(); }, [loadCounts]);
+
+  function countAge(ag: AgeGroup): number {
+    return counts.filter((g) => g.subject === subject && g.ageGroup === ag).reduce((a, g) => a + g.total, 0);
+  }
+  function countYear(y: number): number {
+    return counts
+      .filter((g) => g.subject === subject && g.ageGroup === ageGroup && g.year === y)
+      .reduce((a, g) => a + g.total, 0);
+  }
+  function countSection(sec: string): number {
+    return counts
+      .filter((g) => g.subject === subject && g.ageGroup === ageGroup && g.year === year && g.section === sec)
+      .reduce((a, g) => a + g.total, 0);
+  }
 
   // Qidiruvdan dars tanlanganda — filtrlarni o'rnatib, darsni belgilash uchun id saqlaymiz
   function pickLesson(l: LessonHit) {
@@ -160,12 +228,13 @@ export default function Curriculum() {
 
   useEffect(() => { loadLessons(); }, [loadLessons]);
 
+  // Yo'nalish almashganda yosh/yil tanlovi SAQLANADI (reset qilinmaydi)
   function changeSubject(s: Subject) {
-    setSubject(s); setAgeGroup(null); setYear(null); setSection("DESIGN");
+    setSubject(s);
     setShowAdd(false); setEditingId(null);
   }
   function changeAgeGroup(ag: AgeGroup) {
-    setAgeGroup(ag); setYear(null); setShowAdd(false); setEditingId(null);
+    setAgeGroup(ag); setShowAdd(false); setEditingId(null);
   }
 
   function openAdd() {
@@ -214,7 +283,8 @@ export default function Curriculum() {
       });
       const lesson = { ...r.lesson, quiz: newQuizId ? quizForId(newQuizId) : null };
       setLessons((ls) => [...ls, lesson].sort((a, b) => a.order - b.order));
-      // #4: forma ochiq qoladi — ketma-ket tez kiritish (tartib +1, fokus mavzuga)
+      loadCounts();
+      // Forma ochiq qoladi — ketma-ket tez kiritish (tartib +1, fokus mavzuga)
       setNewTitle(""); setNewAuthor(""); setNewIsDemo(false); setNewQuizId("");
       setNewOrder((o) => o + 1);
       titleRef.current?.focus();
@@ -235,10 +305,11 @@ export default function Curriculum() {
         }),
       });
       await loadLessons();
+      loadCounts();
       setShowFolderAdd(false);
-      alert(`${r.created} ta dars qo'shildi${r.skipped ? `, ${r.skipped} ta allaqachon mavjud edi` : ""}.`);
+      showToast(`✅ ${r.created} ta dars qo'shildi${r.skipped ? `, ${r.skipped} ta allaqachon mavjud edi` : ""}.`);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Xatolik");
+      showToast(e instanceof Error ? e.message : "Xatolik");
     } finally { setSaving(false); }
   }
 
@@ -257,10 +328,11 @@ export default function Curriculum() {
         }),
       });
       await loadLessons();
+      loadCounts();
       setShowBulkAdd(false); setBulkText("");
-      alert(`${r.created} ta dars qo'shildi.`);
+      showToast(`✅ ${r.created} ta dars qo'shildi.`);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Xatolik");
+      showToast(e instanceof Error ? e.message : "Xatolik");
     } finally { setSaving(false); }
   }
 
@@ -284,6 +356,7 @@ export default function Curriculum() {
             : x
         ).sort((a, b) => a.order - b.order)
       );
+      loadCounts();
       setEditingId(null);
     } finally { setEditSaving(false); }
   }
@@ -292,6 +365,7 @@ export default function Curriculum() {
     if (!confirm("Darsni o'chirishni tasdiqlaysizmi?")) return;
     await api(`/curriculum/${id}`, { method: "DELETE" });
     setLessons((ls) => ls.filter((l) => l.id !== id));
+    loadCounts();
   }
 
   // Drag&drop: sudralgan darsni nishon dars o'rniga qo'yamiz, tartibni 0..n-1
@@ -324,18 +398,16 @@ export default function Curriculum() {
     setLessons((ls) =>
       ls.map((x) => (x.id === l.id ? { ...x, quizId: quizId || null, quiz: quizId ? quizForId(quizId) : null } : x)),
     );
+    loadCounts();
   }
 
-  const btnBase: React.CSSProperties = {
-    border: "none", cursor: "pointer", borderRadius: 8,
-    display: "flex", alignItems: "center", gap: 4,
-    padding: "4px 8px", fontSize: 13, fontWeight: 600,
-  };
+  const withQuizCount = lessons.filter((l) => l.quiz).length;
+  const progressPct = lessons.length > 0 ? Math.round((withQuizCount / lessons.length) * 100) : 0;
 
   return (
     <Shell>
     <div style={{ maxWidth: 860, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 28, marginBottom: 4 }}>O'quv dastur</h1>
           <p className="muted" style={{ margin: 0, fontSize: 15 }}>
@@ -345,66 +417,61 @@ export default function Curriculum() {
         <SearchBar scope="lessons" onPick={(item) => pickLesson(item as LessonHit)} placeholder="Dars qidirish…" />
       </div>
 
-      {/* Subject toggle */}
-      <div style={{ display: "inline-flex", background: "var(--surface-high)", borderRadius: 999, padding: 4, gap: 4, marginBottom: 28 }}>
+      {/* Yo'nalish (subject) */}
+      <div className="cur-seg" style={{ marginBottom: 20 }}>
         {(["ROBOTEXNIKA", "DASTURLASH"] as Subject[]).map((s) => (
-          <button key={s} onClick={() => changeSubject(s)} style={{
-            padding: "8px 28px", borderRadius: 999, border: "none", cursor: "pointer",
-            fontWeight: 700, fontSize: 15,
-            background: subject === s ? "var(--primary)" : "transparent",
-            color: subject === s ? "#fff" : "var(--ink)", transition: "all 0.15s",
-          }}>
+          <button key={s} className={subject === s ? "active" : ""} onClick={() => changeSubject(s)}>
             {s === "ROBOTEXNIKA" ? "Robotexnika" : "Dasturlash"}
           </button>
         ))}
       </div>
 
-      {/* Yosh toifasi */}
-      <div style={{ marginBottom: 16 }}>
-        <div className="muted text-sm" style={{ fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Yosh toifasi</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {AGE_GROUPS.map((ag) => (
-            <button key={ag.key} onClick={() => changeAgeGroup(ag.key)} style={{
-              padding: "8px 20px", borderRadius: 10, border: "2px solid",
-              borderColor: ageGroup === ag.key ? "var(--primary)" : "var(--border)",
-              background: ageGroup === ag.key ? "var(--primary-soft)" : "transparent",
-              color: ageGroup === ag.key ? "var(--primary)" : "var(--ink)",
-              fontWeight: 600, cursor: "pointer", fontSize: 14, transition: "all 0.15s",
-            }}>{ag.label}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* O'quv yili */}
-      {ageGroup && (
-        <div style={{ marginBottom: 28 }}>
-          <div className="muted text-sm" style={{ fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>O'quv yili</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {[1, 2].map((y) => (
-              <button key={y} onClick={() => setYear(y)} style={{
-                padding: "8px 28px", borderRadius: 10, border: "2px solid",
-                borderColor: year === y ? "var(--c2)" : "var(--border)",
-                background: year === y ? "#e8fff0" : "transparent",
-                color: year === y ? "var(--c2)" : "var(--ink)",
-                fontWeight: 600, cursor: "pointer", fontSize: 14, transition: "all 0.15s",
-              }}>{y}-yil</button>
-            ))}
+      {/* Yosh toifasi + o'quv yili — bitta ixcham qator, har birida dars soni */}
+      <div className="cur-filters">
+        <div className="cur-filter-group">
+          <span className="cur-filter-label">Yosh toifasi</span>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {AGE_GROUPS.map((ag) => {
+              const n = countAge(ag.key);
+              return (
+                <button key={ag.key} className={`cur-chip ${ageGroup === ag.key ? "active" : ""}`} onClick={() => changeAgeGroup(ag.key)}>
+                  {ag.label}
+                  {n > 0 && <span className="cur-count">{n}</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
-      )}
+        {ageGroup && (
+          <div className="cur-filter-group">
+            <span className="cur-filter-label">O'quv yili</span>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[1, 2].map((y) => {
+                const n = countYear(y);
+                return (
+                  <button key={y} className={`cur-chip ${year === y ? "active" : ""}`} onClick={() => setYear(y)}>
+                    {y}-yil
+                    {n > 0 && <span className="cur-count">{n}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* Section tablar */}
+      {/* Section tablar (faqat Robotexnika) — har tabda dars soni */}
       {subject === "ROBOTEXNIKA" && allFiltersSet && (
-        <div style={{ display: "flex", borderBottom: "2px solid var(--border)", marginBottom: 20 }}>
-          {SECTIONS.map((s) => (
-            <button key={s.key} onClick={() => setSection(s.key)} style={{
-              padding: "10px 24px", border: "none", background: "none", cursor: "pointer",
-              fontWeight: 700, fontSize: 15,
-              color: section === s.key ? "var(--primary)" : "var(--muted)",
-              borderBottom: section === s.key ? "2px solid var(--primary)" : "2px solid transparent",
-              marginBottom: -2, transition: "all 0.15s",
-            }}>{s.label}</button>
-          ))}
+        <div className="cur-tabs">
+          {SECTIONS.map((s) => {
+            const n = countSection(s.key);
+            return (
+              <button key={s.key} className={`cur-tab ${section === s.key ? "active" : ""}`} onClick={() => setSection(s.key)}>
+                {s.label}
+                {n > 0 && <span className="cur-count">{n}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -415,12 +482,31 @@ export default function Curriculum() {
           <p className="muted" style={{ margin: 0, fontSize: 16 }}>{!ageGroup ? "Yosh toifasini tanlang" : "O'quv yilini tanlang"}</p>
         </div>
       ) : loading ? (
-        <p className="muted" style={{ marginTop: 16 }}>Yuklanmoqda…</p>
+        <div>
+          <div className="cur-skel" />
+          <div className="cur-skel" />
+          <div className="cur-skel" />
+          <div className="cur-skel" />
+        </div>
       ) : (
         <div>
           {lessons.length === 0 && !showAdd && (
             <div className="card" style={{ padding: "32px 24px", textAlign: "center" }}>
-              <p className="muted" style={{ margin: 0 }}>Bu bo'lim uchun hali dars qo'shilmagan.</p>
+              <p className="muted" style={{ margin: 0 }}>
+                Bu bo'lim uchun hali dars qo'shilmagan.
+                {isAdmin && " Pastdagi tugmalar bilan dars qo'shing."}
+              </p>
+            </div>
+          )}
+
+          {/* Progress: nechta darsga slayd biriktirilgan */}
+          {lessons.length > 0 && (
+            <div className="cur-progress">
+              <span style={{ whiteSpace: "nowrap" }}>
+                📊 {withQuizCount}/{lessons.length} darsga slayd biriktirilgan
+              </span>
+              <div className="bar"><div className="bar-fill" style={{ width: `${progressPct}%` }} /></div>
+              <span className="muted" style={{ whiteSpace: "nowrap" }}>{progressPct}%</span>
             </div>
           )}
 
@@ -432,14 +518,11 @@ export default function Curriculum() {
               if (isEditing && isAdmin) {
                 // ---- EDIT REJIMI ----
                 return (
-                  <div key={l.id} style={{
-                    padding: 16, background: "var(--surface-low)", borderRadius: 12,
-                    border: "2px solid var(--primary)",
-                  }}>
+                  <div key={l.id} className="cur-form editing" style={{ marginTop: 0 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                       {/* Tartib raqami */}
                       <div style={{ width: 72 }}>
-                        <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>#</label>
+                        <label className="f-label">#</label>
                         <input type="number" min={1} value={editState.order}
                           onChange={(e) => setEditState((s) => ({ ...s, order: Number(e.target.value) }))}
                           style={{ textAlign: "center" }}
@@ -447,7 +530,7 @@ export default function Curriculum() {
                       </div>
                       {/* Mavzu */}
                       <div style={{ flex: 1, minWidth: 180 }}>
-                        <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Dars mavzusi *</label>
+                        <label className="f-label">Dars mavzusi *</label>
                         <input value={editState.title} autoFocus
                           onChange={(e) => setEditState((s) => ({ ...s, title: e.target.value }))}
                           onKeyDown={(e) => e.key === "Enter" && saveEdit(l)}
@@ -455,7 +538,7 @@ export default function Curriculum() {
                       </div>
                       {/* Muallif */}
                       <div style={{ width: 150 }}>
-                        <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Muallif</label>
+                        <label className="f-label">Muallif</label>
                         <input value={editState.author}
                           onChange={(e) => setEditState((s) => ({ ...s, author: e.target.value }))}
                           placeholder="Ixtiyoriy"
@@ -463,7 +546,7 @@ export default function Curriculum() {
                       </div>
                       {/* Quiz — yozib qidiriladigan */}
                       <div style={{ flex: 1, minWidth: 180 }}>
-                        <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Slayd biriktirish</label>
+                        <label className="f-label">Slayd biriktirish</label>
                         <QuizPicker quizzes={quizList} value={editState.quizId}
                           onChange={(id) => setEditState((s) => ({ ...s, quizId: id }))} />
                       </div>
@@ -494,12 +577,8 @@ export default function Curriculum() {
                   onDragOver={isAdmin ? (e) => { e.preventDefault(); if (dragId && dragId !== l.id) setDragOverId(l.id); } : undefined}
                   onDragLeave={isAdmin ? () => setDragOverId((cur) => (cur === l.id ? null : cur)) : undefined}
                   onDrop={isAdmin ? (e) => { e.preventDefault(); dropOnLesson(l.id); } : undefined}
-                  style={{
-                  display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
-                  background: "var(--surface-low)", borderRadius: 12,
-                  border: dragOverId === l.id ? "2px solid var(--primary)" : "1px solid var(--border)",
-                  opacity: dragId === l.id ? 0.4 : 1,
-                }}>
+                  className={`cur-row ${dragOverId === l.id ? "drag-over" : ""} ${dragId === l.id ? "dragging" : ""}`}
+                >
                   {/* Sudrash uchun dastak — faqat admin */}
                   {isAdmin && (
                     <span className="material-symbols-outlined" title="Sudrab tartibini o'zgartiring"
@@ -507,13 +586,15 @@ export default function Curriculum() {
                   )}
                   {/* Holat belgisi */}
                   {hasQuiz ? (
-                    <span className="material-symbols-outlined" style={{ color: "#22c55e", fontSize: 22, flexShrink: 0 }}>task_alt</span>
+                    <span className="material-symbols-outlined" title="Slayd biriktirilgan — dars tayyor"
+                      style={{ color: "var(--success)", fontSize: 22, flexShrink: 0 }}>task_alt</span>
                   ) : (
-                    <span className="material-symbols-outlined" style={{ color: "#f59e0b", fontSize: 22, flexShrink: 0 }}>schedule</span>
+                    <span className="material-symbols-outlined" title="Slayd hali biriktirilmagan"
+                      style={{ color: "var(--warn)", fontSize: 22, flexShrink: 0 }}>schedule</span>
                   )}
 
                   {/* Mavzu va biriktirilgan quiz */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
                     <div
                       style={{
                         fontWeight: 600, fontSize: 15,
@@ -529,7 +610,7 @@ export default function Curriculum() {
                         <span className="material-symbols-outlined" style={{ fontSize: 15, marginLeft: 5, verticalAlign: "middle", opacity: 0.7 }}>edit_note</span>
                       )}
                       {l.isDemo && (
-                        <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#22c55e", marginLeft: 8, verticalAlign: "middle" }} />
+                        <span className="cur-badge-demo" title="Demo Day darsi">Demo Day</span>
                       )}
                     </div>
                     {l.quiz && (
@@ -545,20 +626,25 @@ export default function Curriculum() {
                     </span>
                   )}
 
-                  {/* Boshlash tugmasi — faqat quiz biriktirilganda */}
+                  {/* Ko'rish (preview) + Boshlash — faqat quiz biriktirilganda */}
                   {hasQuiz && (
-                    <button
-                      onClick={() => navigate(`/host/${l.quiz!.id}`)}
-                      style={{ ...btnBase, background: "#22c55e", color: "#fff", padding: "6px 14px", flexShrink: 0 }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>play_arrow</span>
-                      Boshlash
-                    </button>
+                    <>
+                      <button className="cur-mini-btn view" onClick={() => navigate(`/activity/${l.quiz!.id}`)}
+                        title="Slaydlarni oldindan ko'rish">
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
+                        Ko'rish
+                      </button>
+                      <button className="cur-mini-btn play" onClick={() => navigate(`/host/${l.quiz!.id}`)}
+                        title="O'yinni boshlash">
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>play_arrow</span>
+                        Boshlash
+                      </button>
+                    </>
                   )}
 
                   {/* canCreate ustoz (admin emas) — o'z slaydini biriktirish (yozib qidiriladigan) */}
                   {!isAdmin && canCreate && (
-                    <div style={{ flexShrink: 0, width: 200 }} title="Darsga o'z slaydingizni biriktirish">
+                    <div className="cur-picker" style={{ flexShrink: 0, width: 200 }} title="Darsga o'z slaydingizni biriktirish">
                       <QuizPicker quizzes={quizList} value={l.quizId ?? ""}
                         onChange={(id) => attachQuiz(l, id)} placeholder="Slayd biriktirish…" />
                     </div>
@@ -567,12 +653,10 @@ export default function Curriculum() {
                   {/* Admin tugmalari */}
                   {isAdmin && (
                     <>
-                      <button onClick={() => openEdit(l)} title="Tahrirlash"
-                        style={{ ...btnBase, background: "var(--primary-soft)", color: "var(--primary)", flexShrink: 0 }}>
+                      <button className="cur-mini-btn edit" onClick={() => openEdit(l)} title="Tahrirlash">
                         <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
                       </button>
-                      <button onClick={() => removeLesson(l.id)} title="O'chirish"
-                        style={{ ...btnBase, background: "var(--error-container)", color: "var(--error)", flexShrink: 0 }}>
+                      <button className="cur-mini-btn del" onClick={() => removeLesson(l.id)} title="O'chirish">
                         <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
                       </button>
                     </>
@@ -586,11 +670,11 @@ export default function Curriculum() {
           {isAdmin && (
             <>
             {showAdd && (
-              <div style={{ marginTop: 12, padding: 16, background: "var(--surface-low)", borderRadius: 12, border: "2px dashed var(--border)" }}>
+              <div className="cur-form">
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                   {/* Tartib raqami */}
                   <div style={{ width: 72 }}>
-                    <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>#</label>
+                    <label className="f-label">#</label>
                     <input type="number" min={1} value={newOrder}
                       onChange={(e) => setNewOrder(Number(e.target.value))}
                       style={{ textAlign: "center" }}
@@ -598,7 +682,7 @@ export default function Curriculum() {
                   </div>
                   {/* Mavzu */}
                   <div style={{ flex: 1, minWidth: 200 }}>
-                    <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Dars mavzusi *</label>
+                    <label className="f-label">Dars mavzusi *</label>
                     <input ref={titleRef} value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
                       placeholder="Masalan: Google Docs bilan ishlash"
                       autoFocus onKeyDown={(e) => e.key === "Enter" && addLesson()}
@@ -606,12 +690,12 @@ export default function Curriculum() {
                   </div>
                   {/* Muallif */}
                   <div style={{ width: 160 }}>
-                    <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Muallif</label>
+                    <label className="f-label">Muallif</label>
                     <input value={newAuthor} onChange={(e) => setNewAuthor(e.target.value)} placeholder="Ixtiyoriy" />
                   </div>
-                  {/* Quiz — yozib qidiriladigan; tanlanганда mavzu bo'sh bo'lsa avtomatik to'ladi */}
+                  {/* Quiz — yozib qidiriladigan; tanlanganda mavzu bo'sh bo'lsa avtomatik to'ladi */}
                   <div style={{ flex: 1, minWidth: 200 }}>
-                    <label className="text-sm" style={{ fontWeight: 700, display: "block", marginBottom: 4 }}>Slayd biriktirish</label>
+                    <label className="f-label">Slayd biriktirish</label>
                     <QuizPicker quizzes={quizList} value={newQuizId}
                       placeholder="— Ixtiyoriy —"
                       onChange={(id) => {
@@ -640,7 +724,7 @@ export default function Curriculum() {
 
             {/* Papkadan ommaviy dars yaratish */}
             {showFolderAdd && (
-              <div style={{ marginTop: 12, padding: 16, background: "var(--surface-low)", borderRadius: 12, border: "2px dashed var(--border)" }}>
+              <div className="cur-form">
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>📁 Papkadan darslar yaratish</div>
                 <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
                   Tanlangan papkadagi <b>har quizdan avtomatik dars</b> yaratiladi (kutubxona tartibida,
@@ -670,7 +754,7 @@ export default function Curriculum() {
 
             {/* Mavzular ro'yxatidan ommaviy qo'shish */}
             {showBulkAdd && (
-              <div style={{ marginTop: 12, padding: 16, background: "var(--surface-low)", borderRadius: 12, border: "2px dashed var(--border)" }}>
+              <div className="cur-form">
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>📋 Ro'yxatdan darslar qo'shish</div>
                 <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
                   Har qatorga bitta dars mavzusi. Quizni keyinroq biriktirasiz. Boshidagi "1." kabi raqamlar avtomatik olib tashlanadi.
@@ -704,6 +788,8 @@ export default function Curriculum() {
           )}
         </div>
       )}
+
+      {toast && <div className="cur-toast">{toast}</div>}
     </div>
     </Shell>
   );

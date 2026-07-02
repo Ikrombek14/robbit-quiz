@@ -24,6 +24,15 @@
   --danger: #e23b3b;
   --danger-soft: #fde3e3;
   --focus: rgba(232, 119, 46, 0.4);
+  /* sirt darajalari va holat ranglari (ko'p sahifada ishlatiladi) */
+  --surface-low: #fdfaf4;
+  --surface-high: #efe7da;
+  --error: #e23b3b;
+  --error-container: #fde3e3;
+  --success: #2f9e57;
+  --success-soft: #e2f4e8;
+  --warn: #d98a00;
+  --warn-soft: #fdf1d8;
   /* javob ranglari A/B/C/D */
   --c0: #2f6df0;
   --c1: #ec4899;
@@ -56,6 +65,15 @@
   --danger: #ff6b6b;
   --danger-soft: #3a2326;
   --focus: rgba(95, 168, 255, 0.4);
+  /* sirt darajalari va holat ranglari (ko'p sahifada ishlatiladi) */
+  --surface-low: #262b34;
+  --surface-high: #303643;
+  --error: #ff6b6b;
+  --error-container: #3a2326;
+  --success: #4ade80;
+  --success-soft: #17301f;
+  --warn: #fbbf24;
+  --warn-soft: #332a10;
 }
 
 * { box-sizing: border-box; }
@@ -1084,3 +1102,89 @@ img, svg, video { max-width: 100%; height: auto; }
 }
 .stats-table td:first-child { border-left: 1px solid var(--border); border-radius: 10px 0 0 10px; }
 .stats-table td:last-child { border-right: 1px solid var(--border); border-radius: 0 10px 10px 0; }
+
+/* ---------- O'quv dastur (Curriculum) ---------- */
+.cur-seg { display: inline-flex; background: var(--surface-high); border-radius: 999px; padding: 4px; gap: 4px; }
+.cur-seg button {
+  padding: 8px 24px; border-radius: 999px; border: none; cursor: pointer;
+  font-weight: 700; font-size: 15px; background: transparent; color: var(--ink); transition: all 0.15s;
+}
+.cur-seg button.active { background: var(--primary); color: var(--on-primary); }
+
+.cur-filters { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 20px; }
+.cur-filter-group { display: flex; flex-direction: column; gap: 8px; }
+.cur-filter-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.cur-chip {
+  padding: 8px 16px; border-radius: 10px; border: 2px solid var(--border);
+  background: transparent; color: var(--ink); font-weight: 600; cursor: pointer;
+  font-size: 14px; transition: all 0.15s; display: inline-flex; align-items: center; gap: 8px;
+}
+.cur-chip:hover { border-color: var(--primary); }
+.cur-chip.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.cur-count { font-size: 12px; font-weight: 700; background: var(--surface-high); color: var(--muted); border-radius: 999px; padding: 1px 8px; }
+.cur-chip.active .cur-count { background: var(--primary); color: var(--on-primary); }
+
+.cur-tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
+.cur-tab {
+  padding: 10px 20px; border: none; background: none; cursor: pointer; font-weight: 700; font-size: 15px;
+  color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
+  white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;
+}
+.cur-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+.cur-progress {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  background: var(--surface-low); border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 12px; font-size: 14px; font-weight: 600;
+}
+.cur-progress .bar { flex: 1; margin: 0; height: 8px; }
+.cur-progress .bar-fill { background: var(--success); }
+
+.cur-row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  background: var(--surface-low); border-radius: 12px; border: 1px solid var(--border);
+}
+.cur-row.drag-over { border: 2px solid var(--primary); padding: 11px 15px; }
+.cur-row.dragging { opacity: 0.4; }
+
+.cur-badge-demo {
+  font-size: 11px; font-weight: 800; background: var(--success-soft); color: var(--success);
+  border-radius: 6px; padding: 2px 8px; margin-left: 8px; vertical-align: middle; white-space: nowrap;
+}
+
+.cur-mini-btn {
+  border: none; cursor: pointer; border-radius: 8px; display: inline-flex; align-items: center;
+  gap: 4px; padding: 6px 12px; font-size: 13px; font-weight: 600; flex-shrink: 0; transition: filter 0.15s;
+}
+.cur-mini-btn:hover { filter: brightness(0.95); }
+.cur-mini-btn.play { background: var(--success); color: #fff; }
+.cur-mini-btn.view { background: var(--surface-high); color: var(--ink); }
+.cur-mini-btn.edit { background: var(--primary-soft); color: var(--primary); }
+.cur-mini-btn.del { background: var(--error-container); color: var(--error); }
+
+.cur-form { margin-top: 12px; padding: 16px; background: var(--surface-low); border-radius: 12px; border: 2px dashed var(--border); }
+.cur-form.editing { border: 2px solid var(--primary); }
+.cur-form label.f-label { font-size: 14px; font-weight: 700; display: block; margin-bottom: 4px; }
+
+.cur-skel {
+  height: 58px; border-radius: 12px; margin-bottom: 8px;
+  background: linear-gradient(90deg, var(--surface-low) 25%, var(--surface-high) 50%, var(--surface-low) 75%);
+  background-size: 200% 100%; animation: cur-skel 1.1s infinite linear;
+}
+@keyframes cur-skel { to { background-position: -200% 0; } }
+
+.cur-toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--navy); color: #fff; padding: 12px 20px; border-radius: 12px;
+  font-weight: 600; font-size: 14px; z-index: 100; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  animation: cur-toast 0.2s ease-out; max-width: min(90vw, 480px); text-align: center;
+}
+@keyframes cur-toast { from { opacity: 0; transform: translateX(-50%) translateY(8px); } }
+
+@media (max-width: 720px) {
+  .cur-row { flex-wrap: wrap; padding: 10px 12px; }
+  .cur-row .cur-picker { width: 100% !important; }
+  .cur-seg button { padding: 8px 16px; font-size: 14px; }
+  .cur-filters { gap: 14px; }
+}

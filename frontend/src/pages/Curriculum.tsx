@@ -7,9 +7,9 @@ import SearchBar, { type LessonHit } from "../components/SearchBar";
 import QuizPicker from "../components/QuizPicker";
 import type { QuizListItem, FolderItem } from "../types";
 
-// Har bir dars kartasi biri ikkinchisidan ajralib tursin — navbatma-navbat yumshoq fon
-// + chap chetda rangli aksent chiziq. Ranglar brend pastel palitrasidan; alfa past
-// bo'lgani uchun light va dark mavzuda ham yaxshi o'qiladi. Karta tartibi (index) bo'yicha aylanadi.
+// Darslar biriktirilgan slayd PAPKASI bo'yicha ranglanadi: bir papkadagi darslar bir xil
+// tusda, boshqa papkadagilar boshqa rangda. Papkasi (yoki slaydi) yo'q darslar neytral.
+// Ranglar brend pastel palitrasidan; alfa past bo'lgani uchun light/dark mavzuda ham o'qiladi.
 const LESSON_TINTS: { bg: string; accent: string }[] = [
   { bg: "rgba(76, 141, 255, 0.09)", accent: "#4c8dff" }, // ko'k
   { bg: "rgba(34, 201, 147, 0.09)", accent: "#22c993" }, // yashil-mint
@@ -32,6 +32,8 @@ type AgeGroup = "MIDDLE" | "SENIOR";
 interface LinkedQuiz {
   id: string;
   title: string;
+  folderId: string | null;
+  folder: { name: string } | null;
   _count: { slides: number };
 }
 
@@ -304,7 +306,10 @@ export default function Curriculum() {
 
   function quizForId(id: string): LinkedQuiz | null {
     const q = quizList.find((q) => q.id === id);
-    return q ? { id: q.id, title: q.title, _count: q._count } : null;
+    if (!q) return null;
+    const fid = q.folderId ?? null;
+    const fname = fid ? (folders.find((f) => f.id === fid)?.name ?? null) : null;
+    return { id: q.id, title: q.title, folderId: fid, folder: fname ? { name: fname } : null, _count: q._count };
   }
 
   async function addLesson() {
@@ -447,6 +452,15 @@ export default function Curriculum() {
   const withQuizCount = lessons.filter((l) => l.quiz).length;
   const progressPct = lessons.length > 0 ? Math.round((withQuizCount / lessons.length) * 100) : 0;
 
+  // Papka -> rang indeksi: ro'yxatda papka birinchi uchragan tartibda raqamlanadi,
+  // shunda yonma-yon turgan har xil papkalar (odatda) har xil rang oladi.
+  const folderOrder = new Map<string, number>();
+  for (const l of lessons) {
+    const fid = l.quiz?.folderId;
+    if (fid && !folderOrder.has(fid)) folderOrder.set(fid, folderOrder.size);
+  }
+  const folderColorIndex = (fid: string) => folderOrder.get(fid) ?? 0;
+
   return (
     <Shell>
     <div style={{ maxWidth: 860, margin: "0 auto" }}>
@@ -578,10 +592,13 @@ export default function Curriculum() {
           )}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {lessons.map((l, idx) => {
+            {lessons.map((l) => {
               const hasQuiz = Boolean(l.quiz);
               const isEditing = editingId === l.id;
-              const tint = LESSON_TINTS[idx % LESSON_TINTS.length];
+              // Papka bo'yicha rang: har papkaga (ro'yxatda birinchi uchragani tartibida)
+              // palitradan bitta tus biriktiriladi; shu papkadagi barcha darslar shu tusda.
+              const folderId = l.quiz?.folderId ?? null;
+              const tint = folderId ? LESSON_TINTS[folderColorIndex(folderId) % LESSON_TINTS.length] : null;
 
               if (isEditing && isAdmin) {
                 // ---- EDIT REJIMI ----
@@ -648,10 +665,10 @@ export default function Curriculum() {
                   className={`cur-row ${dragOverId === l.id ? "drag-over" : ""} ${dragId === l.id ? "dragging" : ""} ${selectMode && selectedIds.has(l.id) ? "selected" : ""}`}
                   onClick={selectMode ? () => toggleSelect(l.id) : undefined}
                   style={{
-                    // Har dars uchun navbatdagi yumshoq fon + chap aksent chiziq (CSS o'zgaruvchilari orqali,
-                    // shunda .selected / .drag-over holatlari baribir ustun bo'ladi)
-                    ["--row-tint" as string]: tint.bg,
-                    ["--row-accent" as string]: tint.accent,
+                    // Papka tusi — yumshoq fon + chap aksent chiziq (CSS o'zgaruvchilari orqali,
+                    // shunda .selected / .drag-over holatlari baribir ustun bo'ladi).
+                    // Papkasiz dars — neytral (o'zgaruvchi berilmaydi, oddiy sirt fonida qoladi).
+                    ...(tint ? { ["--row-tint" as string]: tint.bg, ["--row-accent" as string]: tint.accent } : {}),
                     ...(selectMode ? { cursor: "pointer" } : {}),
                   }}
                 >
@@ -694,8 +711,20 @@ export default function Curriculum() {
                       )}
                     </div>
                     {l.quiz && (
-                      <div style={{ marginTop: 3, fontSize: 13, color: "var(--muted)" }}>
-                        📑 {l.quiz.title} · {l.quiz._count.slides} ta slayd
+                      <div style={{ marginTop: 3, fontSize: 13, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span>📑 {l.quiz.title} · {l.quiz._count.slides} ta slayd</span>
+                        {/* Papka yorlig'i — karta tusi qaysi papkadanligini bildiradi */}
+                        {l.quiz.folder && tint && (
+                          <span title={`Papka: ${l.quiz.folder.name}`}
+                            style={{
+                              display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 700,
+                              padding: "1px 8px", borderRadius: 999, whiteSpace: "nowrap",
+                              background: tint.bg, color: tint.accent, border: `1px solid ${tint.accent}`,
+                            }}>
+                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: tint.accent }} />
+                            {l.quiz.folder.name}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>

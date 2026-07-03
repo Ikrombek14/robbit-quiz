@@ -55,7 +55,12 @@ curriculumRouter.get("/", requireApproved, async (req, res) => {
   const quizzes = quizIds.length
     ? await prisma.quiz.findMany({
         where: { id: { in: quizIds } },
-        select: { id: true, title: true, _count: { select: { slides: true } } },
+        // folderId + papka nomi — o'quv dasturda darslarni papkasi bo'yicha ranglash uchun
+        select: {
+          id: true, title: true, folderId: true,
+          folder: { select: { name: true } },
+          _count: { select: { slides: true } },
+        },
       })
     : [];
   const quizMap = new Map(quizzes.map((q) => [q.id, q]));

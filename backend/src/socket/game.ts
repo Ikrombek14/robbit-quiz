@@ -16,6 +16,9 @@ interface GamePlayer {
   playerId: string;
   socketId: string;
   nickname: string;
+  avatar: string; // lobby'da tanlangan emoji-avatar ("" = tanlanmagan)
+  typingWpm: number; // lobby typing musobaqasi — eng yaxshi natija (0 = qatnashmagan)
+  typingAcc: number; // typing aniqligi, %
   score: number;
   lastGain: number;
   answeredCurrent: boolean;
@@ -123,7 +126,16 @@ function connectedPlayers(game: GameState) {
 }
 // Host ro'yxati uchun — id bilan (kick qilish imkoni uchun)
 function lobbyPlayers(game: GameState) {
-  return connectedPlayers(game).map((p) => ({ id: p.playerId, nickname: p.nickname }));
+  return connectedPlayers(game).map((p) => ({ id: p.playerId, nickname: p.nickname, avatar: p.avatar }));
+}
+
+// Lobby typing musobaqasi reytingi — natijasi borlar, WPM bo'yicha (TOP-10)
+function typingBoard(game: GameState) {
+  return connectedPlayers(game)
+    .filter((p) => p.typingWpm > 0)
+    .sort((a, b) => b.typingWpm - a.typingWpm)
+    .slice(0, 10)
+    .map((p) => ({ nickname: p.nickname, avatar: p.avatar, wpm: p.typingWpm, acc: p.typingAcc }));
 }
 
 // ----- TEST rejimi yordamchilari -----
@@ -473,6 +485,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       playerId,
       socketId: socket.id,
       nickname,
+      avatar: "",
+      typingWpm: 0,
+      typingAcc: 0,
       score: 0,
       lastGain: 0,
       answeredCurrent: false,
@@ -495,6 +510,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     socket.data.playerId = playerId;
     cb?.({ ok: true, playerId, settings: clientSettings(game), status: game.status, mode: game.mode });
     io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
+    // Lobby'da typing musobaqasi ketayotgan bo'lsa — joriy reytingni ham beramiz
+    if (game.status === "lobby") {
+      const rows = typingBoard(game);
+      if (rows.length) socket.emit("typing:board", { rows });
+    }
     if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt });
     // Kech qo'shilgan o'quvchini darhol jonli o'yinga/testga tushiramiz
     if (game.status !== "lobby") {
@@ -532,6 +552,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       settings: clientSettings(game),
     });
     io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
+    if (game.status === "lobby") {
+      const rows = typingBoard(game);
+      if (rows.length) socket.emit("typing:board", { rows });
+    }
     // Amaliyot taymeri davom etayotgan bo'lsa, qaytgan o'quvchiga ham ko'rsatamiz
     if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt });
     if (game.status === "active") {
@@ -540,6 +564,36 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     } else if (game.status === "ended") {
       socket.emit("game:ended", { leaderboard: finalLeaderboard(game) });
     }
+  });
+
+  // Lobby: o'quvchi avatar (emoji) tanladi — host ro'yxatida ko'rinadi
+  const AVATARS = ["🤖", "👾", "🦾", "🛸", "🚀", "⚡", "🧠", "🎮", "🦊", "🐼", "🦁", "🐸"];
+  socket.on("player:avatar", (data: { pin: string; avatar: string }) => {
+    const game = games.get(data?.pin);
+    const player = game?.players.get(String(socket.data.playerId ?? ""));
+    if (!game || !player) return;
+    if (!AVATARS.includes(String(data?.avatar ?? ""))) return; // faqat ruxsat etilgan to'plamdan
+    player.avatar = data.avatar;
+    io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
+  });
+
+  // Lobby typing musobaqasi: o'quvchi poygani tugatdi — eng yaxshi natijasi saqlanadi,
+  // yangilangan reyting hammaga (host + o'quvchilar) yuboriladi
+  socket.on("player:typing", (data: { pin: string; wpm: number; acc: number }) => {
+    const game = games.get(data?.pin);
+    const player = game?.players.get(String(socket.data.playerId ?? ""));
+    if (!game || !player || game.status !== "lobby") return;
+    const wpm = Math.round(Number(data?.wpm));
+    const acc = Math.round(Number(data?.acc));
+    if (!Number.isFinite(wpm) || wpm <= 0 || wpm > 400) return; // real bo'lmagan qiymatlar
+    if (!Number.isFinite(acc) || acc < 0 || acc > 100) return;
+    if (wpm > player.typingWpm) {
+      player.typingWpm = wpm;
+      player.typingAcc = acc;
+    }
+    const rows = typingBoard(game);
+    io.to(game.pin).emit("typing:board", { rows });
+    io.to(game.hostSocketId).emit("typing:board", { rows });
   });
 
   function clearGameTimer(game: GameState) {

@@ -4,6 +4,11 @@ import { getSocket } from "../socket";
 import type { LeaderRow, SlideData } from "../types";
 import SlideScene from "../components/SlideScene";
 import TestRunner from "../components/TestRunner";
+import TypingRace, { type TypingRow } from "../components/TypingRace";
+import { randomFact } from "../facts";
+
+// Lobby'da tanlanadigan avatarlar — backend bilan bir xil to'plam (game.ts AVATARS)
+const AVATARS = ["🤖", "👾", "🦾", "🛸", "🚀", "⚡", "🧠", "🎮", "🦊", "🐼", "🦁", "🐸"];
 
 type Phase = "form" | "lobby" | "content" | "question" | "answered" | "reveal" | "ended" | "test" | "kicked";
 
@@ -47,6 +52,11 @@ export default function Join() {
   const [warn, setWarn] = useState("");
   const [gameMode, setGameMode] = useState<"LIVE" | "TEST">("LIVE");
   const [practiceEndsAt, setPracticeEndsAt] = useState(0); // amaliyot (mashq) taymeri
+
+  // Lobby o'yin-kulgi: avatar, typing reytingi; kutish ekranida qiziqarli fakt
+  const [avatar, setAvatar] = useState("");
+  const [typingRows, setTypingRows] = useState<TypingRow[]>([]);
+  const [fact, setFact] = useState("");
 
   // interaktiv javob holatlari
   const [selected, setSelected] = useState<string[]>([]);
@@ -95,6 +105,8 @@ export default function Join() {
       setGameMode("TEST");
       setPhase("test");
     };
+    const onTypingBoard = (d: { rows: TypingRow[] }) => setTypingRows(d.rows ?? []);
+    socket.on("typing:board", onTypingBoard);
     socket.on("test:begin", onTestBegin);
     socket.on("slide:show", onSlide);
     socket.on("answer:received", onReceived);
@@ -106,6 +118,7 @@ export default function Join() {
     socket.on("player:kicked", onKicked);
     socket.on("practice:timer", onPractice);
     return () => {
+      socket.off("typing:board", onTypingBoard);
       socket.off("slide:show", onSlide);
       socket.off("answer:received", onReceived);
       socket.off("timer:update", onTimer);
@@ -212,6 +225,20 @@ export default function Join() {
     setPhase("answered");
   }
 
+  // Javobdan keyin kutish ekranida qiziqarli fakt — har 8 soniyada yangilanadi
+  useEffect(() => {
+    if (phase !== "answered") return;
+    setFact((f) => randomFact(f));
+    const id = setInterval(() => setFact((f) => randomFact(f)), 8000);
+    return () => clearInterval(id);
+  }, [phase]);
+
+  // Lobby'da avatar tanlash — serverga yuboriladi, host ro'yxatida ko'rinadi
+  function pickAvatar(a: string) {
+    setAvatar(a);
+    getSocket().emit("player:avatar", { pin, avatar: a });
+  }
+
   function toggleFs() {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
     else document.exitFullscreen?.().catch(() => {});
@@ -260,9 +287,41 @@ export default function Join() {
     return (
       <div className="center-screen">
         {pracBanner}
-        <div className="card card-narrow center">
-          <h2>✅ Qo'shildingiz!</h2>
-          <p className="muted">Salom, {nickname}! Boshlanishini kuting…</p>
+        <div className="card" style={{ maxWidth: 460, width: "100%" }}>
+          <div className="center">
+            <h2 style={{ marginTop: 0 }}>✅ Qo'shildingiz!</h2>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Salom, {avatar ? `${avatar} ` : ""}{nickname}! Boshlanishini kuting…
+            </p>
+          </div>
+
+          {/* Avatar tanlash — host ekranidagi ro'yxatda ko'rinadi */}
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>O'z belgingni tanla:</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6 }}>
+              {AVATARS.map((a) => (
+                <button
+                  key={a}
+                  onClick={() => pickAvatar(a)}
+                  aria-label={`Avatar ${a}`}
+                  style={{
+                    fontSize: 24, padding: "6px 0", borderRadius: 10, cursor: "pointer",
+                    border: avatar === a ? "2px solid var(--primary)" : "2px solid var(--border)",
+                    background: avatar === a ? "var(--primary-soft, rgba(76,141,255,0.12))" : "var(--surface)",
+                  }}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tezkor yozish musobaqasi — kutish zerikarli bo'lmasin */}
+          <TypingRace
+            board={typingRows}
+            myName={nickname}
+            onFinish={(wpm, acc) => getSocket().emit("player:typing", { pin, wpm, acc })}
+          />
         </div>
       </div>
     );
@@ -524,6 +583,15 @@ export default function Join() {
             <h2>⏳ Javob qabul qilindi</h2>
           )}
           <p className="muted" style={{ marginTop: 8 }}>Keyingi savolni kuting…</p>
+          {/* Kutish zerikarli bo'lmasin — qiziqarli fakt (har 8 soniyada almashadi) */}
+          {fact && (
+            <div style={{
+              marginTop: 14, padding: "10px 14px", borderRadius: 12, textAlign: "left",
+              background: "var(--surface-high, rgba(0,0,0,0.05))", fontSize: 14.5, lineHeight: 1.5,
+            }}>
+              💡 <strong>Bilasanmi?</strong> {fact}
+            </div>
+          )}
         </div>
       </div>
     );

@@ -49,6 +49,14 @@ interface GameSettings {
 interface PlayerRow {
   id: string;
   nickname: string;
+  avatar?: string; // lobby'da tanlangan emoji
+}
+// Lobby typing musobaqasi reytingi qatori
+interface TypingBoardRow {
+  nickname: string;
+  avatar: string;
+  wpm: number;
+  acc: number;
 }
 interface TestProgRow {
   id: string;
@@ -72,6 +80,7 @@ export default function Host() {
   const [pin, setPin] = useState("");
   const [title, setTitle] = useState("");
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [typingRows, setTypingRows] = useState<TypingBoardRow[]>([]); // lobby typing reytingi
   const [slide, setSlide] = useState<PublicSlide | null>(null);
   const [progress, setProgress] = useState({ answered: 0, total: 0 });
   const [answeredNames, setAnsweredNames] = useState<string[]>([]);
@@ -215,6 +224,8 @@ export default function Host() {
       setMode("TEST");
       setPhase((p) => (p === "lobby" || p === "connecting" ? "active" : p));
     };
+    const onTypingBoard = (d: { rows: TypingBoardRow[] }) => setTypingRows(d.rows ?? []);
+    socket.on("typing:board", onTypingBoard);
     socket.on("test:progress", onTestProg);
     socket.on("lobby:update", onLobby);
     socket.on("slide:show", onSlide);
@@ -225,6 +236,7 @@ export default function Host() {
     socket.on("host:flag", onFlag);
     socket.on("practice:timer", onPractice);
     return () => {
+      socket.off("typing:board", onTypingBoard);
       socket.off("lobby:update", onLobby);
       socket.off("slide:show", onSlide);
       socket.off("question:progress", onProgress);
@@ -425,7 +437,8 @@ export default function Host() {
               ) : (
                 players.map((p, i) => (
                   <span className="player-pill" key={p.id}>
-                    <span className="pp-ava">{initial(dispName(p.nickname, i))}</span>
+                    {/* Avatar tanlagan bo'lsa — emoji, bo'lmasa bosh harf */}
+                    <span className="pp-ava">{p.avatar || initial(dispName(p.nickname, i))}</span>
                     {dispName(p.nickname, i)}
                     <button
                       className="kick-btn"
@@ -438,6 +451,19 @@ export default function Host() {
                 ))
               )}
             </div>
+
+            {/* Lobby typing musobaqasi — jonli TOP-5 (proyektorda bolalar ko'rib turadi) */}
+            {typingRows.length > 0 && (
+              <div className="settings-card" style={{ marginBottom: 12 }}>
+                <div className="settings-title">⌨️ Tezkor yozish — eng tezkorlar</div>
+                {typingRows.slice(0, 5).map((r, i) => (
+                  <div key={r.nickname + i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px", fontSize: 15, fontWeight: i === 0 ? 800 : 600 }}>
+                    <span>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`} {r.avatar ? `${r.avatar} ` : ""}{dispName(r.nickname, i)}</span>
+                    <span>{r.wpm} WPM <span className="muted" style={{ fontSize: 12 }}>({r.acc}%)</span></span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="settings-card">
               <div className="settings-title">

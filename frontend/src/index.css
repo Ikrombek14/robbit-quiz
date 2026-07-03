@@ -1242,12 +1242,16 @@ img, svg, video { max-width: 100%; height: auto; }
 
 .cur-row {
   display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-  background: var(--surface-low); border-radius: 12px; border: 1px solid var(--border);
-  transition: border-color 0.12s, background 0.12s;
+  /* Fon — darsning navbatdagi yumshoq tusi (JS beradi), bo'lmasa oddiy sirt */
+  background: var(--row-tint, var(--surface-low)); border-radius: 12px; border: 1px solid var(--border);
+  /* Chap chetdagi rangli aksent chiziq — border o'zgarishlariga xalaqit bermaydi */
+  box-shadow: inset 4px 0 0 var(--row-accent, transparent);
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
 }
 .cur-row:hover { border-color: var(--primary); }
 .cur-row.drag-over { border: 2px solid var(--primary); padding: 11px 15px; }
 .cur-row.dragging { opacity: 0.4; }
+/* Belgilangan holatda tus o'rniga aniq primary fon (var ustidan yutadi) */
 .cur-row.selected { border-color: var(--primary); background: var(--primary-soft); }
 
 /* Belgilash rejimi paneli — nechta tanlangani + ommaviy amallar */

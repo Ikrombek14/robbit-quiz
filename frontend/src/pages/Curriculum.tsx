@@ -7,6 +7,18 @@ import SearchBar, { type LessonHit } from "../components/SearchBar";
 import QuizPicker from "../components/QuizPicker";
 import type { QuizListItem, FolderItem } from "../types";
 
+// Har bir dars kartasi biri ikkinchisidan ajralib tursin — navbatma-navbat yumshoq fon
+// + chap chetda rangli aksent chiziq. Ranglar brend pastel palitrasidan; alfa past
+// bo'lgani uchun light va dark mavzuda ham yaxshi o'qiladi. Karta tartibi (index) bo'yicha aylanadi.
+const LESSON_TINTS: { bg: string; accent: string }[] = [
+  { bg: "rgba(76, 141, 255, 0.09)", accent: "#4c8dff" }, // ko'k
+  { bg: "rgba(34, 201, 147, 0.09)", accent: "#22c993" }, // yashil-mint
+  { bg: "rgba(245, 166, 35, 0.10)", accent: "#f5a623" }, // sariq
+  { bg: "rgba(160, 108, 255, 0.09)", accent: "#a06cff" }, // binafsha
+  { bg: "rgba(255, 107, 138, 0.09)", accent: "#ff6b8a" }, // pushti
+  { bg: "rgba(43, 184, 214, 0.10)", accent: "#2bb8d6" }, // moviy
+];
+
 // Dars sarlavhasi boshidagi tartib prefiksini tozalaydi ("1-dars. ", "12. ", "3) ")
 function cleanTitle(raw: string): string {
   const t = String(raw ?? "").trim();
@@ -566,9 +578,10 @@ export default function Curriculum() {
           )}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {lessons.map((l) => {
+            {lessons.map((l, idx) => {
               const hasQuiz = Boolean(l.quiz);
               const isEditing = editingId === l.id;
+              const tint = LESSON_TINTS[idx % LESSON_TINTS.length];
 
               if (isEditing && isAdmin) {
                 // ---- EDIT REJIMI ----
@@ -634,7 +647,13 @@ export default function Curriculum() {
                   onDrop={isAdmin ? (e) => { e.preventDefault(); dropOnLesson(l.id); } : undefined}
                   className={`cur-row ${dragOverId === l.id ? "drag-over" : ""} ${dragId === l.id ? "dragging" : ""} ${selectMode && selectedIds.has(l.id) ? "selected" : ""}`}
                   onClick={selectMode ? () => toggleSelect(l.id) : undefined}
-                  style={selectMode ? { cursor: "pointer" } : undefined}
+                  style={{
+                    // Har dars uchun navbatdagi yumshoq fon + chap aksent chiziq (CSS o'zgaruvchilari orqali,
+                    // shunda .selected / .drag-over holatlari baribir ustun bo'ladi)
+                    ["--row-tint" as string]: tint.bg,
+                    ["--row-accent" as string]: tint.accent,
+                    ...(selectMode ? { cursor: "pointer" } : {}),
+                  }}
                 >
                   {/* Belgilash rejimida — checkbox; oddiy rejimda — sudrash dastagi */}
                   {isAdmin && selectMode && (

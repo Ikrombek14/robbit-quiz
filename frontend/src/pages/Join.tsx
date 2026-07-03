@@ -287,7 +287,7 @@ export default function Join() {
     return (
       <div className="center-screen">
         {pracBanner}
-        <div className="card" style={{ maxWidth: 460, width: "100%" }}>
+        <div className="card" style={{ maxWidth: 680, width: "100%" }}>
           <div className="center">
             <h2 style={{ marginTop: 0 }}>✅ Qo'shildingiz!</h2>
             <p className="muted" style={{ marginTop: 0 }}>

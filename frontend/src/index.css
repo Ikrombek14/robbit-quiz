@@ -1352,3 +1352,37 @@ img, svg, video { max-width: 100%; height: auto; }
   .cur-seg button { padding: 8px 16px; font-size: 14px; }
   .cur-filters { gap: 14px; }
 }
+
+/* ============================================================
+   TYPING MUSOBAQASI (lobby) — monkeytype uslubidagi maydon
+   ============================================================ */
+:root {
+  --tr-ok: var(--ink);           /* to'g'ri terilgan harf */
+  --tr-bad: #e05561;             /* xato harf */
+  --tr-dim: var(--muted);        /* hali terilmagan */
+}
+.tr-area {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 26px; line-height: 1.75; font-weight: 600;
+  background: var(--surface-low); border: 2px solid var(--border); border-radius: 14px;
+  padding: 16px 18px; height: 152px; overflow: hidden;
+  display: flex; flex-wrap: wrap; column-gap: 0.6em; align-content: flex-start;
+  user-select: none; cursor: text;
+}
+.tr-word { white-space: nowrap; }
+.tr-caret {
+  position: absolute; left: -2px; top: 8%; width: 2.5px; height: 84%;
+  background: var(--primary); border-radius: 2px;
+  animation: tr-blink 1s step-end infinite;
+}
+@keyframes tr-blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0; } }
+.tr-overlay {
+  position: absolute; inset: 0; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  backdrop-filter: blur(2.5px); font-weight: 700; font-size: 16px;
+  pointer-events: none;
+}
+@media (max-width: 520px) {
+  .tr-area { font-size: 21px; height: 132px; padding: 12px 14px; }
+}

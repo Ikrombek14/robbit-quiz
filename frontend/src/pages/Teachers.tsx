@@ -21,6 +21,44 @@ function catClass(c?: string | null): string {
   return "cat-badge";
 }
 
+// Platformadan foydalanish holati: faol (o'yin o'tkazgan) / kirgan (akkaunt bor) / kirmagan
+type PlatStatus = "faol" | "kirgan" | "yoq";
+function platStatus(r: RosterTeacher): PlatStatus {
+  if (!r.usage) return "yoq";
+  return r.usage.games > 0 ? "faol" : "kirgan";
+}
+const fmtDate = (s: string) =>
+  new Date(s).toLocaleDateString("uz-UZ", { day: "numeric", month: "short" });
+
+// Platforma holati badge'i (admin ustuni)
+function PlatBadge({ r }: { r: RosterTeacher }) {
+  const st = platStatus(r);
+  if (st === "yoq") {
+    return <span className="muted" title="Platformada akkaunt ochmagan">—</span>;
+  }
+  const u = r.usage!;
+  if (st === "kirgan") {
+    return (
+      <span title={`${u.email} · ro'yxatdan o'tgan: ${fmtDate(u.registeredAt)} · ${u.quizzes} ta slayd, o'yin o'tkazmagan`}
+        style={{
+          fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, whiteSpace: "nowrap",
+          background: "rgba(245,158,11,0.16)", color: "#d97706", border: "1px solid rgba(245,158,11,0.42)",
+        }}>
+        Kirgan
+      </span>
+    );
+  }
+  return (
+    <span title={`${u.email} · ${u.games} ta o'yin, ${u.quizzes} ta slayd${u.lastGameAt ? ` · oxirgi o'yin: ${fmtDate(u.lastGameAt)}` : ""}`}
+      style={{
+        fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, whiteSpace: "nowrap",
+        background: "rgba(34,197,94,0.14)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.38)",
+      }}>
+      ✓ {u.games} o'yin{u.lastGameAt ? ` · ${fmtDate(u.lastGameAt)}` : ""}
+    </span>
+  );
+}
+
 export default function Teachers() {
   const { teacher } = useAuth();
   // Roster mutatsiyalari (import/qo'shish/tahrir/o'chirish) — faqat super admin
@@ -32,6 +70,7 @@ export default function Teachers() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [branch, setBranch] = useState("");
+  const [plat, setPlat] = useState<"" | PlatStatus>(""); // platforma holati filtri (admin)
   const [msg, setMsg] = useState("");
 
   // qo'shish/tahrirlash modal
@@ -58,10 +97,18 @@ export default function Teachers() {
     const needle = q.trim().toLowerCase();
     return rows.filter((r) => {
       if (branch && r.branch !== branch) return false;
+      if (plat && platStatus(r) !== plat) return false;
       if (needle && !`${r.name} ${r.username ?? ""}`.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [rows, q, branch]);
+  }, [rows, q, branch, plat]);
+
+  // Platforma xulosasi (faqat admin ko'radi — usage faqat unga keladi)
+  const platCounts = useMemo(() => {
+    const c = { faol: 0, kirgan: 0, yoq: 0 };
+    for (const r of rows) c[platStatus(r)]++;
+    return c;
+  }, [rows]);
 
   // ---- Import ----
   async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -128,7 +175,15 @@ export default function Teachers() {
       <div className="between" style={{ flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 28, marginBottom: 2 }}>O'qituvchilar</h1>
-          <p className="muted" style={{ marginTop: 0 }}>Rasmiy ustozlar ro'yxati · {rows.length} ta</p>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Rasmiy ustozlar ro'yxati · {rows.length} ta
+            {/* Platforma xulosasi — usage faqat adminga keladi */}
+            {showCategory && rows.length > 0 && (
+              <> · <span style={{ color: "#16a34a", fontWeight: 700 }}>{platCounts.faol} faol</span>
+                {" · "}<span style={{ color: "#d97706", fontWeight: 700 }}>{platCounts.kirgan} kirgan</span>
+                {" · "}{platCounts.yoq} kirmagan</>
+            )}
+          </p>
         </div>
         {isAdmin && (
           <div className="row" style={{ flexWrap: "wrap" }}>
@@ -159,6 +214,15 @@ export default function Teachers() {
             ))}
           </div>
         )}
+        {/* Platforma holati filtri — faqat admin (usage faqat unga keladi) */}
+        {showCategory && (
+          <div className="chip-row">
+            <button className={`chip ${plat === "" ? "on" : ""}`} onClick={() => setPlat("")}>Barchasi</button>
+            <button className={`chip ${plat === "faol" ? "on" : ""}`} onClick={() => setPlat("faol")}>🎮 Faol ({platCounts.faol})</button>
+            <button className={`chip ${plat === "kirgan" ? "on" : ""}`} onClick={() => setPlat("kirgan")}>Kirgan ({platCounts.kirgan})</button>
+            <button className={`chip ${plat === "yoq" ? "on" : ""}`} onClick={() => setPlat("yoq")}>Kirmagan ({platCounts.yoq})</button>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -169,15 +233,16 @@ export default function Teachers() {
         </div>
       ) : (
         <div className="roster-table">
-          <div className={`roster-row roster-head ${showCategory ? "" : "no-cat"}`}>
+          <div className={`roster-row roster-head ${showCategory ? "with-usage" : "no-cat"}`}>
             <span>#</span>
             <span>Ism-familiya</span>
             {showCategory && <span>Toifa</span>}
             <span>Filial</span>
+            {showCategory && <span>Platforma</span>}
             {isAdmin && <span style={{ textAlign: "right" }}>Amallar</span>}
           </div>
           {filtered.map((r, i) => (
-            <div className={`roster-row ${showCategory ? "" : "no-cat"}`} key={r.id}>
+            <div className={`roster-row ${showCategory ? "with-usage" : "no-cat"}`} key={r.id}>
               <span className="muted">{i + 1}</span>
               <span className="roster-name">
                 <span className="side-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>{(r.name[0] ?? "?").toUpperCase()}</span>
@@ -185,6 +250,7 @@ export default function Teachers() {
               </span>
               {showCategory && <span>{catLabel(r.category) && <span className={catClass(r.category)}>{catLabel(r.category)}</span>}</span>}
               <span>{r.branch ? <span className="cat-badge alt">{r.branch}</span> : <span className="muted">—</span>}</span>
+              {showCategory && <span><PlatBadge r={r} /></span>}
               {isAdmin && (
                 <span className="row" style={{ justifyContent: "flex-end", gap: 6 }}>
                   <button className="icon-btn" title="Tahrirlash" onClick={() => openEdit(r)} style={{ width: 36, height: 36 }}>

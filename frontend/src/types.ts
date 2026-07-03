@@ -193,6 +193,14 @@ export interface RosterTeacher {
   username?: string | null;
   status?: string | null;
   order: number;
+  // Platformadan foydalanish (faqat adminga keladi): null = akkaunt ochmagan
+  usage?: {
+    email: string;
+    registeredAt: string;
+    games: number; // o'tkazilgan o'yinlar soni
+    quizzes: number; // yaratilgan slaydlar soni
+    lastGameAt: string | null; // oxirgi o'yin sanasi
+  } | null;
 }
 
 // Ustoz statistikasi (Google Sheet'dan) — bosh sahifadagi kataklar va reyting uchun

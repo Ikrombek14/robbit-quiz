@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireSuperAdmin, type AuthedRequest } from "../auth.js";
 import { nameKey } from "../lib/nameKey.js";
+import { nameMatch } from "../services/stats.js";
 import { resyncAllApproved } from "../lib/approval.js";
 
 export const teachersRouter = Router();
@@ -16,12 +17,40 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 // ---- Ro'yxat (barcha login ustozlar ko'radi) ----
 // Toifa (category) — maxfiy: faqat adminlarga yuboriladi.
+// Admin uchun qo'shimcha: har ustozning platformadan foydalanishi (usage) —
+// akkaunt ochganmi (ism bo'yicha moslashtiriladi), nechta o'yin/slayd, oxirgi o'yin sanasi.
 teachersRouter.get("/", async (req: AuthedRequest, res) => {
   const me = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { isAdmin: true } });
   const teachers = await prisma.rosterTeacher.findMany({ orderBy: [{ order: "asc" }, { name: "asc" }] });
-  res.json({
-    teachers: me?.isAdmin ? teachers : teachers.map(({ category: _category, ...rest }) => rest),
-  });
+  if (!me?.isAdmin) {
+    res.json({ teachers: teachers.map(({ category: _category, ...rest }) => rest) });
+    return;
+  }
+
+  const [accounts, games, quizzes] = await Promise.all([
+    prisma.teacher.findMany({ select: { id: true, name: true, email: true, createdAt: true } }),
+    prisma.gameRecord.groupBy({ by: ["teacherId"], _count: { _all: true }, _max: { playedAt: true } }),
+    prisma.quiz.groupBy({ by: ["teacherId"], _count: { _all: true } }),
+  ]);
+  const gameMap = new Map(games.map((g) => [g.teacherId, g]));
+  const quizMap = new Map(quizzes.map((q) => [q.teacherId, q._count._all]));
+  const accByKey = new Map(accounts.map((a) => [nameKey(a.name), a]));
+
+  const usageFor = (r: { name: string; nameKey: string }) => {
+    // Avval aniq nameKey mosligi, bo'lmasa fuzzy (ism tartibi / qisqa-to'liq shakl)
+    const acc = accByKey.get(r.nameKey) ?? accounts.find((a) => nameMatch(a.name, r.name));
+    if (!acc) return null; // akkaunt ochmagan
+    const g = gameMap.get(acc.id);
+    return {
+      email: acc.email,
+      registeredAt: acc.createdAt,
+      games: g?._count._all ?? 0,
+      quizzes: quizMap.get(acc.id) ?? 0,
+      lastGameAt: g?._max.playedAt ?? null,
+    };
+  };
+
+  res.json({ teachers: teachers.map((t) => ({ ...t, usage: usageFor(t) })) });
 });
 
 const rosterSchema = z.object({

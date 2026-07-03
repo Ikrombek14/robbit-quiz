@@ -1142,11 +1142,15 @@ button.quiz-card:active { transform: translateY(0); }
 .roster-row:first-child { border-top: none; }
 /* Toifa ustuni yashirilganda (oddiy ustoz): #, ism, filial */
 .roster-row.no-cat { grid-template-columns: 40px 1fr 130px; }
+/* Admin: qo'shimcha "Platforma" ustuni — kim saytdan foydalanayotganini ko'rsatadi */
+.roster-row.with-usage { grid-template-columns: 40px 1fr 100px 120px 175px 110px; }
 .roster-head { background: var(--surface-2); color: var(--muted); font-size: 13px; font-weight: 700; }
 .roster-name { display: flex; align-items: center; gap: 10px; font-weight: 600; overflow: hidden; }
 @media (max-width: 720px) {
   .roster-row { grid-template-columns: 28px 1fr auto; }
   .roster-row > :nth-child(3), .roster-row > :nth-child(4) { display: none; }
+  /* Admin mobilda: toifa/filial yashirin, platforma badge'i ko'rinib qoladi */
+  .roster-row.with-usage { grid-template-columns: 28px 1fr auto auto; }
 }
 
 /* ============================================================

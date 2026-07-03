@@ -324,7 +324,9 @@ button.quiz-card:active { transform: translateY(0); }
 .spacer { height: 16px; }
 
 /* ---------- App shell (sidebar) ---------- */
-.shell-wrapper { max-width: 1400px; margin: 0 auto; min-height: 100vh; background: var(--bg); box-shadow: 0 0 0 1px var(--border), 0 4px 40px rgba(0,0,0,0.07); }
+/* Shell butun ekranni egallaydi: sidebar chap chetда, kontent esa o'z
+   max-width'i bilan qolgan joyda markazlashadi (letterbox yo'q). */
+.shell-wrapper { min-height: 100vh; background: var(--bg); }
 .shell { display: grid; grid-template-columns: 244px 1fr; min-height: 100vh; }
 .sidebar {
   background: var(--surface); border-right: 1px solid var(--border);
@@ -354,7 +356,39 @@ button.quiz-card:active { transform: translateY(0); }
 }
 .side-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .side-logout { border: none; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; padding: 0; }
-.shell-main { padding: 28px 36px; max-width: 1200px; width: 100%; }
+/* Kontent kengligi: zich sahifalar (jadval, grid) uchun 1440px gacha fluid,
+   qolgan bo'sh joyda markazda turadi. Matnli sahifalar ichida o'z tor
+   konteynerini ishlatadi (masalan, O'quv dastur 860px). */
+.shell-main { padding: 28px 40px; max-width: 1440px; width: 100%; margin: 0 auto; }
+
+/* Qator ichidagi amal tugmalari (tahrir/o'chirish) — neytral, hover'da rang.
+   Xavfli amal (danger) faqat hover'da qizil bo'ladi: ro'yxat 200 ta qizil
+   signalga to'lib ketmasin. */
+.row-action {
+  width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface-low); color: var(--muted); cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.row-action:hover { background: var(--surface-high); color: var(--ink); }
+.row-action.primary:hover { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+.row-action.danger:hover { background: var(--error-container); color: var(--error); border-color: var(--error); }
+
+/* Ruxsat berish/olib tashlash tugmasi (Foydalanuvchilar): berilgan = yashil
+   holat ko'rinishida; hover'da qizil — bosish huquqni olib tashlashini bildiradi */
+.grant-btn {
+  min-width: 112px; height: 34px; padding: 0 14px; border-radius: 999px; font-weight: 700; font-size: 13px;
+  border: 1px solid var(--border); background: var(--surface-low); color: var(--ink); cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.grant-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.grant-btn.on { background: var(--success-soft); color: var(--success); border-color: transparent; }
+.grant-btn.on:hover { background: var(--error-container); color: var(--error); border-color: var(--error); }
+.grant-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Bosh sahifa: keng ekranda reyting va so'nggi loyihalar yonma-yon */
+.dash-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 12px 32px; align-items: start; }
+@media (max-width: 560px) { .dash-cols { grid-template-columns: 1fr; } }
 @media (max-width: 700px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar {
@@ -1093,6 +1127,10 @@ button.quiz-card:active { transform: translateY(0); }
 }
 .cat-badge.alt { background: var(--olive-soft); color: var(--olive); }
 .cat-badge.ghost { background: var(--surface-2); color: var(--muted); }
+/* Toifa darajalari — har biri o'z tusida (skanerlash oson) */
+.cat-badge.t1 { background: var(--success-soft); color: var(--success); }
+.cat-badge.t2 { background: var(--warn-soft); color: var(--warn); }
+.cat-badge.t3 { background: var(--primary-soft); color: var(--primary-strong); }
 
 .roster-table { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); }
 .roster-row {
@@ -1226,7 +1264,9 @@ img, svg, video { max-width: 100%; height: auto; }
 .cur-count { font-size: 12px; font-weight: 700; background: var(--surface-high); color: var(--muted); border-radius: 999px; padding: 1px 8px; }
 .cur-chip.active .cur-count { background: var(--primary); color: var(--on-primary); }
 
-.cur-tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
+/* scrollbar yashirin — Windows'da doimiy ko'rinib artefakt bermasin (torда swipe ishlayveradi) */
+.cur-tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 16px; overflow-x: auto; scrollbar-width: none; }
+.cur-tabs::-webkit-scrollbar { display: none; }
 .cur-tab {
   padding: 10px 20px; border: none; background: none; cursor: pointer; font-weight: 700; font-size: 15px;
   color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
@@ -1277,7 +1317,9 @@ img, svg, video { max-width: 100%; height: auto; }
 .cur-mini-btn.play { background: var(--success); color: #fff; }
 .cur-mini-btn.view { background: var(--surface-high); color: var(--ink); }
 .cur-mini-btn.edit { background: var(--primary-soft); color: var(--primary); }
-.cur-mini-btn.del { background: var(--error-container); color: var(--error); }
+/* O'chirish — neytral turadi, faqat hover'da qizil (har qatorda qizil signal bo'lmasin) */
+.cur-mini-btn.del { background: var(--surface-high); color: var(--muted); }
+.cur-mini-btn.del:hover { background: var(--error-container); color: var(--error); }
 
 .cur-form { margin-top: 12px; padding: 16px; background: var(--surface-low); border-radius: 12px; border: 2px dashed var(--border); }
 .cur-form.editing { border: 2px solid var(--primary); }

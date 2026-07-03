@@ -94,6 +94,18 @@ export default function Users() {
     admin: rows.filter((u) => u.isAdmin).length,
   }), [rows]);
 
+  // Dublikat akkauntlar: bir xil ism bilan bir nechta account (odatda emaildagi
+  // xato tufayli, masalan gmail.com / gmai.com) — adminga ogohlantirib ko'rsatamiz
+  const dupNames = useMemo(() => {
+    const seen = new Map<string, number>();
+    rows.forEach((u) => {
+      const k = u.name.trim().toLowerCase().replace(/\s+/g, " ");
+      seen.set(k, (seen.get(k) ?? 0) + 1);
+    });
+    return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k));
+  }, [rows]);
+  const isDup = (u: AppUser) => dupNames.has(u.name.trim().toLowerCase().replace(/\s+/g, " "));
+
   return (
     <Shell>
       <div className="between" style={{ flexWrap: "wrap", gap: 12 }}>
@@ -127,9 +139,9 @@ export default function Users() {
           <div className="roster-row roster-head" style={{ gridTemplateColumns: cols }}>
             <span>#</span>
             <span>Foydalanuvchi</span>
-            <span>Slayd ruxsati</span>
-            {isSuper && <span>Ustoz huquqi</span>}
-            {isSuper && <span style={{ textAlign: "right" }}>Parol · Admin</span>}
+            <span title="Slayd (loyiha) yaratish va tahrirlash ruxsati">Slayd ruxsati</span>
+            {isSuper && <span title="O'quv dastur va Yo'riqnoma bo'limlariga kirish huquqi">Ustoz huquqi</span>}
+            {isSuper && <span style={{ textAlign: "right" }} title="Parolni tiklash va admin huquqini boshqarish">Amallar</span>}
           </div>
           {filtered.map((u, i) => {
             const isMe = u.id === me?.id;
@@ -142,21 +154,29 @@ export default function Users() {
                     {(u.name[0] ?? "?").toUpperCase()}
                   </span>
                   <span style={{ overflow: "hidden" }}>
-                    <span>{u.name}{isMe ? <span className="muted text-sm"> (siz)</span> : null}</span>
+                    <span>
+                      {u.name}{isMe ? <span className="muted text-sm"> (siz)</span> : null}
+                      {isDup(u) && (
+                        <span className="cat-badge t2" style={{ marginLeft: 6, fontSize: 11 }}
+                          title="Bu ism bilan bir nechta account bor — email xato yozilgan bo'lishi mumkin">
+                          ⚠ dublikat
+                        </span>
+                      )}
+                    </span>
                     <span className="muted text-sm" style={{ display: "block" }}>{u.email}</span>
                   </span>
                 </span>
 
-                {/* Slayd qilish ruxsati — har qanday admin boshqaradi */}
+                {/* Slayd qilish ruxsati — har qanday admin boshqaradi.
+                    Berilgan = yashil holat (hover'da qizil — bosish olib tashlaydi). */}
                 <span>
                   <button
-                    className={`btn ${u.canCreate ? "" : "btn-ghost"}`}
-                    style={{ minWidth: 110, height: 36, padding: "0 12px" }}
+                    className={`grant-btn ${u.canCreate ? "on" : ""}`}
                     disabled={working}
                     onClick={() => patch(u, { canCreate: !u.canCreate })}
-                    title={u.canCreate ? "Slayd qilish ruxsatini olib tashlash" : "Slayd qilish ruxsatini berish"}
+                    title={u.canCreate ? "Bosilsa: slayd ruxsati olib tashlanadi" : "Bosilsa: slayd ruxsati beriladi"}
                   >
-                    {working ? "…" : u.canCreate ? "✓ Slaydchi" : "Ruxsat ber"}
+                    {working ? "…" : u.canCreate ? "✓ Slaydchi" : "+ Ruxsat berish"}
                   </button>
                 </span>
 
@@ -165,13 +185,12 @@ export default function Users() {
                 <>
                 <span>
                   <button
-                    className={`btn ${u.approved ? "btn-ghost" : ""}`}
-                    style={{ minWidth: 92, height: 36, padding: "0 12px" }}
+                    className={`grant-btn ${u.approved ? "on" : ""}`}
                     disabled={working}
                     onClick={() => patch(u, { accessOverride: u.approved ? false : true })}
-                    title={u.approved ? "Ustoz huquqini olib tashlash" : "Ustoz huquqini berish"}
+                    title={u.approved ? "Bosilsa: ustoz huquqi olib tashlanadi" : "Bosilsa: ustoz huquqi beriladi"}
                   >
-                    {working ? "…" : u.approved ? "✓ Ustoz" : "Ber"}
+                    {working ? "…" : u.approved ? "✓ Ustoz" : "+ Berish"}
                   </button>
                   <span className="muted text-sm" style={{ display: "block", marginTop: 2 }}>
                     {accessSource(u)}

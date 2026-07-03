@@ -12,6 +12,15 @@ function catLabel(c?: string | null): string {
   return /^\d+$/.test(s) ? `${s}-toifa` : s;
 }
 
+// Toifaga qarab badge tusi — jadval bir qarashda skanerlanadi (hammasi bir xil ko'k emas)
+function catClass(c?: string | null): string {
+  const s = String(c ?? "").trim();
+  if (s === "1") return "cat-badge t1";
+  if (s === "2") return "cat-badge t2";
+  if (s === "3") return "cat-badge t3";
+  return "cat-badge";
+}
+
 export default function Teachers() {
   const { teacher } = useAuth();
   // Roster mutatsiyalari (import/qo'shish/tahrir/o'chirish) — faqat super admin
@@ -174,7 +183,7 @@ export default function Teachers() {
                 <span className="side-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>{(r.name[0] ?? "?").toUpperCase()}</span>
                 <span>{r.name}{r.username ? <span className="muted text-sm"> · {r.username}</span> : null}</span>
               </span>
-              {showCategory && <span>{catLabel(r.category) && <span className="cat-badge">{catLabel(r.category)}</span>}</span>}
+              {showCategory && <span>{catLabel(r.category) && <span className={catClass(r.category)}>{catLabel(r.category)}</span>}</span>}
               <span>{r.branch ? <span className="cat-badge alt">{r.branch}</span> : <span className="muted">—</span>}</span>
               {isAdmin && (
                 <span className="row" style={{ justifyContent: "flex-end", gap: 6 }}>

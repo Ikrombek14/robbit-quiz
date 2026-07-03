@@ -712,7 +712,12 @@ export default function Curriculum() {
                     </div>
                     {l.quiz && (
                       <div style={{ marginTop: 3, fontSize: 13, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <span>📑 {l.quiz.title} · {l.quiz._count.slides} ta slayd</span>
+                        {/* Quiz nomi dars mavzusi bilan bir xil bo'lsa takrorlamaymiz — faqat slayd soni */}
+                        <span>
+                          📑 {cleanTitle(l.quiz.title).toLowerCase() === cleanTitle(l.title).toLowerCase()
+                            ? `${l.quiz._count.slides} ta slayd`
+                            : `${l.quiz.title} · ${l.quiz._count.slides} ta slayd`}
+                        </span>
                         {/* Papka yorlig'i — karta tusi qaysi papkadanligini bildiradi */}
                         {l.quiz.folder && tint && (
                           <span title={`Papka: ${l.quiz.folder.name}`}

@@ -185,8 +185,13 @@ export default function Library() {
 
   // Joriy darajadagi papkalar: joriy papkaning bevosita ichki papkalari
   // (ildizda — parentId yo'q papkalar). Ichma-ich navigatsiya shu bilan ishlaydi.
+  // Tartib: to'la papkalar oldin (soni bo'yicha kamayish), bo'shlari oxirida —
+  // chiplar qatori "eng ko'p ishlatiladigan oldinda" mantiqda skanerlansin.
   const visibleFolders = useMemo(
-    () => folders.filter((f) => (f.parentId ?? null) === currentFolderId),
+    () =>
+      folders
+        .filter((f) => (f.parentId ?? null) === currentFolderId)
+        .sort((a, b) => (b.count ?? 0) - (a.count ?? 0) || a.name.localeCompare(b.name, "uz")),
     [folders, currentFolderId],
   );
 
@@ -458,8 +463,7 @@ export default function Library() {
               {canCreate && (
                 <>
                   <button
-                    className="w-11 h-11 rounded-xl flex items-center justify-center"
-                    style={{ background: "#cae6ff", color: "#004f75" }}
+                    className="row-action primary"
                     onClick={(e) => {
                       e.stopPropagation();
                       navigate(`/quiz/${item.id}`);
@@ -469,8 +473,7 @@ export default function Library() {
                     <span className="material-symbols-outlined">edit</span>
                   </button>
                   <button
-                    className="w-11 h-11 rounded-xl flex items-center justify-center"
-                    style={{ background: "#ffdad6", color: "#ba1a1a" }}
+                    className="row-action danger"
                     onClick={(e) => remove(item.id, e)}
                     title="O'chirish"
                   >

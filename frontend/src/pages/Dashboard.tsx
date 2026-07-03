@@ -8,13 +8,15 @@ import type { QuizListItem, Quiz, TeacherStat } from "../types";
 
 const EMOJIS = ["🚀", "🌍", "📐", "🔬", "🎨", "📚", "🧮", "🌟", "🦋", "🎯"];
 
-// Reyting qatori (ixcham) — bosh sahifadagi top 5 / oxirgi 5 uchun
-function RatingRow({ s, rank }: { s: TeacherStat; rank: number }) {
+// Reyting qatori (ixcham) — bosh sahifadagi top 5 / oxirgi 5 uchun.
+// me=true — foydalanuvchining o'z qatori (ajratib ko'rsatiladi).
+function RatingRow({ s, rank, me }: { s: TeacherStat; rank: number; me?: boolean }) {
   const st = TONE_STYLE[ballTone(s.umumiyBall)];
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, padding: "7px 12px",
-      background: "var(--surface-low)", borderRadius: 10, border: "1px solid var(--border)",
+      background: me ? "var(--primary-soft)" : "var(--surface-low)", borderRadius: 10,
+      border: me ? "1.5px solid var(--primary)" : "1px solid var(--border)",
     }}>
       <div style={{
         width: 24, height: 24, borderRadius: 7, flexShrink: 0, fontWeight: 800, fontSize: 13,
@@ -24,6 +26,7 @@ function RatingRow({ s, rank }: { s: TeacherStat; rank: number }) {
       }}>{rank}</div>
       <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {s.name}
+        {me && <span style={{ fontWeight: 800, fontSize: 12, color: "var(--primary)" }}> (siz)</span>}
         {s.branch && <span className="muted" style={{ fontWeight: 400, fontSize: 12.5 }}> · {s.branch}</span>}
       </div>
       <div style={{
@@ -78,6 +81,11 @@ export default function Dashboard() {
   const topRows = sorted.slice(0, 5).map((s, i) => ({ s, rank: i + 1 }));
   // Oxirgi 5 o'rin (top bilan ustma-ust tushmasligi uchun faqat 10 tadan ko'p bo'lsa)
   const bottomRows = n > 10 ? sorted.slice(n - 5).map((s, i) => ({ s, rank: n - 5 + i + 1 })) : [];
+  // Foydalanuvchining o'z o'rni — top/bottom'da ko'rinmasa, alohida qistirib ko'rsatamiz
+  const myRank = myStat ? sorted.findIndex((x) => x.nameKey === myStat.nameKey) + 1 : 0;
+  const myRowPinned =
+    myRank > 5 && !(bottomRows.length > 0 && myRank > n - 5) ? { s: sorted[myRank - 1], rank: myRank } : null;
+  const isMe = (s: TeacherStat) => Boolean(myStat && s.nameKey === myStat.nameKey);
 
   return (
     <Shell>
@@ -156,9 +164,11 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Keng ekranda reyting va so'nggi loyihalar yonma-yon — fold ostida qolmasin */}
+      <div className="dash-cols">
       {/* Ustozlar reytingi — barcha ustozlarga (ixcham: top 5 + oxirgi 5) */}
       {(statLoading || allStats.length > 0) && (
-        <>
+        <section>
           <div className="between" style={{ marginTop: 8 }}>
             <h2 style={{ fontSize: 18, margin: 0 }}>Ustozlar reytingi</h2>
             <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => navigate("/stats")}>
@@ -169,20 +179,26 @@ export default function Dashboard() {
             <p className="muted" style={{ marginTop: 12 }}>Yuklanmoqda…</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 12 }}>
-              {topRows.map(({ s, rank }) => <RatingRow key={"t" + rank} s={s} rank={rank} />)}
+              {topRows.map(({ s, rank }) => <RatingRow key={"t" + rank} s={s} rank={rank} me={isMe(s)} />)}
+              {myRowPinned && (
+                <>
+                  <div className="muted" style={{ textAlign: "center", fontSize: 20, lineHeight: 1 }}>⋯</div>
+                  <RatingRow s={myRowPinned.s} rank={myRowPinned.rank} me />
+                </>
+              )}
               {bottomRows.length > 0 && (
                 <div className="muted" style={{ textAlign: "center", fontSize: 20, lineHeight: 1, padding: "0" }}>⋯</div>
               )}
-              {bottomRows.map(({ s, rank }) => <RatingRow key={"b" + rank} s={s} rank={rank} />)}
+              {bottomRows.map(({ s, rank }) => <RatingRow key={"b" + rank} s={s} rank={rank} me={isMe(s)} />)}
             </div>
           )}
-        </>
+        </section>
       )}
 
       {/* So'nggi loyihalar — faqat slayd qilish ruxsati bo'lganlar */}
       {canCreate && (
-        <>
-          <div className="between" style={{ marginTop: 32 }}>
+        <section>
+          <div className="between" style={{ marginTop: 8 }}>
             <h2 style={{ fontSize: 18, margin: 0 }}>So'nggi loyihalar</h2>
             <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => navigate("/library")}>
               Hammasini ko'rish →
@@ -225,10 +241,9 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </>
+        </section>
       )}
-
-      {canCreate && <button className="fab" onClick={createQuiz} title="Yangi loyiha">+</button>}
+      </div>
     </Shell>
   );
 }

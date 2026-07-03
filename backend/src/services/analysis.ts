@@ -91,7 +91,8 @@ async function fetchText(url: string): Promise<string> {
 
 // Google gviz noto'g'ri varaq nomiga xato bermaydi — default varaqni qaytaraveradi.
 // Shu sabab oy varag'i defaultga aynan teng bo'lsa, varaq yo'q deb hisoblaymiz.
-async function fetchMonthRows(month: string): Promise<string[][] | null> {
+// (export — stats.ts reytingda kechikishni oy varag'idan olishi uchun ham ishlatiladi)
+export async function fetchMonthRows(month: string): Promise<string[][] | null> {
   const hit = monthCache.get(month);
   if (hit && Date.now() - hit.ts < MONTH_TTL_MS) return hit.rows;
 
@@ -110,7 +111,7 @@ async function fetchMonthRows(month: string): Promise<string[][] | null> {
 // Oylik varaqlarda ustunlar siljiydi (masalan, May'da "HH ID" yo'q), shuning uchun
 // indekslar qat'iy emas — sarlavha matnidan qidiriladi. gviz ikki qatorli sarlavhani
 // bitta qatorga birlashtirib beradi (ichida \n bilan).
-interface Cols {
+export interface Cols {
   name: number;
   ketgan: number;
   bajarmagan: number;
@@ -120,7 +121,7 @@ interface Cols {
   umumiy: number;
 }
 
-function detectCols(header: string[]): Cols | null {
+export function detectCols(header: string[]): Cols | null {
   const H = header.map((h) => h.toLowerCase().replace(/\s+/g, " ").trim());
   const find = (pred: (h: string) => boolean) => H.findIndex((h) => h && pred(h));
 

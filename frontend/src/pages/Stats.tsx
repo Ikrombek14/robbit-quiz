@@ -121,7 +121,14 @@ export default function Stats() {
                 <th style={{ width: 40, textAlign: "center" }}>#</th>
                 <th style={{ textAlign: "left", minWidth: 190 }}>O'qituvchi</th>
                 {METRICS.map((m) => (
-                  <th key={m.key} style={{ minWidth: 84 }}>{m.short}</th>
+                  <th key={m.key} style={{ minWidth: 84 }}>
+                    {m.short}
+                    {/* Kechikish oy varag'idan olinadi — qaysi oyligini ko'rsatamiz */}
+                    {m.key === "kechikish" && (() => {
+                      const oy = rows.find((r) => r.kechikishOy)?.kechikishOy;
+                      return oy ? <span className="muted" style={{ fontWeight: 500, fontSize: 11 }}> ({oy})</span> : null;
+                    })()}
+                  </th>
                 ))}
                 <th style={{ minWidth: 74 }}>Umumiy</th>
               </tr>

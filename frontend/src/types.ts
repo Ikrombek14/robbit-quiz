@@ -203,7 +203,8 @@ export interface TeacherStat {
   davomat: number | null; // o'quvchilar davomati, %
   uyBajarilishi: number | null; // uy vazifa bajarilishi, %
   uyTekshirilmaganSoni: number | null; // tekshirilmagan uy vazifa soni (H ustun)
-  kechikish: number | null; // kechikish, daqiqa
+  kechikish: number | null; // kechikish, daqiqa (oy varag'idagi Kechikish→Daqiqa ustunidan)
+  kechikishOy: string | null; // kechikish qaysi oy varag'idan olingan (masalan "Iyun")
   ketganlar: number | null; // ketgan o'quvchilar soni
   guruhlar: number | null; // guruhlar soni
   umumiyBall: number | null; // umumiy ball

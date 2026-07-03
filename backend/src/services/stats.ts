@@ -1,4 +1,5 @@
 import { nameKey } from "../lib/nameKey.js";
+import { getTargetMonths, fetchMonthRows, detectCols } from "./analysis.js";
 
 // Ustozlar statistikasi — Google Sheet'dan (CSV export) jonli olinadi va keshlanadi.
 // Manba jadval ikki qatorli sarlavhaga ega; ma'lumot 3-qatordan boshlanadi.
@@ -16,7 +17,8 @@ export interface TeacherStat {
   davomat: number | null; // o'quvchilar davomati, %
   uyBajarilishi: number | null; // uy vazifa bajarilishi, % (100 - topshirmagan)
   uyTekshirilmaganSoni: number | null; // tekshirilmagan uy vazifa SONI (foiz emas)
-  kechikish: number | null; // o'qituvchi kechikishi, daqiqa
+  kechikish: number | null; // o'qituvchi kechikishi, daqiqa (oy varag'idagi Kechikish→Daqiqa ustunidan)
+  kechikishOy: string | null; // kechikish qaysi oy varag'idan olingani (masalan "Iyun")
   ketganlar: number | null; // ketgan o'quvchilar soni (Sheet E ustun)
   guruhlar: number | null; // guruhlar soni
   umumiyBall: number | null; // umumiy ball
@@ -60,6 +62,32 @@ export function statsUpdatedAt(): number | null {
   return cache?.ts ?? null;
 }
 
+// Kechikish (daqiqa) — OY VARAG'IDAN olinadi (default varaqda bu ustun to'ldirilmaydi,
+// hammaga 0 chiqib qolardi). 20-sana qoidasi bo'yicha eng yangi mavjud oy varag'i
+// topiladi, undagi "Kechikish → Daqiqa" ustuni sarlavhadan aniqlanadi va
+// nameKey(ism) → daqiqa xaritasi qaytadi. Varaq topilmasa null.
+async function fetchKechikishFromMonth(): Promise<{ month: string; byKey: Map<string, number | null> } | null> {
+  for (const month of getTargetMonths(new Date(), 3)) {
+    let rows: string[][] | null;
+    try {
+      rows = await fetchMonthRows(month);
+    } catch {
+      continue; // tarmoq xatosi — keyingi oyni sinaymiz
+    }
+    if (!rows || rows.length < 2) continue;
+    const cols = detectCols(rows[0]);
+    if (!cols || cols.kechikish === -1) continue;
+    const byKey = new Map<string, number | null>();
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i] ?? [];
+      const key = nameKey(String(r[cols.name] ?? "").trim());
+      if (key && !byKey.has(key)) byKey.set(key, num(r[cols.kechikish]));
+    }
+    if (byKey.size) return { month, byKey };
+  }
+  return null;
+}
+
 export async function getAllStats(force = false): Promise<TeacherStat[]> {
   if (!force && cache && Date.now() - cache.ts < TTL_MS) return cache.data;
 
@@ -99,10 +127,27 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
       uyBajarilishi: bajarmagan == null ? null : Math.max(0, Math.round((100 - bajarmagan) * 10) / 10),
       uyTekshirilmaganSoni: num(r[7]),
       kechikish: num(r[12]),
+      kechikishOy: null,
       ketganlar: num(r[4]),
       guruhlar: num(r[20]),
       umumiyBall: num(r[17]),
     });
+  }
+
+  // Kechikishni oy varag'idan ustiga yozamiz — default varaqdagi qiymat ishonchsiz
+  // (doim 0). Oy varag'i ochilmasa, default qiymatlar qoladi (sahifa buzilmaydi).
+  try {
+    const late = await fetchKechikishFromMonth();
+    if (late) {
+      for (const s of data) {
+        if (late.byKey.has(s.nameKey)) {
+          s.kechikish = late.byKey.get(s.nameKey) ?? null;
+          s.kechikishOy = late.month;
+        }
+      }
+    }
+  } catch {
+    /* oy varag'i vaqtincha ishlamasa — default qiymatlar bilan davom etamiz */
   }
 
   cache = { data, ts: Date.now() };

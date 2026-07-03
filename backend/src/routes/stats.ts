@@ -33,15 +33,18 @@ statsRouter.get("/all", async (_req, res) => {
   }
 });
 
-// Joriy ustozning toifa tahlili: 3 oylik dinamika + keyingi toifa talablari holati
+// Joriy ustozning faoliyat tahlili. ?months=3|6|12 — grafiklar davri
+// (toifa talablari baribir oxirgi 3 oy bo'yicha hisoblanadi)
 statsRouter.get("/analysis/me", async (req: AuthedRequest, res) => {
   const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { name: true } });
   if (!teacher) {
     res.json({ analysis: null });
     return;
   }
+  const m = Number(req.query.months);
+  const monthLimit = m === 6 ? 6 : m === 12 ? 12 : 3;
   try {
-    const analysis = await getAnalysisByName(teacher.name);
+    const analysis = await getAnalysisByName(teacher.name, monthLimit);
     res.json({ analysis });
   } catch {
     res.json({ analysis: null }); // manba vaqtincha ishlamasa — sahifa baribir ochiladi

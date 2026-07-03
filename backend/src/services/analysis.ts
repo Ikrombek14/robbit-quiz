@@ -32,11 +32,12 @@ export const GURUH_LIMITLARI: Record<number, string> = {
 };
 
 // 20-sana qoidasi: oyning 20-sanasidan boshlab joriy oy ham hisobga kiradi,
-// undan oldin esa o'tgan oydan boshlab 3 oy olinadi. Natija: eng yangi oy birinchi.
-export function getTargetMonths(now = new Date()): string[] {
+// undan oldin esa o'tgan oydan boshlanadi. limit tagacha oy nomi qaytadi
+// (eng yangi birinchi). Varaq nomlarida yil yo'q, shuning uchun 12 tadan oshmaydi.
+export function getTargetMonths(now = new Date(), limit = 3): string[] {
   const ref = now.getDate() >= 20 ? now : new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const months: string[] = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < Math.min(limit, 12); i++) {
     const d = new Date(ref.getFullYear(), ref.getMonth() - i, 1);
     months.push(UZB_MONTHS[d.getMonth()]);
   }
@@ -98,7 +99,9 @@ async function fetchMonthRows(month: string): Promise<string[][] | null> {
     defaultSheetCache = { text: await fetchText(gvizUrl()), ts: Date.now() };
   }
   const text = await fetchText(gvizUrl(month));
-  const rows = text === defaultSheetCache.text ? null : parseCSV(text);
+  // Bo'sh qatorlarni tashlab yuboramiz — varaqlarda o'n minglab bo'sh qator bor,
+  // ularni keshda saqlash xotirani behuda yeydi
+  const rows = text === defaultSheetCache.text ? null : parseCSV(text).filter((r) => r.some((c) => c && c.trim()));
   monthCache.set(month, { rows, ts: Date.now() });
   return rows;
 }
@@ -164,12 +167,19 @@ function parseTier(category: string | null): number {
   return t >= 1 && t <= 4 ? t : 1;
 }
 
-export async function getAllAnalyses(): Promise<{ months: string[]; analyses: TeacherAnalysis[] }> {
-  const targetMonths = getTargetMonths();
-  const [sheets, roster] = await Promise.all([
-    Promise.all(targetMonths.map((m) => fetchMonthRows(m).catch(() => null))),
+export async function getAllAnalyses(monthLimit = 3): Promise<{ months: string[]; analyses: TeacherAnalysis[] }> {
+  const candidates = getTargetMonths(new Date(), monthLimit);
+  const [allSheets, roster] = await Promise.all([
+    Promise.all(candidates.map((m) => fetchMonthRows(m).catch(() => null))),
     prisma.rosterTeacher.findMany({ select: { name: true, nameKey: true, category: true, branch: true } }),
   ]);
+
+  // Birinchi topilmagan varaqda to'xtaymiz: varaq nomlarida yil yo'q, shuning uchun
+  // uzilishdan keyingi nomdosh varaq boshqa davrga tegishli bo'lib chiqishi mumkin
+  let cut = allSheets.findIndex((s) => !s || s.length < 2);
+  if (cut === -1) cut = allSheets.length;
+  const targetMonths = candidates.slice(0, cut);
+  const sheets = allSheets.slice(0, cut);
 
   // Har bir ustoz uchun oyma-oy ko'rsatkichlarni yig'amiz (kaliti — nameKey)
   const byKey = new Map<string, { name: string; branch: string | null; months: MonthMetrics[] }>();
@@ -225,10 +235,13 @@ export async function getAllAnalyses(): Promise<{ months: string[]; analyses: Te
     const targetTier = isExpert ? 4 : tier + 1;
     const req = REQUIREMENTS[targetTier];
 
-    const avgUv = avgOf(entry.months.map((m) => m.uvBajarish));
-    const avgDav = avgOf(entry.months.map((m) => m.davomat));
-    const avgKet = avgOf(entry.months.map((m) => m.ketgan));
-    const avgKechUv = avgOf(entry.months.map((m) => m.kechUv));
+    // Toifa talablari HAR DOIM oxirgi 3 oy o'rtachasi bo'yicha (davr tanlovi
+    // faqat grafiklarga ta'sir qiladi — biznes-qoida o'zgarmaydi)
+    const recent = entry.months.slice(0, 3);
+    const avgUv = avgOf(recent.map((m) => m.uvBajarish));
+    const avgDav = avgOf(recent.map((m) => m.davomat));
+    const avgKet = avgOf(recent.map((m) => m.ketgan));
+    const avgKechUv = avgOf(recent.map((m) => m.kechUv));
     const latest = entry.months[0] ?? null; // eng yangi oy birinchi turadi
     const lat = latest?.kechikish ?? null;
 
@@ -259,9 +272,9 @@ export async function getAllAnalyses(): Promise<{ months: string[]; analyses: Te
   return { months: availableMonths, analyses };
 }
 
-export async function getAnalysisByName(name: string): Promise<TeacherAnalysis | null> {
+export async function getAnalysisByName(name: string, monthLimit = 3): Promise<TeacherAnalysis | null> {
   const key = nameKey(name);
   if (!key) return null;
-  const { analyses } = await getAllAnalyses();
+  const { analyses } = await getAllAnalyses(monthLimit);
   return analyses.find((a) => a.nameKey === key) ?? analyses.find((a) => nameMatch(a.name, name)) ?? null;
 }

@@ -22,6 +22,71 @@ function fmt(v: number | null, unit = ""): string {
   return v == null ? "—" : `${v}${unit}`;
 }
 
+/* ---- Line chart (SVG) — 3 oydan uzun davrlar uchun ----
+   2px chiziq, nuqtalar sirt rangida halqa bilan, tanlab yorliqlash (oxirgi,
+   eng katta, eng kichik qiymat), har nuqtada hover-tooltip. */
+function LineChart({ def, months }: { def: (typeof METRIC_DEFS)[number]; months: MonthMetrics[] }) {
+  const seq = [...months].reverse(); // eski -> yangi
+  const n = seq.length;
+  const W = 280, PLOT_H = 88, PAD_X = 16, PAD_TOP = 18, X_BAND = 16;
+  const H = PLOT_H + X_BAND;
+
+  const vals = seq.map((m) => m[def.key]);
+  const nums = vals.filter((v): v is number => v != null);
+  if (nums.length < 2) return null;
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const span = max - min || 1;
+  const x = (i: number) => PAD_X + (i * (W - 2 * PAD_X)) / (n - 1);
+  const y = (v: number) => PAD_TOP + (1 - (v - min) / span) * (PLOT_H - PAD_TOP - 8);
+
+  const pts = seq.map((m, i) => ({ i, month: m.month, v: m[def.key] })).filter((p) => p.v != null) as { i: number; month: string; v: number }[];
+  const line = pts.map((p, k) => `${k === 0 ? "M" : "L"}${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const area = `${line} L${x(pts[pts.length - 1].i).toFixed(1)},${PLOT_H} L${x(pts[0].i).toFixed(1)},${PLOT_H} Z`;
+
+  // Tanlab yorliqlash: oxirgi nuqta + ekstremumlar (takrorlanmasin)
+  const lastP = pts[pts.length - 1];
+  const labeled = new Set<number>([lastP.i]);
+  const maxP = pts.find((p) => p.v === max);
+  const minP = pts.find((p) => p.v === min);
+  if (maxP) labeled.add(maxP.i);
+  if (minP) labeled.add(minP.i);
+
+  // Oy yozuvlari: ko'p bo'lsa har ikkinchisini ko'rsatamiz (oxirgisi doim ko'rinadi)
+  const showMonth = (i: number) => n <= 8 || i === n - 1 || (n - 1 - i) % 2 === 0;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }} role="img"
+      aria-label={`${def.label} — oylar kesimida`}>
+      {/* pastki o'q — hairline */}
+      <line x1={PAD_X - 6} y1={PLOT_H} x2={W - PAD_X + 6} y2={PLOT_H} stroke="var(--border)" strokeWidth="1" />
+      <path d={area} fill="var(--chart-bar)" opacity="0.1" />
+      <path d={line} fill="none" stroke="var(--chart-bar)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {pts.map((p) => (
+        <g key={p.i}>
+          {/* katta ko'rinmas hit-target + tooltip */}
+          <circle cx={x(p.i)} cy={y(p.v)} r="12" fill="transparent">
+            <title>{`${p.month}: ${fmt(p.v, def.unit)}`}</title>
+          </circle>
+          <circle cx={x(p.i)} cy={y(p.v)} r="4" fill="var(--chart-bar)" stroke="var(--surface)" strokeWidth="2" pointerEvents="none" />
+          {labeled.has(p.i) && (
+            <text x={x(p.i)} y={y(p.v) - 8} textAnchor="middle" pointerEvents="none"
+              style={{ fontSize: 10.5, fontWeight: p.i === lastP.i ? 800 : 600, fill: p.i === lastP.i ? "var(--ink)" : "var(--muted)" }}>
+              {p.v}
+            </text>
+          )}
+        </g>
+      ))}
+      {seq.map((m, i) => showMonth(i) && (
+        <text key={m.month + i} x={x(i)} y={H - 3} textAnchor="middle"
+          style={{ fontSize: 9.5, fontWeight: i === n - 1 ? 700 : 500, fill: i === n - 1 ? "var(--ink)" : "var(--muted)" }}>
+          {m.month.slice(0, 3)}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
 /* ---- Metrika kartasi: oxirgi qiymat + o'zgarish + oylar kesimida ustunli grafik ----
    Ustunlar chapdan o'ngga eski -> yangi; joriy (oxirgi) oy urg'u rangida, o'tganlari
    xira. Har ustun ustida qiymat yozuvi bor (rang kontrasti past bo'lgani uchun ham,
@@ -57,30 +122,35 @@ function MetricCard({ def, months }: { def: (typeof METRIC_DEFS)[number]; months
         <span style={{ fontSize: 26, fontWeight: 800 }}>{fmt(latest, def.unit)}</span>
         {delta && <span style={{ fontSize: 12.5, fontWeight: 700, color: delta.color }}>{delta.text}</span>}
       </div>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 18, justifyContent: "center" }}>
-        {seq.map((m, i) => {
-          const v = m[def.key];
-          const isLatest = i === seq.length - 1;
-          const h = v == null ? 4 : Math.max(4, Math.round((v / max) * PLOT_H));
-          return (
-            <div key={m.month} title={`${m.month}: ${fmt(v, def.unit)}`}
-              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 40 }}>
-              <div style={{ height: PLOT_H + 18, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", gap: 3 }}>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: v == null ? "var(--muted)" : "var(--ink)" }}>
-                  {fmt(v, "")}
+      {seq.length > 3 ? (
+        // Uzun davr — line chart (trend aniqroq o'qiladi)
+        <LineChart def={def} months={months} />
+      ) : (
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 18, justifyContent: "center" }}>
+          {seq.map((m, i) => {
+            const v = m[def.key];
+            const isLatest = i === seq.length - 1;
+            const h = v == null ? 4 : Math.max(4, Math.round((v / max) * PLOT_H));
+            return (
+              <div key={m.month} title={`${m.month}: ${fmt(v, def.unit)}`}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 40 }}>
+                <div style={{ height: PLOT_H + 18, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", gap: 3 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: v == null ? "var(--muted)" : "var(--ink)" }}>
+                    {fmt(v, "")}
+                  </span>
+                  <div style={{
+                    width: 22, height: h, borderRadius: "4px 4px 0 0",
+                    background: v == null ? "var(--chart-bar-dim)" : isLatest ? "var(--chart-bar)" : "var(--chart-bar-dim)",
+                  }} />
+                </div>
+                <span style={{ fontSize: 11.5, color: isLatest ? "var(--ink)" : "var(--muted)", fontWeight: isLatest ? 700 : 500 }}>
+                  {m.month}
                 </span>
-                <div style={{
-                  width: 22, height: h, borderRadius: "4px 4px 0 0",
-                  background: v == null ? "var(--chart-bar-dim)" : isLatest ? "var(--chart-bar)" : "var(--chart-bar-dim)",
-                }} />
               </div>
-              <span style={{ fontSize: 11.5, color: isLatest ? "var(--ink)" : "var(--muted)", fontWeight: isLatest ? 700 : 500 }}>
-                {m.month}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -149,27 +219,40 @@ function TierCard({ a }: { a: TeacherAnalysis }) {
   );
 }
 
+// Davr variantlari: nechta oy grafiklarga olinadi (12 = Sheets'da bor hamma oy)
+const PERIODS = [
+  { months: 3, label: "3 oylik" },
+  { months: 6, label: "6 oylik" },
+  { months: 12, label: "Barcha oylar" },
+] as const;
+
 export default function StatsAnalysis() {
   const { teacher } = useAuth();
   const isAdmin = teacher?.isAdmin === true;
   const [mine, setMine] = useState<TeacherAnalysis | null>(null);
   const [all, setAll] = useState<TeacherAnalysis[]>([]);
+  const [period, setPeriod] = useState<3 | 6 | 12>(3);
   const [loading, setLoading] = useState(true);
+  const [refetching, setRefetching] = useState(false);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [branch, setBranch] = useState("");
 
+  // O'z tahlili — davr o'zgarganda qayta olinadi; eski render xira holda turadi
   useEffect(() => {
-    const reqs: Promise<void>[] = [
-      api<{ analysis: TeacherAnalysis | null }>("/stats/analysis/me").then((r) => setMine(r.analysis)),
-    ];
-    // Boshqa ustozlar tahlili faqat adminga ko'rinadi
-    if (isAdmin) {
-      reqs.push(api<{ months: string[]; analyses: TeacherAnalysis[] }>("/stats/analysis/all").then((r) => setAll(r.analyses)));
-    }
-    Promise.all(reqs)
+    setRefetching(true);
+    api<{ analysis: TeacherAnalysis | null }>(`/stats/analysis/me?months=${period}`)
+      .then((r) => { setMine(r.analysis); setErr(""); })
       .catch((e) => setErr(e instanceof Error ? e.message : "Xatolik"))
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); setRefetching(false); });
+  }, [period]);
+
+  // Boshqa ustozlar tahlili faqat adminga ko'rinadi (bir marta yuklanadi)
+  useEffect(() => {
+    if (!isAdmin) return;
+    api<{ months: string[]; analyses: TeacherAnalysis[] }>("/stats/analysis/all")
+      .then((r) => setAll(r.analyses))
+      .catch(() => {}); // admin jadvali ochilmasa ham sahifa ishlayveradi
   }, [isAdmin]);
 
   const months = mine?.months.map((m) => m.month) ?? [];
@@ -195,7 +278,7 @@ export default function StatsAnalysis() {
       <div className="card" style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 26, margin: 0 }}>Faoliyat tahlili</h1>
         <p className="muted" style={{ margin: "4px 0 0" }}>
-          {months.length ? <>Davr: {[...months].reverse().join(" → ")} · </> : null}
+          {months.length ? <>Davr: {months[months.length - 1]} → {months[0]} ({months.length} oy) · </> : null}
           oylar kesimidagi ko'rsatkichlaringiz va toifa holati
         </p>
       </div>
@@ -214,21 +297,34 @@ export default function StatsAnalysis() {
 
       {!loading && mine && (
         <>
-          {/* Ustoz sarlavhasi */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "0 4px 12px" }}>
-            <h2 style={{ fontSize: 19, margin: 0 }}>{mine.name}</h2>
-            {mine.branch && <span className="muted" style={{ fontSize: 13 }}>{mine.branch}</span>}
+          {/* Ustoz sarlavhasi + davr tanlagichi (bitta filtr qatori) */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", margin: "0 4px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 19, margin: 0 }}>{mine.name}</h2>
+              {mine.branch && <span className="muted" style={{ fontSize: 13 }}>{mine.branch}</span>}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {PERIODS.map((p) => (
+                <button key={p.months}
+                  className={period === p.months ? "btn btn-primary" : "btn btn-ghost"}
+                  onClick={() => setPeriod(p.months)}
+                  disabled={refetching}
+                  style={{ padding: "6px 14px", fontSize: 13.5 }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Metrika kartalari — oylar kesimida solishtirish */}
           <div style={{
-            display: "grid", gap: 12, marginBottom: 16,
+            display: "grid", gap: 12, marginBottom: 16, opacity: refetching ? 0.55 : 1, transition: "opacity .15s",
             gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
           }}>
             {METRIC_DEFS.map((def) => <MetricCard key={def.key} def={def} months={mine.months} />)}
           </div>
 
-          {/* Toifa — kichik blok */}
+          {/* Toifa — kichik blok (talablar davr tanlovidan qat'i nazar oxirgi 3 oy bo'yicha) */}
           <TierCard a={mine} />
         </>
       )}

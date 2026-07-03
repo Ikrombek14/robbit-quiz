@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
@@ -6,6 +7,7 @@ import { METRICS, TONE_STYLE, ballTone, fmtNum } from "../stats";
 import type { TeacherStat } from "../types";
 
 export default function Stats() {
+  const navigate = useNavigate();
   const { teacher } = useAuth();
   const isAdmin = teacher?.isAdmin === true;
   const [rows, setRows] = useState<TeacherStat[]>([]);
@@ -81,6 +83,9 @@ export default function Stats() {
           </p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, width: 300, maxWidth: "100%" }}>
+          <button className="btn btn-primary" onClick={() => navigate("/stats/tahlil")} style={{ justifyContent: "center" }}>
+            🎯 Toifa tahlili
+          </button>
           <input
             className="filter-search"
             placeholder="🔍 Ism bo'yicha qidirish…"

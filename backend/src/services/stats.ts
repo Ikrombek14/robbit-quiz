@@ -27,7 +27,7 @@ let cache: { data: TeacherStat[]; ts: number } | null = null;
 // "96,95%" / "97%" / "5" / "" -> number | null
 // (CSV qo'lda parse qilinadi, shuning uchun qiymatlar har doim matn ko'rinishida keladi —
 //  XLSX foizni 0.97 ga aylantirib yuborardi, shuning uchun XLSX ishlatilmaydi.)
-function num(v: unknown): number | null {
+export function num(v: unknown): number | null {
   const t = String(v ?? "").trim().replace("%", "").replace(",", ".");
   if (!t) return null;
   const n = Number(t);
@@ -35,7 +35,7 @@ function num(v: unknown): number | null {
 }
 
 // Oddiy CSV parser (qo'shtirnoq ichidagi vergul/yangi qatorni hisobga oladi)
-function parseCSV(s: string): string[][] {
+export function parseCSV(s: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let cur = "";
@@ -111,7 +111,7 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
 
 // Ismlarni moslashtirish (tartibga bog'liq emas + qisqa/to'liq shaklga to'lerant):
 // "Ikrom Bekmurodov" ~ "Bekmurodov Ikromjon" (ikrom -> ikromjon prefiks).
-function nameMatch(a: string, b: string): boolean {
+export function nameMatch(a: string, b: string): boolean {
   const ta = nameKey(a).split(" ").filter(Boolean);
   const tb = nameKey(b).split(" ").filter(Boolean);
   if (ta.length < 2 || tb.length < 2) return ta.join(" ") === tb.join(" ");

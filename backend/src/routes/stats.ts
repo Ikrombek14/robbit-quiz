@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { prisma } from "../prisma.js";
 import { getAllStats, getStatByName, statsUpdatedAt } from "../services/stats.js";
+import { getAllAnalyses, getAnalysisByName } from "../services/analysis.js";
 
 // Ustozlar statistikasi (Google Sheet'dan). Barcha kirgan ustozlar ko'ra oladi.
 export const statsRouter = Router();
@@ -29,6 +30,31 @@ statsRouter.get("/all", async (_req, res) => {
     res.json({ stats, updatedAt: statsUpdatedAt() });
   } catch {
     res.status(502).json({ error: "Statistikani yuklab bo'lmadi" });
+  }
+});
+
+// Joriy ustozning toifa tahlili: 3 oylik dinamika + keyingi toifa talablari holati
+statsRouter.get("/analysis/me", async (req: AuthedRequest, res) => {
+  const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { name: true } });
+  if (!teacher) {
+    res.json({ analysis: null });
+    return;
+  }
+  try {
+    const analysis = await getAnalysisByName(teacher.name);
+    res.json({ analysis });
+  } catch {
+    res.json({ analysis: null }); // manba vaqtincha ishlamasa — sahifa baribir ochiladi
+  }
+});
+
+// Barcha ustozlar toifa tahlili (reyting sahifasi kabi barcha kirgan ustozlarga ochiq)
+statsRouter.get("/analysis/all", async (_req, res) => {
+  try {
+    const r = await getAllAnalyses();
+    res.json(r);
+  } catch {
+    res.status(502).json({ error: "Tahlilni yuklab bo'lmadi" });
   }
 });
 

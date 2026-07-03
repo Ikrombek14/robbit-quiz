@@ -209,6 +209,40 @@ export interface TeacherStat {
   umumiyBall: number | null; // umumiy ball
 }
 
+// Toifa tahlili (3 oylik dinamika + keyingi toifa talablari) — /stats/tahlil sahifasi
+export interface MonthMetrics {
+  month: string;
+  uvBajarish: number | null;
+  davomat: number | null;
+  ketgan: number | null;
+  kechUv: number | null;
+  kechikish: number | null;
+  umumiyBall: number | null;
+}
+
+export interface TierCheck {
+  key: "uv" | "davomat" | "ketgan" | "kechUv" | "kechikish";
+  label: string;
+  value: number | null;
+  required: number;
+  direction: "min" | "max";
+  ok: boolean;
+}
+
+export interface TeacherAnalysis {
+  name: string;
+  nameKey: string;
+  branch: string | null;
+  currentTier: number;
+  targetTier: number;
+  guruhLimit: string;
+  months: MonthMetrics[];
+  latestMonth: string | null;
+  checks: TierCheck[];
+  passed: boolean;
+  isExpert: boolean;
+}
+
 export interface LeaderRow {
   nickname: string;
   score: number;

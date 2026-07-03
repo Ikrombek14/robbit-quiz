@@ -226,6 +226,22 @@ const PERIODS = [
   { months: 12, label: "Barcha oylar" },
 ] as const;
 
+/* ---- Bitta ustozning to'liq tahlili: metrika kartalari + toifa bloki ----
+   O'z sahifasida ham, admin panelida (tanlangan ustoz) ham shu ishlatiladi */
+function AnalysisView({ a, dim }: { a: TeacherAnalysis; dim: boolean }) {
+  return (
+    <>
+      <div style={{
+        display: "grid", gap: 12, marginBottom: 16, opacity: dim ? 0.55 : 1, transition: "opacity .15s",
+        gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+      }}>
+        {METRIC_DEFS.map((def) => <MetricCard key={def.key} def={def} months={a.months} />)}
+      </div>
+      <TierCard a={a} />
+    </>
+  );
+}
+
 export default function StatsAnalysis() {
   const { teacher } = useAuth();
   const isAdmin = teacher?.isAdmin === true;
@@ -237,6 +253,8 @@ export default function StatsAnalysis() {
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [branch, setBranch] = useState("");
+  // Admin panelida tanlangan ustoz (nameKey) — to'liq tahlili ochiladi
+  const [selected, setSelected] = useState<string | null>(null);
 
   // O'z tahlili — davr o'zgarganda qayta olinadi; eski render xira holda turadi
   useEffect(() => {
@@ -247,13 +265,23 @@ export default function StatsAnalysis() {
       .finally(() => { setLoading(false); setRefetching(false); });
   }, [period]);
 
-  // Boshqa ustozlar tahlili faqat adminga ko'rinadi (bir marta yuklanadi)
+  // Boshqa ustozlar tahlili faqat adminga ko'rinadi (davr bilan birga yangilanadi)
   useEffect(() => {
     if (!isAdmin) return;
-    api<{ months: string[]; analyses: TeacherAnalysis[] }>("/stats/analysis/all")
+    api<{ months: string[]; analyses: TeacherAnalysis[] }>(`/stats/analysis/all?months=${period}`)
       .then((r) => setAll(r.analyses))
       .catch(() => {}); // admin jadvali ochilmasa ham sahifa ishlayveradi
-  }, [isAdmin]);
+  }, [isAdmin, period]);
+
+  const selectedAnalysis = useMemo(
+    () => (selected ? all.find((a) => a.nameKey === selected) ?? null : null),
+    [all, selected],
+  );
+
+  // Tanlangan ustoz paneli ochilganda unga suriltiramiz
+  useEffect(() => {
+    if (selected) document.getElementById("admin-analysis-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selected]);
 
   const months = mine?.months.map((m) => m.month) ?? [];
 
@@ -316,24 +344,35 @@ export default function StatsAnalysis() {
             </div>
           </div>
 
-          {/* Metrika kartalari — oylar kesimida solishtirish */}
-          <div style={{
-            display: "grid", gap: 12, marginBottom: 16, opacity: refetching ? 0.55 : 1, transition: "opacity .15s",
-            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-          }}>
-            {METRIC_DEFS.map((def) => <MetricCard key={def.key} def={def} months={mine.months} />)}
-          </div>
-
-          {/* Toifa — kichik blok (talablar davr tanlovidan qat'i nazar oxirgi 3 oy bo'yicha) */}
-          <TierCard a={mine} />
+          {/* Metrika kartalari + toifa (talablar davr tanlovidan qat'i nazar oxirgi 3 oy bo'yicha) */}
+          <AnalysisView a={mine} dim={refetching} />
         </>
       )}
 
       {/* ---- Barcha ustozlar (faqat admin) ---- */}
       {!loading && isAdmin && all.length > 0 && (
         <>
+          {/* Tanlangan ustozning to'liq tahlili (jadval qatori bosilganda) */}
+          {selectedAnalysis && (
+            <div id="admin-analysis-panel" style={{ marginBottom: 16 }}>
+              <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <h2 style={{ fontSize: 19, margin: 0 }}>👁 {selectedAnalysis.name}</h2>
+                  {selectedAnalysis.branch && <span className="muted" style={{ fontSize: 13 }}>{selectedAnalysis.branch}</span>}
+                </div>
+                <button className="btn btn-ghost" onClick={() => setSelected(null)} style={{ padding: "6px 14px", fontSize: 13.5 }}>
+                  ✕ Yopish
+                </button>
+              </div>
+              <AnalysisView a={selectedAnalysis} dim={false} />
+            </div>
+          )}
+
           <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
-            <h2 style={{ fontSize: 19, margin: 0 }}>Barcha ustozlar · {filtered.length} ta</h2>
+            <div>
+              <h2 style={{ fontSize: 19, margin: 0 }}>Barcha ustozlar · {filtered.length} ta</h2>
+              <p className="muted" style={{ margin: "3px 0 0", fontSize: 12.5 }}>Ustozning to'liq tahlilini (grafiklar bilan) ko'rish uchun qatorni bosing</p>
+            </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input
                 className="filter-search"
@@ -369,7 +408,10 @@ export default function StatsAnalysis() {
               </thead>
               <tbody>
                 {filtered.map((a) => (
-                  <tr key={a.nameKey}>
+                  <tr key={a.nameKey}
+                    onClick={() => setSelected(a.nameKey === selected ? null : a.nameKey)}
+                    style={{ cursor: "pointer", outline: a.nameKey === selected ? "2px solid var(--primary)" : undefined, outlineOffset: -2 }}
+                    title="To'liq tahlilini ko'rish">
                     <td style={{ fontWeight: 600 }}>
                       {a.name}
                       {a.branch && <span className="muted" style={{ fontWeight: 400, fontSize: 12.5 }}> · {a.branch}</span>}

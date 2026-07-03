@@ -51,15 +51,18 @@ statsRouter.get("/analysis/me", async (req: AuthedRequest, res) => {
   }
 });
 
-// Barcha ustozlar tahlili — faqat admin (oddiy ustoz faqat o'zinikini ko'radi)
+// Barcha ustozlar tahlili — faqat admin (oddiy ustoz faqat o'zinikini ko'radi).
+// ?months=3|6|12 — tanlangan ustozning grafiklari uchun davr
 statsRouter.get("/analysis/all", async (req: AuthedRequest, res) => {
   const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { isAdmin: true } });
   if (!teacher?.isAdmin) {
     res.status(403).json({ error: "Bu bo'lim faqat admin uchun" });
     return;
   }
+  const m = Number(req.query.months);
+  const monthLimit = m === 6 ? 6 : m === 12 ? 12 : 3;
   try {
-    const r = await getAllAnalyses();
+    const r = await getAllAnalyses(monthLimit);
     res.json(r);
   } catch {
     res.status(502).json({ error: "Tahlilni yuklab bo'lmadi" });

@@ -165,72 +165,78 @@ export default function TypingRace({
   }
 
   return (
-    <div style={{ marginTop: 18, textAlign: "left" }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
-        <strong style={{ fontSize: 16 }}>⌨️ Tezkor yozish</strong>
-        {startAt > 0 && !result && (
-          <div style={{ display: "flex", gap: 14, alignItems: "baseline" }}>
-            <span style={{ fontWeight: 800, fontSize: 22, color: "var(--primary)" }}>{liveWpm} <span style={{ fontSize: 12, fontWeight: 600 }}>WPM</span></span>
-            <span style={{ fontWeight: 800, fontSize: 26, color: secsLeft <= 5 ? "var(--tr-bad)" : "var(--ink)" }}>{secsLeft}</span>
+    <div className="tr-wrap">
+      {/* Asosiy maydon — poyga */}
+      <div style={{ textAlign: "left", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+          <strong style={{ fontSize: 16 }}>⌨️ Tezkor yozish</strong>
+          {startAt > 0 && !result && (
+            <div style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
+              <span style={{ fontWeight: 800, fontSize: 26, color: "var(--primary)" }}>{liveWpm} <span style={{ fontSize: 13, fontWeight: 600 }}>WPM</span></span>
+              <span style={{ fontWeight: 800, fontSize: 32, color: secsLeft <= 5 ? "var(--tr-bad)" : "var(--ink)" }}>{secsLeft}</span>
+            </div>
+          )}
+        </div>
+
+        {result ? (
+          <div className="tr-area" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "auto" }}>
+            <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1, color: "var(--primary)" }}>{result.wpm}</div>
+            <div className="muted" style={{ fontSize: 16, marginTop: 6 }}>WPM · Aniqlik: {result.acc}%</div>
+            <button className="btn" style={{ marginTop: 16 }} onClick={restart}>🔄 Qayta o'ynash</button>
+          </div>
+        ) : (
+          // Matn maydoni — bosilsa yashirin input fokuslanadi (klaviatura ochiladi)
+          <div style={{ position: "relative" }} onClick={() => inputRef.current?.focus()}>
+            <div ref={areaRef} className="tr-area">
+              {words.map((w, i) => renderWord(w, i))}
+            </div>
+            {/* Fokus yo'q — ustida "bosing" qatlami */}
+            {!focused && (
+              <div className="tr-overlay">
+                <span>👆 {startAt ? "Davom etish uchun bosing" : "Boshlash uchun shu yerga bosing"}</span>
+              </div>
+            )}
+            {/* Yashirin input — barcha terish shu orqali */}
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => onChange(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+              aria-label="Tezkor yozish maydoni"
+              style={{
+                position: "absolute", inset: 0, width: "100%", height: "100%",
+                opacity: 0, border: "none", cursor: "pointer",
+              }}
+            />
+          </div>
+        )}
+        {!result && (
+          <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+            So'zni terib <strong>bo'shliq</strong> bosing · {RACE_SECS} soniya
           </div>
         )}
       </div>
 
-      {result ? (
-        <div style={{ textAlign: "center", padding: "18px 0" }}>
-          <div style={{ fontSize: 56, fontWeight: 800, lineHeight: 1, color: "var(--primary)" }}>{result.wpm}</div>
-          <div className="muted" style={{ fontSize: 15, marginTop: 4 }}>WPM · Aniqlik: {result.acc}%</div>
-          <button className="btn" style={{ marginTop: 14 }} onClick={restart}>🔄 Qayta o'ynash</button>
-        </div>
-      ) : (
-        // Matn maydoni — bosilsa yashirin input fokuslanadi (klaviatura ochiladi)
-        <div style={{ position: "relative" }} onClick={() => inputRef.current?.focus()}>
-          <div ref={areaRef} className="tr-area">
-            {words.map((w, i) => renderWord(w, i))}
-          </div>
-          {/* Fokus yo'q — ustida "bosing" qatlami */}
-          {!focused && (
-            <div className="tr-overlay">
-              <span>👆 {startAt ? "Davom etish uchun bosing" : "Boshlash uchun shu yerga bosing"}</span>
-            </div>
-          )}
-          {/* Yashirin input — barcha terish shu orqali */}
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => onChange(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            autoCapitalize="none"
-            autoCorrect="off"
-            autoComplete="off"
-            spellCheck={false}
-            aria-label="Tezkor yozish maydoni"
-            style={{
-              position: "absolute", inset: 0, width: "100%", height: "100%",
-              opacity: 0, border: "none", cursor: "pointer",
-            }}
-          />
-        </div>
-      )}
-      {!result && (
-        <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>
-          So'zni terib <strong>bo'shliq</strong> bosing · {RACE_SECS} soniya
-        </div>
-      )}
-
-      {/* Jonli reyting (TOP-5) */}
+      {/* Jonli reyting — keng ekranda o'ngda panel, torда pastda */}
       {board.length > 0 && (
-        <div style={{ marginTop: 14 }}>
-          <div className="muted" style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>🏆 Eng tezkorlar</div>
-          {board.slice(0, 5).map((r, i) => (
+        <div className="tr-side">
+          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>🏆 Eng tezkorlar</div>
+          {board.slice(0, 8).map((r, i) => (
             <div key={r.nickname + i} style={{
-              display: "flex", justifyContent: "space-between", padding: "4px 10px", borderRadius: 8, fontSize: 15,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "6px 10px", borderRadius: 10, fontSize: 15.5,
               background: r.nickname === myName ? "var(--primary-soft, rgba(76,141,255,0.12))" : undefined,
               fontWeight: r.nickname === myName ? 800 : 500,
             }}>
-              <span>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`} {r.avatar ? `${r.avatar} ` : ""}{r.nickname}</span>
-              <span>{r.wpm} WPM</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`} {r.avatar ? `${r.avatar} ` : ""}{r.nickname}
+              </span>
+              <span style={{ flexShrink: 0, marginLeft: 8 }}>{r.wpm} <span className="muted" style={{ fontSize: 12 }}>WPM</span></span>
             </div>
           ))}
         </div>

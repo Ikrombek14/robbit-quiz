@@ -285,44 +285,38 @@ export default function Join() {
 
   if (phase === "lobby")
     return (
-      <div className="center-screen">
+      <div className="stu-lobby">
         {pracBanner}
-        <div className="card" style={{ maxWidth: 680, width: "100%" }}>
-          <div className="center">
-            <h2 style={{ marginTop: 0 }}>✅ Qo'shildingiz!</h2>
-            <p className="muted" style={{ marginTop: 0 }}>
-              Salom, {avatar ? `${avatar} ` : ""}{nickname}! Boshlanishini kuting…
-            </p>
-          </div>
-
-          {/* Avatar tanlash — host ekranidagi ro'yxatda ko'rinadi */}
-          <div style={{ marginTop: 6 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>O'z belgingni tanla:</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6 }}>
-              {AVATARS.map((a) => (
-                <button
-                  key={a}
-                  onClick={() => pickAvatar(a)}
-                  aria-label={`Avatar ${a}`}
-                  style={{
-                    fontSize: 24, padding: "6px 0", borderRadius: 10, cursor: "pointer",
-                    border: avatar === a ? "2px solid var(--primary)" : "2px solid var(--border)",
-                    background: avatar === a ? "var(--primary-soft, rgba(76,141,255,0.12))" : "var(--surface)",
-                  }}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Tezkor yozish musobaqasi — kutish zerikarli bo'lmasin */}
-          <TypingRace
-            board={typingRows}
-            myName={nickname}
-            onFinish={(wpm, acc) => getSocket().emit("player:typing", { pin, wpm, acc })}
-          />
+        <div className="stu-lobby-head">
+          <h2 style={{ margin: 0 }}>✅ Qo'shildingiz!</h2>
+          <p className="muted" style={{ margin: "4px 0 0" }}>
+            Salom, {avatar ? `${avatar} ` : ""}{nickname}! Boshlanishini kuting…
+          </p>
         </div>
+
+        {/* Avatar tanlash — host ekranidagi ro'yxatda ko'rinadi */}
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>O'z belgingni tanla:</div>
+          <div className="stu-ava-row">
+            {AVATARS.map((a) => (
+              <button
+                key={a}
+                onClick={() => pickAvatar(a)}
+                aria-label={`Avatar ${a}`}
+                className={`stu-ava-btn ${avatar === a ? "on" : ""}`}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tezkor yozish musobaqasi — butun ekran bo'ylab */}
+        <TypingRace
+          board={typingRows}
+          myName={nickname}
+          onFinish={(wpm, acc) => getSocket().emit("player:typing", { pin, wpm, acc })}
+        />
       </div>
     );
 

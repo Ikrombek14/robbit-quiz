@@ -1361,11 +1361,34 @@ img, svg, video { max-width: 100%; height: auto; }
   --tr-bad: #e05561;             /* xato harf */
   --tr-dim: var(--muted);        /* hali terilmagan */
 }
+/* O'quvchi lobby — to'liq ekran: markazda katta typing, tepada avatar qatori */
+.stu-lobby {
+  min-height: 100dvh; width: 100%; max-width: 1180px; margin: 0 auto;
+  padding: 28px clamp(16px, 4vw, 40px) 40px;
+  display: flex; flex-direction: column; gap: 18px; justify-content: center;
+}
+.stu-lobby-head { text-align: center; }
+.stu-ava-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 8px; }
+.stu-ava-btn {
+  font-size: 26px; padding: 8px 0; border-radius: 12px; cursor: pointer;
+  border: 2px solid var(--border); background: var(--surface);
+  transition: transform 0.1s, border-color 0.1s;
+}
+.stu-ava-btn:hover { transform: scale(1.08); }
+.stu-ava-btn.on { border-color: var(--primary); background: var(--primary-soft, rgba(76,141,255,0.12)); }
+
+/* Typing bloki: keng ekranda maydon + o'ngda reyting paneli */
+.tr-wrap { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
+@media (min-width: 920px) { .tr-wrap { grid-template-columns: 1fr 300px; } }
+.tr-side {
+  background: var(--surface-low); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px;
+}
 .tr-area {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-size: 26px; line-height: 1.75; font-weight: 600;
-  background: var(--surface-low); border: 2px solid var(--border); border-radius: 14px;
-  padding: 16px 18px; height: 152px; overflow: hidden;
+  font-size: clamp(24px, 2.6vw, 34px); line-height: 1.75; font-weight: 600;
+  background: var(--surface-low); border: 2px solid var(--border); border-radius: 16px;
+  padding: 20px 24px; height: clamp(180px, 36vh, 340px); overflow: hidden;
   display: flex; flex-wrap: wrap; column-gap: 0.6em; align-content: flex-start;
   user-select: none; cursor: text;
 }
@@ -1384,5 +1407,8 @@ img, svg, video { max-width: 100%; height: auto; }
   pointer-events: none;
 }
 @media (max-width: 520px) {
-  .tr-area { font-size: 21px; height: 132px; padding: 12px 14px; }
+  .tr-area { font-size: 21px; height: 30vh; min-height: 140px; padding: 14px 16px; }
+  .stu-lobby { padding-top: 16px; justify-content: flex-start; }
+  .stu-ava-row { grid-template-columns: repeat(6, 1fr); }
+  .stu-ava-btn { font-size: 22px; padding: 6px 0; }
 }

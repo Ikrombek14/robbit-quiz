@@ -80,7 +80,7 @@ function LineChart({ def, months }: { def: (typeof METRIC_DEFS)[number]; months:
       {seq.map((m, i) => showMonth(i) && (
         <text key={m.month + i} x={x(i)} y={H - 3} textAnchor="middle"
           style={{ fontSize: 9.5, fontWeight: i === n - 1 ? 700 : 500, fill: i === n - 1 ? "var(--ink)" : "var(--muted)" }}>
-          {m.month.slice(0, 3)}
+          {n <= 6 ? m.month : m.month.slice(0, 4)}
         </text>
       ))}
     </svg>
@@ -122,8 +122,8 @@ function MetricCard({ def, months }: { def: (typeof METRIC_DEFS)[number]; months
         <span style={{ fontSize: 26, fontWeight: 800 }}>{fmt(latest, def.unit)}</span>
         {delta && <span style={{ fontSize: 12.5, fontWeight: 700, color: delta.color }}>{delta.text}</span>}
       </div>
-      {seq.length > 3 ? (
-        // Uzun davr — line chart (trend aniqroq o'qiladi)
+      {vals.filter((v) => v != null).length >= 2 ? (
+        // Line chart — barcha davrlar uchun (kamida 2 nuqta bo'lsa)
         <LineChart def={def} months={months} />
       ) : (
         <div style={{ display: "flex", alignItems: "flex-end", gap: 18, justifyContent: "center" }}>

@@ -48,8 +48,13 @@ statsRouter.get("/analysis/me", async (req: AuthedRequest, res) => {
   }
 });
 
-// Barcha ustozlar toifa tahlili (reyting sahifasi kabi barcha kirgan ustozlarga ochiq)
-statsRouter.get("/analysis/all", async (_req, res) => {
+// Barcha ustozlar tahlili — faqat admin (oddiy ustoz faqat o'zinikini ko'radi)
+statsRouter.get("/analysis/all", async (req: AuthedRequest, res) => {
+  const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { isAdmin: true } });
+  if (!teacher?.isAdmin) {
+    res.status(403).json({ error: "Bu bo'lim faqat admin uchun" });
+    return;
+  }
   try {
     const r = await getAllAnalyses();
     res.json(r);

@@ -84,7 +84,7 @@ export default function Stats() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, width: 300, maxWidth: "100%" }}>
           <button className="btn btn-primary" onClick={() => navigate("/stats/tahlil")} style={{ justifyContent: "center" }}>
-            🎯 Toifa tahlili
+            📈 Faoliyat tahlili
           </button>
           <input
             className="filter-search"

@@ -3,23 +3,86 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import { TONE_STYLE } from "../stats";
-import type { TeacherAnalysis, TierCheck } from "../types";
+import type { MonthMetrics, TeacherAnalysis, TierCheck } from "../types";
 
 // Ariza formasi (keyingi toifaga o'tish) — Telegram botdagi havola bilan bir xil
 const ARIZA_URL = "https://forms.gle/n6pFxqYEfsyF6HDYA";
 
-// Oylik jadval qatorlari: qaysi metrika, qanday birlikda
-const MONTH_ROWS: { key: "uvBajarish" | "davomat" | "ketgan" | "kechUv" | "kechikish" | "umumiyBall"; label: string; unit: string }[] = [
-  { key: "uvBajarish", label: "Uy vazifa bajarilishi", unit: "%" },
-  { key: "davomat", label: "Davomat", unit: "%" },
-  { key: "ketgan", label: "Ketgan o'quvchilar", unit: "%" },
-  { key: "kechUv", label: "Kech tekshirish", unit: "%" },
-  { key: "kechikish", label: "Kechikish", unit: "daq" },
-  { key: "umumiyBall", label: "Umumiy ball", unit: "" },
+// Faoliyat metrikalari: goodUp — qiymat oshsa yaxshimi (o'zgarish rangini aniqlaydi)
+const METRIC_DEFS: { key: keyof Omit<MonthMetrics, "month">; label: string; unit: string; goodUp: boolean }[] = [
+  { key: "umumiyBall", label: "Umumiy ball", unit: "", goodUp: true },
+  { key: "uvBajarish", label: "Uy vazifa bajarilishi", unit: "%", goodUp: true },
+  { key: "davomat", label: "Davomat", unit: "%", goodUp: true },
+  { key: "ketgan", label: "Ketgan o'quvchilar", unit: "%", goodUp: false },
+  { key: "kechUv", label: "Kech tekshirish", unit: "%", goodUp: false },
+  { key: "kechikish", label: "Kechikish", unit: " daq", goodUp: false },
 ];
 
 function fmt(v: number | null, unit = ""): string {
   return v == null ? "—" : `${v}${unit}`;
+}
+
+/* ---- Metrika kartasi: oxirgi qiymat + o'zgarish + oylar kesimida ustunli grafik ----
+   Ustunlar chapdan o'ngga eski -> yangi; joriy (oxirgi) oy urg'u rangida, o'tganlari
+   xira. Har ustun ustida qiymat yozuvi bor (rang kontrasti past bo'lgani uchun ham,
+   jadval-ekvivalent sifatida ham). */
+function MetricCard({ def, months }: { def: (typeof METRIC_DEFS)[number]; months: MonthMetrics[] }) {
+  const seq = [...months].reverse(); // eski -> yangi
+  const vals = seq.map((m) => m[def.key]);
+  const latest = vals[vals.length - 1] ?? null;
+  const prev = vals.length > 1 ? vals[vals.length - 2] : null;
+
+  // O'zgarish (oxirgi oy vs undan oldingi): yo'nalish x "oshgani yaxshimi" -> rang
+  let delta: { text: string; color: string } | null = null;
+  if (latest != null && prev != null) {
+    const d = Math.round((latest - prev) * 10) / 10;
+    if (d === 0) {
+      delta = { text: "0 o'zgarish", color: "var(--muted)" };
+    } else {
+      const improved = def.goodUp ? d > 0 : d < 0;
+      delta = {
+        text: `${d > 0 ? "▲" : "▼"} ${Math.abs(d)}${def.unit}`,
+        color: improved ? TONE_STYLE.good.fg : TONE_STYLE.bad.fg,
+      };
+    }
+  }
+
+  const max = Math.max(...vals.map((v) => v ?? 0), 1);
+  const PLOT_H = 84; // ustunlar maydoni balandligi (px)
+
+  return (
+    <div className="card" style={{ padding: "14px 16px" }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>{def.label}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, margin: "2px 0 10px" }}>
+        <span style={{ fontSize: 26, fontWeight: 800 }}>{fmt(latest, def.unit)}</span>
+        {delta && <span style={{ fontSize: 12.5, fontWeight: 700, color: delta.color }}>{delta.text}</span>}
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 18, justifyContent: "center" }}>
+        {seq.map((m, i) => {
+          const v = m[def.key];
+          const isLatest = i === seq.length - 1;
+          const h = v == null ? 4 : Math.max(4, Math.round((v / max) * PLOT_H));
+          return (
+            <div key={m.month} title={`${m.month}: ${fmt(v, def.unit)}`}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 40 }}>
+              <div style={{ height: PLOT_H + 18, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", gap: 3 }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: v == null ? "var(--muted)" : "var(--ink)" }}>
+                  {fmt(v, "")}
+                </span>
+                <div style={{
+                  width: 22, height: h, borderRadius: "4px 4px 0 0",
+                  background: v == null ? "var(--chart-bar-dim)" : isLatest ? "var(--chart-bar)" : "var(--chart-bar-dim)",
+                }} />
+              </div>
+              <span style={{ fontSize: 11.5, color: isLatest ? "var(--ink)" : "var(--muted)", fontWeight: isLatest ? 700 : 500 }}>
+                {m.month}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // Talab holati chipi: ✓ yashil / ✗ qizil
@@ -46,29 +109,70 @@ function TierBadge({ tier }: { tier: number }) {
   );
 }
 
+/* ---- Toifa bloki — faoliyat tahlili ichidagi kichik funksiya ---- */
+function TierCard({ a }: { a: TeacherAnalysis }) {
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+        <h2 style={{ fontSize: 17, margin: 0 }}>🎯 Toifa</h2>
+        <TierBadge tier={a.currentTier} />
+        {!a.isExpert && <span className="muted" style={{ fontSize: 13 }}>Maqsad: {a.targetTier}-toifa</span>}
+      </div>
+      <p className="muted" style={{ margin: "0 0 10px", fontSize: 13 }}>Guruh limiti: {a.guruhLimit}</p>
+      {a.isExpert ? (
+        <p style={{ margin: 0, fontWeight: 700 }}>Siz Expert (4) toifadasiz — bu eng yuqori daraja!</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {a.checks.map((c) => (
+              <span key={c.key} title={`Talab: ${c.direction === "min" ? "kamida" : "ko'pi bilan"} ${c.required}${c.key === "kechikish" ? " daq" : "%"}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                <span className="muted">{c.label}:</span>
+                <CheckChip c={c} />
+              </span>
+            ))}
+          </div>
+          {a.passed ? (
+            <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 700, color: TONE_STYLE.good.fg }}>✅ Barcha talablarga javob berdingiz!</span>
+              <a className="btn btn-primary" href={ARIZA_URL} target="_blank" rel="noreferrer">📝 Ariza topshirish</a>
+            </div>
+          ) : (
+            <p className="muted" style={{ margin: "10px 0 0", fontSize: 13 }}>
+              {a.targetTier}-toifa uchun {a.checks.filter((c) => !c.ok).length} ta talab yetishmayapti
+              (qiymatlar — 3 oylik o'rtacha, kechikish — oxirgi oy).
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function StatsAnalysis() {
   const { teacher } = useAuth();
+  const isAdmin = teacher?.isAdmin === true;
   const [mine, setMine] = useState<TeacherAnalysis | null>(null);
   const [all, setAll] = useState<TeacherAnalysis[]>([]);
-  const [months, setMonths] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [branch, setBranch] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      api<{ analysis: TeacherAnalysis | null }>("/stats/analysis/me"),
-      api<{ months: string[]; analyses: TeacherAnalysis[] }>("/stats/analysis/all"),
-    ])
-      .then(([me, everyone]) => {
-        setMine(me.analysis);
-        setAll(everyone.analyses);
-        setMonths(everyone.months);
-      })
+    const reqs: Promise<void>[] = [
+      api<{ analysis: TeacherAnalysis | null }>("/stats/analysis/me").then((r) => setMine(r.analysis)),
+    ];
+    // Boshqa ustozlar tahlili faqat adminga ko'rinadi
+    if (isAdmin) {
+      reqs.push(api<{ months: string[]; analyses: TeacherAnalysis[] }>("/stats/analysis/all").then((r) => setAll(r.analyses)));
+    }
+    Promise.all(reqs)
       .catch((e) => setErr(e instanceof Error ? e.message : "Xatolik"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [isAdmin]);
+
+  const months = mine?.months.map((m) => m.month) ?? [];
 
   const branches = useMemo(
     () => [...new Set(all.map((a) => a.branch).filter(Boolean))].sort() as string[],
@@ -84,100 +188,53 @@ export default function StatsAnalysis() {
     });
   }, [all, q, branch]);
 
-  const checkLabels = mine?.checks ?? all[0]?.checks ?? [];
+  const checkLabels = all[0]?.checks ?? [];
 
   return (
     <Shell>
       <div className="card" style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 26, margin: 0 }}>Toifa tahlili</h1>
+        <h1 style={{ fontSize: 26, margin: 0 }}>Faoliyat tahlili</h1>
         <p className="muted" style={{ margin: "4px 0 0" }}>
-          {months.length ? <>Davr: {months.join(", ")} · </> : null}
-          3 oylik o'rtacha ko'rsatkichlar keyingi toifa talablari bilan solishtiriladi
+          {months.length ? <>Davr: {[...months].reverse().join(" → ")} · </> : null}
+          oylar kesimidagi ko'rsatkichlaringiz va toifa holati
         </p>
       </div>
 
       {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
       {loading && <p className="muted">Yuklanmoqda…</p>}
 
-      {/* ---- Mening tahlilim ---- */}
-      {!loading && (
+      {!loading && !mine && (
         <div className="card" style={{ marginBottom: 16 }}>
-          {!mine ? (
-            <p className="muted" style={{ margin: 0 }}>
-              Statistikada ismingiz topilmadi{teacher?.name ? <> ("{teacher.name}")</> : null}.
-              Ismingiz Sheet'dagi yozuv bilan mos kelishini admin bilan tekshiring.
-            </p>
-          ) : (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-                <h2 style={{ fontSize: 19, margin: 0 }}>{mine.name}</h2>
-                <TierBadge tier={mine.currentTier} />
-                {mine.branch && <span className="muted" style={{ fontSize: 13 }}>{mine.branch}</span>}
-              </div>
-              <p className="muted" style={{ margin: "0 0 14px", fontSize: 13.5 }}>
-                Guruh limiti: {mine.guruhLimit}
-              </p>
-
-              {/* Oylik dinamika jadvali */}
-              <div style={{ overflowX: "auto", marginBottom: 16 }}>
-                <table className="stats-table">
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: "left", minWidth: 170 }}>Ko'rsatkich</th>
-                      {mine.months.map((m) => <th key={m.month} style={{ minWidth: 80 }}>{m.month}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {MONTH_ROWS.map((row) => (
-                      <tr key={row.key}>
-                        <td style={{ fontWeight: 600 }}>{row.label}</td>
-                        {mine.months.map((m) => (
-                          <td key={m.month} style={{ textAlign: "center" }}>{fmt(m[row.key], row.unit)}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Maqsad toifa talablari */}
-              {mine.isExpert ? (
-                <p style={{ margin: 0, fontWeight: 700 }}>🏆 Siz Expert (4) toifadasiz — bu eng yuqori daraja!</p>
-              ) : (
-                <>
-                  <h3 style={{ fontSize: 16, margin: "0 0 10px" }}>🎯 Maqsad: {mine.targetTier}-toifa</h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {mine.checks.map((c) => (
-                      <div key={c.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 14 }}>
-                          {c.label}
-                          <span className="muted" style={{ fontSize: 12.5 }}>
-                            {" "}(talab: {c.direction === "min" ? "kamida" : "ko'pi bilan"} {c.required}{c.key === "kechikish" ? " daq" : "%"})
-                          </span>
-                        </span>
-                        <CheckChip c={c} />
-                      </div>
-                    ))}
-                  </div>
-                  {mine.passed ? (
-                    <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                      <span style={{ fontWeight: 700, color: TONE_STYLE.good.fg }}>✅ Barcha talablarga javob berdingiz!</span>
-                      <a className="btn btn-primary" href={ARIZA_URL} target="_blank" rel="noreferrer">📝 Ariza topshirish</a>
-                    </div>
-                  ) : (
-                    <p style={{ marginTop: 14, marginBottom: 0, fontWeight: 600, color: TONE_STYLE.bad.fg }}>
-                      Yetishmayotgan talablar: {mine.checks.filter((c) => !c.ok).length} ta
-                    </p>
-                  )}
-                </>
-              )}
-            </>
-          )}
+          <p className="muted" style={{ margin: 0 }}>
+            Statistikada ismingiz topilmadi{teacher?.name ? <> ("{teacher.name}")</> : null}.
+            Ismingiz Sheet'dagi yozuv bilan mos kelishini admin bilan tekshiring.
+          </p>
         </div>
       )}
 
-      {/* ---- Barcha ustozlar ---- */}
-      {!loading && all.length > 0 && (
+      {!loading && mine && (
+        <>
+          {/* Ustoz sarlavhasi */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "0 4px 12px" }}>
+            <h2 style={{ fontSize: 19, margin: 0 }}>{mine.name}</h2>
+            {mine.branch && <span className="muted" style={{ fontSize: 13 }}>{mine.branch}</span>}
+          </div>
+
+          {/* Metrika kartalari — oylar kesimida solishtirish */}
+          <div style={{
+            display: "grid", gap: 12, marginBottom: 16,
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+          }}>
+            {METRIC_DEFS.map((def) => <MetricCard key={def.key} def={def} months={mine.months} />)}
+          </div>
+
+          {/* Toifa — kichik blok */}
+          <TierCard a={mine} />
+        </>
+      )}
+
+      {/* ---- Barcha ustozlar (faqat admin) ---- */}
+      {!loading && isAdmin && all.length > 0 && (
         <>
           <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
             <h2 style={{ fontSize: 19, margin: 0 }}>Barcha ustozlar · {filtered.length} ta</h2>

@@ -16,6 +16,8 @@ export default function Teachers() {
   const { teacher } = useAuth();
   // Roster mutatsiyalari (import/qo'shish/tahrir/o'chirish) — faqat super admin
   const isAdmin = teacher?.isSuperAdmin === true;
+  // Toifa ustuni — maxfiy, faqat adminlarga ko'rinadi (backend ham oddiy ustozga yubormaydi)
+  const showCategory = teacher?.isAdmin === true;
 
   const [rows, setRows] = useState<RosterTeacher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,21 +160,21 @@ export default function Teachers() {
         </div>
       ) : (
         <div className="roster-table">
-          <div className="roster-row roster-head">
+          <div className={`roster-row roster-head ${showCategory ? "" : "no-cat"}`}>
             <span>#</span>
             <span>Ism-familiya</span>
-            <span>Toifa</span>
+            {showCategory && <span>Toifa</span>}
             <span>Filial</span>
             {isAdmin && <span style={{ textAlign: "right" }}>Amallar</span>}
           </div>
           {filtered.map((r, i) => (
-            <div className="roster-row" key={r.id}>
+            <div className={`roster-row ${showCategory ? "" : "no-cat"}`} key={r.id}>
               <span className="muted">{i + 1}</span>
               <span className="roster-name">
                 <span className="side-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>{(r.name[0] ?? "?").toUpperCase()}</span>
                 <span>{r.name}{r.username ? <span className="muted text-sm"> · {r.username}</span> : null}</span>
               </span>
-              <span>{catLabel(r.category) && <span className="cat-badge">{catLabel(r.category)}</span>}</span>
+              {showCategory && <span>{catLabel(r.category) && <span className="cat-badge">{catLabel(r.category)}</span>}</span>}
               <span>{r.branch ? <span className="cat-badge alt">{r.branch}</span> : <span className="muted">—</span>}</span>
               {isAdmin && (
                 <span className="row" style={{ justifyContent: "flex-end", gap: 6 }}>

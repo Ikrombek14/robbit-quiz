@@ -3,7 +3,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requireSuperAdmin } from "../auth.js";
+import { requireAuth, requireSuperAdmin, type AuthedRequest } from "../auth.js";
 import { nameKey } from "../lib/nameKey.js";
 import { resyncAllApproved } from "../lib/approval.js";
 
@@ -15,9 +15,13 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // ---- Ro'yxat (barcha login ustozlar ko'radi) ----
-teachersRouter.get("/", async (_req, res) => {
+// Toifa (category) — maxfiy: faqat adminlarga yuboriladi.
+teachersRouter.get("/", async (req: AuthedRequest, res) => {
+  const me = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { isAdmin: true } });
   const teachers = await prisma.rosterTeacher.findMany({ orderBy: [{ order: "asc" }, { name: "asc" }] });
-  res.json({ teachers });
+  res.json({
+    teachers: me?.isAdmin ? teachers : teachers.map(({ category: _category, ...rest }) => rest),
+  });
 });
 
 const rosterSchema = z.object({

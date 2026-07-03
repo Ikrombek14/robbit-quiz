@@ -71,6 +71,26 @@ export default function Users() {
     }
   }
 
+  // Foydalanuvchini o'chirish — faqat super admin. Loyihalari ham o'chadi,
+  // shuning uchun tasdiqda soni ko'rsatiladi.
+  async function removeUser(u: AppUser) {
+    const extra = u.quizCount > 0 ? `\n\nDIQQAT: ${u.quizCount} ta loyihasi ham o'chadi!` : "";
+    if (!confirm(`"${u.name}" (${u.email}) accountini o'chirishni tasdiqlaysizmi?${extra}`)) return;
+    setBusy(u.id);
+    setMsg("");
+    try {
+      await api(`/admin/users/${u.id}`, { method: "DELETE" });
+      setRows((rs) => rs.filter((x) => x.id !== u.id));
+      setMsg(`🗑️ "${u.name}" o'chirildi`);
+      setTimeout(() => setMsg(""), 5000);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "O'chirishda xatolik");
+      setTimeout(() => setMsg(""), 5000);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function patch(u: AppUser, body: { accessOverride?: boolean | null; isAdmin?: boolean; canCreate?: boolean }) {
     setBusy(u.id);
     setMsg("");
@@ -240,6 +260,19 @@ export default function Users() {
                     <span className="material-symbols-outlined">
                       {u.isAdmin ? "shield_person" : "shield"}
                     </span>
+                  </button>
+                  <button
+                    className="row-action danger"
+                    style={{ width: 40, height: 36, borderRadius: 10 }}
+                    disabled={working || u.envAdmin || isMe}
+                    onClick={() => removeUser(u)}
+                    title={
+                      u.envAdmin ? "ADMIN_EMAILS ro'yxatidagi accountni o'chirib bo'lmaydi"
+                        : isMe ? "O'zingizni o'chira olmaysiz"
+                        : "Accountni o'chirish (loyihalari bilan)"
+                    }
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>delete</span>
                   </button>
                 </span>
                 </>

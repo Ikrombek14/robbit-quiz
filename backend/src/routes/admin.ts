@@ -154,3 +154,29 @@ adminRouter.post("/users/:id/password", async (req: AuthedRequest, res) => {
   await prisma.teacher.update({ where: { id }, data: { password: hash } });
   res.json({ ok: true });
 });
+
+// ---- Foydalanuvchini o'chirish (faqat super admin) ----
+// Account bilan birga loyihalari va papkalari ham o'chadi (FK cascade).
+// O'ynalgan o'yin hisobotlari (GameRecord) saqlanib qoladi.
+adminRouter.delete("/users/:id", async (req: AuthedRequest, res) => {
+  if (!(await isSuperAdminReq(req.teacherId))) {
+    res.status(403).json({ error: "Foydalanuvchini o'chirish faqat super admin uchun" });
+    return;
+  }
+  const id = String(req.params.id);
+  if (id === req.teacherId) {
+    res.status(400).json({ error: "O'zingizni o'chira olmaysiz" });
+    return;
+  }
+  const target = await prisma.teacher.findUnique({ where: { id }, select: { email: true } });
+  if (!target) {
+    res.status(404).json({ error: "Foydalanuvchi topilmadi" });
+    return;
+  }
+  if (isAdminEmail(target.email)) {
+    res.status(400).json({ error: "ADMIN_EMAILS ro'yxatidagi accountni o'chirib bo'lmaydi" });
+    return;
+  }
+  await prisma.teacher.delete({ where: { id } });
+  res.json({ ok: true });
+});

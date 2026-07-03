@@ -373,6 +373,8 @@ button.quiz-card:active { transform: translateY(0); }
 .row-action:hover { background: var(--surface-high); color: var(--ink); }
 .row-action.primary:hover { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
 .row-action.danger:hover { background: var(--error-container); color: var(--error); border-color: var(--error); }
+.row-action:disabled { opacity: 0.45; cursor: default; }
+.row-action:disabled:hover { background: var(--surface-low); color: var(--muted); border-color: var(--border); }
 
 /* Ruxsat berish/olib tashlash tugmasi (Foydalanuvchilar): berilgan = yashil
    holat ko'rinishida; hover'da qizil — bosish huquqni olib tashlashini bildiradi */

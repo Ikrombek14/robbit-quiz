@@ -98,13 +98,24 @@ quizRouter.get("/", async (req: AuthedRequest, res) => {
   });
 });
 
-// Bitta quiz (to'liq) — admin har qanday loyihani ko'ra oladi
+// Bitta quiz (to'liq) — admin har qanday loyihani ko'ra oladi.
+// O'quv dasturga biriktirilgan quizni esa har qanday login ustoz ko'ra oladi (preview/host uchun).
 quizRouter.get("/:id", async (req: AuthedRequest, res) => {
+  const id = String(req.params.id);
   const admin = await isAdminUser(req.teacherId);
-  const quiz = await prisma.quiz.findFirst({
-    where: admin ? { id: String(req.params.id) } : { id: String(req.params.id), teacherId: req.teacherId },
+  let quiz = await prisma.quiz.findFirst({
+    where: admin ? { id } : { id, teacherId: req.teacherId },
     include: { slides: { orderBy: { order: "asc" } } },
   });
+  if (!quiz && !admin) {
+    const inCurriculum = await prisma.lessonPlan.findFirst({ where: { quizId: id }, select: { id: true } });
+    if (inCurriculum) {
+      quiz = await prisma.quiz.findUnique({
+        where: { id },
+        include: { slides: { orderBy: { order: "asc" } } },
+      });
+    }
+  }
   if (!quiz) {
     res.status(404).json({ error: "Quiz topilmadi" });
     return;

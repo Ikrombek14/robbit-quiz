@@ -106,6 +106,9 @@ export default function Join() {
       setPhase("test");
     };
     const onTypingBoard = (d: { rows: TypingRow[] }) => setTypingRows(d.rows ?? []);
+    // O'yin boshlanganda typing bonusi qo'shildi — umumiy ballni yangilaymiz
+    const onTypingBonus = (d: { bonus: number; score: number }) => setScore(d.score);
+    socket.on("typing:bonus", onTypingBonus);
     socket.on("typing:board", onTypingBoard);
     socket.on("test:begin", onTestBegin);
     socket.on("slide:show", onSlide);
@@ -118,6 +121,7 @@ export default function Join() {
     socket.on("player:kicked", onKicked);
     socket.on("practice:timer", onPractice);
     return () => {
+      socket.off("typing:bonus", onTypingBonus);
       socket.off("typing:board", onTypingBoard);
       socket.off("slide:show", onSlide);
       socket.off("answer:received", onReceived);

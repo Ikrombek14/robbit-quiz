@@ -182,7 +182,13 @@ export default function TypingRace({
           <div className="tr-area" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "auto" }}>
             <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1, color: "var(--primary)" }}>{result.wpm}</div>
             <div className="muted" style={{ fontSize: 16, marginTop: 6 }}>WPM · Aniqlik: {result.acc}%</div>
-            <button className="btn" style={{ marginTop: 16 }} onClick={restart}>🔄 Qayta o'ynash</button>
+            {/* Typing natijasi o'yin boshida umumiy ballga kichik bonus beradi (serverda min(wpm,100)) */}
+            {result.wpm > 0 && (
+              <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#16a34a" }}>
+                🎁 O'yin boshida +{Math.min(result.wpm, 100)} ball qo'shiladi
+              </div>
+            )}
+            <button className="btn" style={{ marginTop: 14 }} onClick={restart}>🔄 Qayta o'ynash</button>
           </div>
         ) : (
           // Matn maydoni — bosilsa yashirin input fokuslanadi (klaviatura ochiladi)

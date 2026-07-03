@@ -715,6 +715,17 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       return;
     }
 
+    // LIVE: lobby typing musobaqasi natijasi umumiy ballga KICHIK bonus beradi —
+    // WPM qadar ball (ko'pi bilan 100; bitta savol 500-1000 ball, ya'ni ta'siri kichik).
+    // TEST rejimiga qo'shilmaydi (u foiz bilan baholanadi).
+    game.players.forEach((p) => {
+      if (p.typingWpm > 0 && p.score === 0) {
+        const bonus = Math.min(p.typingWpm, 100);
+        p.score += bonus;
+        io.to(p.socketId).emit("typing:bonus", { bonus, score: p.score });
+      }
+    });
+
     game.currentIndex = 0;
     showCurrent(game);
   });

@@ -126,6 +126,8 @@ quizRouter.get("/:id", async (req: AuthedRequest, res) => {
       title: quiz.title,
       description: quiz.description,
       shuffle: quiz.shuffle,
+      // Tahrirlash huquqi: egasi yoki admin. Curriculum orqali ko'rayotganlarga false.
+      mine: admin || quiz.teacherId === req.teacherId,
       slides: quiz.slides.map(parseSlide),
     },
   });

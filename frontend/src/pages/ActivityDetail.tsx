@@ -148,7 +148,8 @@ export default function ActivityDetail() {
                   {pdfBusy ? "⏳ Tayyorlanmoqda…" : "📥 PDF yuklab olish"}
                 </button>
               )}
-              {canCreate && (
+              {/* Tahrirlash — faqat egasi yoki admin (boshqalarga faqat ko'rish) */}
+              {canCreate && quiz.mine !== false && (
                 <button className="btn btn-ghost" onClick={() => navigate(`/quiz/${quiz.id}`)}>
                   ✏️ Tahrirlash
                 </button>

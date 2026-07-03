@@ -59,6 +59,11 @@ export default function QuizEditor() {
   useEffect(() => {
     api<{ quiz: Quiz }>(`/quizzes/${id}`)
       .then((r) => {
+        // Begona quiz (masalan, o'quv dasturdan ochilgan) — tahrirlab bo'lmaydi, ko'rish sahifasiga
+        if (r.quiz.mine === false) {
+          navigate(`/activity/${id}`, { replace: true });
+          return;
+        }
         setTitle(r.quiz.title);
         setDescription(r.quiz.description ?? "");
         setShuffle(r.quiz.shuffle);
@@ -66,7 +71,7 @@ export default function QuizEditor() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Xatolik"))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, navigate]);
 
   function updateSlide(i: number, s: Slide) {
     setSlides((arr) => arr.map((x, idx) => (idx === i ? s : x)));

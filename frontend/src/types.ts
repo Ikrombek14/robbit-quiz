@@ -129,6 +129,7 @@ export interface Quiz {
   title: string;
   description?: string | null;
   shuffle: boolean;
+  mine?: boolean; // egasi yoki admin — tahrirlash mumkin
   slides: Slide[];
 }
 

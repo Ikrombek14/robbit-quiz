@@ -14,8 +14,7 @@ export default function StudentProfile() {
   const [totals, setTotals] = useState({ score: 0, correct: 0, answered: 0 });
   const [loading, setLoading] = useState(true);
 
-  // Ustozlik so'rovi formasi
-  const [reqName, setReqName] = useState(teacher?.name ?? "");
+  // Ustozlik so'rovi — har doim account ismi bilan yuboriladi (ism kiritilmaydi)
   const [reqOpen, setReqOpen] = useState(false);
   const [reqBusy, setReqBusy] = useState(false);
   const [reqMsg, setReqMsg] = useState("");
@@ -32,19 +31,11 @@ export default function StudentProfile() {
 
   if (!teacher) return null;
 
-  async function sendRequest(e: React.FormEvent) {
-    e.preventDefault();
+  async function sendRequest() {
     setReqMsg("");
-    if (reqName.trim().split(/\s+/).length < 2) {
-      setReqMsg("Ism va familiyani to'liq kiriting");
-      return;
-    }
     setReqBusy(true);
     try {
-      const r = await api<{ teacher: Teacher }>("/auth/teacher-request", {
-        method: "POST",
-        body: JSON.stringify({ name: reqName }),
-      });
+      const r = await api<{ teacher: Teacher }>("/auth/teacher-request", { method: "POST" });
       updateTeacher(r.teacher);
       if (r.teacher.approved) {
         // Ism jadvalga mos keldi — darhol ustoz paneli ochiladi
@@ -137,28 +128,26 @@ export default function StudentProfile() {
             keyinroq qaytadan kirib ko'ring.
           </p>
         ) : reqOpen ? (
-          <form onSubmit={sendRequest}>
+          <>
             <p className="muted" style={{ marginTop: 0 }}>
-              Ism-familiyangizni <b>ustozlar jadvalidagi bilan bir xil</b> yozing — mos kelsa panel darhol ochiladi.
-              Mos kelmasa, so'rovingiz adminga yuboriladi.
+              So'rov accountingizdagi <b>"{teacher.name}"</b> ismi bilan adminga yuboriladi.
+              Agar bu ism ustozlar jadvalidagi bilan bir xil bo'lsa, panel darhol ochiladi.
             </p>
             {reqMsg && <div className="error">{reqMsg}</div>}
-            <label>Ism va familiya</label>
-            <input value={reqName} onChange={(e) => setReqName(e.target.value)} placeholder="Masalan: Bobonova Gulnoza" required />
-            <div className="row" style={{ gap: 8, marginTop: 8 }}>
-              <button className="btn" type="submit" disabled={reqBusy}>
-                {reqBusy ? "Yuborilmoqda…" : "So'rov yuborish"}
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn" disabled={reqBusy} onClick={sendRequest}>
+                {reqBusy ? "Yuborilmoqda…" : "✓ So'rovni yuborish"}
               </button>
               <button className="btn btn-ghost" type="button" onClick={() => setReqOpen(false)}>Bekor qilish</button>
             </div>
-          </form>
+          </>
         ) : (
           <>
             <p className="muted" style={{ marginTop: 0 }}>
               Bu sahifa o'quvchilar uchun. Agar siz Robbit Akademiyasi ustozi bo'lsangiz,
               ustozlik uchun so'rov yuboring.
             </p>
-            <button className="btn" onClick={() => { setReqName(teacher.name); setReqOpen(true); }}>
+            <button className="btn" onClick={() => setReqOpen(true)}>
               🎓 Ustozlik uchun so'rov yuborish
             </button>
           </>

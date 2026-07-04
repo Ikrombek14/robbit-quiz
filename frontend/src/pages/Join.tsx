@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../auth";
 import { getSocket } from "../socket";
 import type { LeaderRow, SlideData } from "../types";
 import SlideScene from "../components/SlideScene";
@@ -38,6 +39,7 @@ interface Results {
 
 export default function Join() {
   const [params] = useSearchParams();
+  const { teacher: account } = useAuth(); // account bilan kirgan bo'lsa ism so'ralmaydi
   const [pin, setPin] = useState(params.get("pin") ?? params.get("gc") ?? "");
   const [nickname, setNickname] = useState("");
   const [phase, setPhase] = useState<Phase>("form");
@@ -197,6 +199,13 @@ export default function Join() {
     }
   }, []);
 
+  // Account bilan kirganlar o'yinga o'z ismi bilan qatnashadi (natijalar
+  // /profile sahifasiga to'g'ri bog'lanishi uchun ham shu ism kerak)
+  useEffect(() => {
+    if (account && phase === "form") setNickname(account.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account]);
+
   // Yangi savol — javob holatlarini tiklash
   useEffect(() => {
     setSelected([]);
@@ -276,9 +285,17 @@ export default function Join() {
               inputMode="numeric"
               autoComplete="off"
             />
-            <label>Ismingiz</label>
-            <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={20}
-              autoComplete="off" enterKeyHint="go" placeholder="Masalan: Ali" />
+            {account ? (
+              <p className="muted" style={{ margin: "0 0 12px" }}>
+                Siz <b>{account.name}</b> nomi bilan qatnashasiz
+              </p>
+            ) : (
+              <>
+                <label>Ismingiz</label>
+                <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40}
+                  autoComplete="off" enterKeyHint="go" placeholder="Masalan: Ali" />
+              </>
+            )}
             <button className="btn btn-block" type="submit" disabled={pin.length !== 6 || !nickname.trim()}>
               Kirish
             </button>

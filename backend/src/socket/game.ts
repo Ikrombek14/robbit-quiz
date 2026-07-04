@@ -479,7 +479,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       cb?.({ error: "O'yin yakunlangan" });
       return;
     }
-    const nickname = (data.nickname ?? "").trim().slice(0, 20) || "O'quvchi";
+    // 40 belgi: account bilan kirganlar to'liq ism-familiyasi bilan qatnashadi
+    // (20 da uzun ismlar kesilib, /profile natijalariga bog'lanmay qolardi)
+    const nickname = (data.nickname ?? "").trim().slice(0, 40) || "O'quvchi";
     const playerId = genId();
     const player: GamePlayer = {
       playerId,

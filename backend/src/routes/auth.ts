@@ -199,18 +199,11 @@ authRouter.post("/password", requireAuth, async (req: AuthedRequest, res) => {
   res.json({ ok: true });
 });
 
-// Ustozlik uchun so'rov. Foydalanuvchi ism-familiyasini (jadvaldagi kabi) yuboradi:
-// 1) ism roster'ga mos kelsa — darhol approved bo'ladi (adminni kutmaydi);
+// Ustozlik uchun so'rov. Ism SO'RALMAYDI — so'rov har doim ACCOUNT ISMI bilan ketadi
+// (o'quvchi istalgan ustoz ismini yozib yuborib adminni chalg'ita olmasin):
+// 1) account ismi roster'ga mos kelsa — darhol approved bo'ladi (adminni kutmaydi);
 // 2) mos kelmasa — so'rov sifatida saqlanadi, admin panelda ko'rinadi.
-const teacherRequestSchema = z.object({ name: z.string().trim().min(3) });
-
 authRouter.post("/teacher-request", requireAuth, async (req: AuthedRequest, res) => {
-  const parsed = teacherRequestSchema.safeParse(req.body);
-  const name = parsed.success ? parsed.data.name.replace(/\s+/g, " ") : "";
-  if (!parsed.success || name.split(" ").length < 2) {
-    res.status(400).json({ error: "Ism va familiyani to'liq kiriting (jadvaldagi bilan bir xil)" });
-    return;
-  }
   const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId } });
   if (!teacher) {
     res.status(404).json({ error: "Foydalanuvchi topilmadi" });
@@ -220,7 +213,8 @@ authRouter.post("/teacher-request", requireAuth, async (req: AuthedRequest, res)
     res.json({ teacher: publicTeacher(teacher) });
     return;
   }
-  // Ismni yangilab, roster bo'yicha qayta tekshiramiz
+  const name = teacher.name.trim().replace(/\s+/g, " ");
+  // Roster bo'yicha tekshiramiz — mos kelsa adminni kutmasdan ochiladi
   const approved = await computeApproved(teacher.email, name, teacher.accessOverride);
   // Bu ustoz nomi bilan tasdiqlangan account allaqachon bo'lsa — taqiq (dublikat account)
   if (approved) {
@@ -235,8 +229,8 @@ authRouter.post("/teacher-request", requireAuth, async (req: AuthedRequest, res)
   const updated = await prisma.teacher.update({
     where: { id: teacher.id },
     data: approved
-      ? { name, approved: true, teacherRequestAt: null, teacherRequestName: null }
-      : { name, teacherRequestAt: new Date(), teacherRequestName: name },
+      ? { approved: true, teacherRequestAt: null, teacherRequestName: null }
+      : { teacherRequestAt: new Date(), teacherRequestName: name },
   });
   res.json({ teacher: publicTeacher(updated) });
 });

@@ -37,12 +37,13 @@ export default function Home() {
     <div style={{ background: "var(--bg)" }}>
       {/* ---- Birinchi ekran: faqat o'quvchi (100vh, scroll shart emas) ---- */}
       <section className="home-hero">
-        {/* Yuqori o'ng burchak — ustoz kirishi + tema (o'quvchi yo'lidan chetda) */}
+        {/* Yuqori o'ng burchak — ro'yxatdan o'tish + tema (o'quvchi yo'lidan chetda).
+            Kirish havolasi /register sahifasining ichida bor. */}
         <div className="home-corner">
           <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 14 }}
-            onClick={() => navigate("/admin")}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>school</span>
-            O'qituvchi kirishi
+            onClick={() => navigate("/register")}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
+            Ro'yxatdan o'tish
           </button>
           <button
             className="icon-btn"

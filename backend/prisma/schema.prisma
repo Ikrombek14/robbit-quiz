@@ -24,6 +24,10 @@ model Teacher {
   // Admin qo'lda bergan/olib tashlagan ustoz huquqi. null = avtomatik (roster yoki admin email
   // bo'yicha). true = majburan berilgan, false = majburan olib tashlangan. approved'dan ustun.
   accessOverride Boolean?
+  // Ustozlik so'rovi: roster'ga mos kelmagan foydalanuvchi "Ustozlik uchun so'rov" yuborsa
+  // vaqti shu yerda turadi. Admin tasdiqlasa/rad etsa null'ga qaytadi.
+  teacherRequestAt   DateTime?
+  teacherRequestName String? // so'rovda ko'rsatilgan ism-familiya (jadvaldagi deb da'vo qilingani)
   createdAt DateTime @default(now())
   quizzes   Quiz[]
   folders   Folder[]

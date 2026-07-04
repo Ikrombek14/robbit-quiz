@@ -32,19 +32,39 @@ export async function computeApproved(
   return autoApproved(email, name);
 }
 
+// Shu ism (nameKey) bilan ALLAQACHON tasdiqlangan boshqa account bormi?
+// Bitta ustoz nomi bilan bir nechta account ochilishini bloklash uchun.
+export async function findApprovedByNameKey(name: string, excludeId?: string): Promise<{ id: string; email: string } | null> {
+  const key = nameKey(name);
+  if (!key) return null;
+  // Teacher'da nameKey saqlanmaydi — accountlar soni kichik, JS'da filtrlaymiz
+  const teachers = await prisma.teacher.findMany({
+    where: { approved: true, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { id: true, email: true, name: true },
+  });
+  const hit = teachers.find((t) => nameKey(t.name) === key);
+  return hit ? { id: hit.id, email: hit.email } : null;
+}
+
 // Roster o'zgargach — barcha ustozlarning approved holatini qayta hisoblaymiz.
 // accessOverride qo'yilganlar (null emas) o'zgartirilmaydi.
+// Dublikatga qarshi: bitta roster ismini faqat bitta account "egallaydi" —
+// avval allaqachon approved bo'lganlar, keyin eng eski account ustun turadi.
 export async function resyncAllApproved(): Promise<void> {
   const teachers = await prisma.teacher.findMany({
-    select: { id: true, email: true, name: true, approved: true, accessOverride: true },
+    select: { id: true, email: true, name: true, approved: true, accessOverride: true, createdAt: true },
+    orderBy: [{ approved: "desc" }, { createdAt: "asc" }],
   });
   const roster = await prisma.rosterTeacher.findMany({ select: { nameKey: true } });
   const keys = new Set(roster.map((r) => r.nameKey));
+  const claimed = new Set<string>(); // shu ism allaqachon bitta accountga berilgan
   for (const t of teachers) {
+    const key = nameKey(t.name);
     const approved =
       t.accessOverride != null
         ? t.accessOverride
-        : isAdminEmail(t.email) || keys.has(nameKey(t.name));
+        : isAdminEmail(t.email) || (keys.has(key) && !claimed.has(key));
+    if (approved && key) claimed.add(key);
     if (approved !== t.approved) {
       await prisma.teacher.update({ where: { id: t.id }, data: { approved } });
     }

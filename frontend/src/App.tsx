@@ -22,12 +22,18 @@ import Stats from "./pages/Stats";
 import StatsAnalysis from "./pages/StatsAnalysis";
 import Settings from "./pages/Settings";
 import BulkImport from "./pages/BulkImport";
+import StudentProfile from "./pages/StudentProfile";
 import Shell from "./components/Shell";
 
-function Protected({ children, approved, admin, create }: { children: ReactNode; approved?: boolean; admin?: boolean; create?: boolean }) {
+function Protected({ children, approved, admin, create, student }: { children: ReactNode; approved?: boolean; admin?: boolean; create?: boolean; student?: boolean }) {
   const { teacher, loading } = useAuth();
   if (loading) return <div className="container">Yuklanmoqda…</div>;
   if (!teacher) return <Navigate to="/admin" replace />;
+  // O'quvchi (roster'da yo'q, tasdiqlanmagan) — ustoz paneli o'rniga shaxsiy sahifaga.
+  // student=true bo'lgan sahifalar (masalan /profile) bundan mustasno.
+  if (!student && !(teacher.isAdmin || teacher.approved)) {
+    return <Navigate to="/profile" replace />;
+  }
   // "slayd qilish" ruxsati talab qilinsa va user'da bo'lmasa — ruxsat yo'q
   if (create && !(teacher.isAdmin || teacher.canCreate)) {
     return (
@@ -78,6 +84,7 @@ export default function App() {
       <Route path="/login" element={<AdminLogin />} />
       <Route path="/register" element={<Register />} />
 
+      <Route path="/profile" element={<Protected student><StudentProfile /></Protected>} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
       <Route path="/library" element={<Protected><Library /></Protected>} />
       <Route path="/activity/:id" element={<Protected><ActivityDetail /></Protected>} />

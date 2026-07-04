@@ -166,6 +166,18 @@ export interface Teacher {
   approved?: boolean; // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa
   canCreate?: boolean; // "slayd qilish" ruxsati (quiz yaratish/tahrirlash/biriktirish)
   hasPassword?: boolean; // parol o'rnatilganmi (Sozlamalar: joriy parol kerakmi)
+  teacherRequestPending?: boolean; // ustozlik so'rovi yuborilgan, admin javobi kutilmoqda
+}
+
+// O'quvchi shaxsiy sahifasi uchun bitta o'yin natijasi (/auth/my-results)
+export interface MyResult {
+  id: string;
+  title: string;
+  mode: string; // LIVE | HOMEWORK
+  playedAt: string;
+  score: number;
+  correctCount: number;
+  totalAnswered: number;
 }
 
 // Saytga kirgan foydalanuvchi (Teacher account) — admin nazorat paneli uchun
@@ -178,6 +190,8 @@ export interface AppUser {
   approved: boolean;
   canCreate: boolean; // "slayd qilish" ruxsati
   accessOverride: boolean | null; // null = avtomatik, true = berilgan, false = olib tashlangan
+  teacherRequestAt: string | null; // ustozlik so'rovi yuborilgan vaqt (kutilayotgan bo'lsa)
+  teacherRequestName: string | null; // so'rovda ko'rsatilgan ism-familiya
   envAdmin: boolean; // ADMIN_EMAILS'dagi (super admin) — huquqini panelda olib bo'lmaydi
   quizCount: number;
   createdAt: string;

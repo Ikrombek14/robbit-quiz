@@ -9,6 +9,7 @@ interface AuthContextValue {
   loginWithGoogle: (credential: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  updateTeacher: (t: Teacher) => void; // server qaytargan yangi holatni contextga yozish
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -61,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ teacher, loading, login, loginWithGoogle, register, logout }}>
+    <AuthContext.Provider value={{ teacher, loading, login, loginWithGoogle, register, logout, updateTeacher: setTeacher }}>
       {children}
     </AuthContext.Provider>
   );

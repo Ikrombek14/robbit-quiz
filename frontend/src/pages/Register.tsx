@@ -14,9 +14,15 @@ export default function Register() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    // Ism va familiya to'liq bo'lishi shart — roster (jadval) bilan moslashtirish uchun
+    if (name.trim().split(/\s+/).length < 2) {
+      setError("Ism va familiyani to'liq kiriting (masalan: Bobonova Gulnoza)");
+      return;
+    }
     setBusy(true);
     try {
-      await register(name, email, password);
+      await register(name.trim().replace(/\s+/g, " "), email, password);
+      // Ustoz (jadvalga mos kelsa) dashboardga; o'quvchi Protected orqali /profile ga tushadi
       navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Xatolik");
@@ -32,8 +38,19 @@ export default function Register() {
         <h2 style={{ marginTop: 0 }}>Ro'yxatdan o'tish</h2>
         {error && <div className="error">{error}</div>}
         <form onSubmit={handleSubmit}>
-          <label>Ism</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoFocus required />
+          <label>Ism va familiya</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Masalan: Bobonova Gulnoza"
+            autoComplete="name"
+            autoFocus
+            required
+          />
+          <p className="muted text-sm" style={{ margin: "4px 0 10px" }}>
+            ⚠️ Ustoz bo'lsangiz, ism-familiyangizni <b>ustozlar jadvalidagi bilan bir xil</b> yozing —
+            shunda ustoz paneli avtomatik ochiladi.
+          </p>
           <label>Email</label>
           <input
             type="email"

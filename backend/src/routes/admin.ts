@@ -19,6 +19,8 @@ function publicUser(t: {
   approved: boolean;
   canCreate: boolean;
   accessOverride: boolean | null;
+  teacherRequestAt?: Date | null;
+  teacherRequestName?: string | null;
   createdAt: Date;
   _count?: { quizzes: number };
 }) {
@@ -31,6 +33,8 @@ function publicUser(t: {
     approved: t.approved,
     canCreate: t.canCreate, // "slayd qilish" ruxsati
     accessOverride: t.accessOverride,
+    teacherRequestAt: t.teacherRequestAt ?? null, // ustozlik so'rovi (kutilayotgan)
+    teacherRequestName: t.teacherRequestName ?? null,
     envAdmin: isAdminEmail(t.email), // env ADMIN_EMAILS'dagi = super admin — huquqini olib bo'lmaydi
     quizCount: t._count?.quizzes ?? 0,
     createdAt: t.createdAt,
@@ -45,16 +49,63 @@ async function isSuperAdminReq(teacherId?: string): Promise<boolean> {
 }
 
 // ---- Ro'yxat ----
-adminRouter.get("/users", async (_req, res) => {
+// Default: o'quvchilar (huquqsiz, so'rovsiz oddiy accountlar) ko'rsatilmaydi —
+// faqat ustozlar, adminlar, ruxsat berilganlar va ustozlik so'rovi yuborganlar.
+// ?all=1 bo'lsa hamma account qaytadi.
+adminRouter.get("/users", async (req, res) => {
+  const showAll = req.query.all === "1";
   const users = await prisma.teacher.findMany({
+    where: showAll
+      ? undefined
+      : {
+          OR: [
+            { approved: true },
+            { isAdmin: true },
+            { canCreate: true },
+            { accessOverride: { not: null } },
+            { teacherRequestAt: { not: null } },
+          ],
+        },
     orderBy: { createdAt: "desc" },
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, accessOverride: true, createdAt: true,
+      teacherRequestAt: true, teacherRequestName: true,
       _count: { select: { quizzes: true } },
     },
   });
   res.json({ users: users.map(publicUser) });
+});
+
+// ---- Ustozlik so'rovini hal qilish (har qanday admin) ----
+// approve=true: ustoz huquqi beriladi (accessOverride=true), so'rov yopiladi.
+// approve=false: so'rov rad etiladi, foydalanuvchi o'quvchi bo'lib qoladi.
+const requestSchema = z.object({ approve: z.boolean() });
+adminRouter.post("/users/:id/teacher-request", async (req: AuthedRequest, res) => {
+  const parsed = requestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Noto'g'ri so'rov" });
+    return;
+  }
+  const id = String(req.params.id);
+  const target = await prisma.teacher.findUnique({ where: { id } });
+  if (!target) {
+    res.status(404).json({ error: "Foydalanuvchi topilmadi" });
+    return;
+  }
+  const updated = await prisma.teacher.update({
+    where: { id },
+    data: parsed.data.approve
+      ? { accessOverride: true, approved: true, teacherRequestAt: null, teacherRequestName: null }
+      : { teacherRequestAt: null, teacherRequestName: null },
+    select: {
+      id: true, email: true, name: true, picture: true, isAdmin: true,
+      approved: true, canCreate: true, accessOverride: true, createdAt: true,
+      teacherRequestAt: true, teacherRequestName: true,
+      _count: { select: { quizzes: true } },
+    },
+  });
+  res.json({ user: publicUser(updated) });
 });
 
 const patchSchema = z

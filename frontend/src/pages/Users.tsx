@@ -91,6 +91,27 @@ export default function Users() {
     }
   }
 
+  // Ustozlik so'rovini tasdiqlash/rad etish (har qanday admin)
+  async function resolveRequest(u: AppUser, approve: boolean) {
+    if (!approve && !confirm(`"${u.name}" so'rovini rad etishni tasdiqlaysizmi?`)) return;
+    setBusy(u.id);
+    setMsg("");
+    try {
+      const r = await api<{ user: AppUser }>(`/admin/users/${u.id}/teacher-request`, {
+        method: "POST",
+        body: JSON.stringify({ approve }),
+      });
+      setRows((rs) => rs.map((x) => (x.id === u.id ? r.user : x)));
+      setMsg(approve ? `✓ "${u.name}" ustoz qilindi` : `"${u.name}" so'rovi rad etildi`);
+      setTimeout(() => setMsg(""), 5000);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Xatolik");
+      setTimeout(() => setMsg(""), 5000);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function patch(u: AppUser, body: { accessOverride?: boolean | null; isAdmin?: boolean; canCreate?: boolean }) {
     setBusy(u.id);
     setMsg("");
@@ -133,11 +154,46 @@ export default function Users() {
           <h1 style={{ fontSize: 28, marginBottom: 2 }}>Foydalanuvchilar</h1>
           <p className="muted" style={{ marginTop: 0 }}>
             Saytga kirgan accountlar · {counts.all} ta · {counts.approved} ustoz · {counts.admin} admin
+            <span className="text-sm"> · o'quvchilar bu ro'yxatda ko'rsatilmaydi</span>
           </p>
         </div>
       </div>
 
       {msg && <div className="import-progress" style={{ marginTop: 12 }}>{msg}</div>}
+
+      {/* Ustozlik so'rovlari — o'quvchi sahifasidan yuborilgan, admin javobini kutmoqda */}
+      {(() => {
+        const requests = rows.filter((u) => u.teacherRequestAt);
+        if (requests.length === 0) return null;
+        return (
+          <div className="card" style={{ marginTop: 12, border: "2px solid var(--tertiary, #f0c419)" }}>
+            <h3 style={{ marginTop: 0 }}>🎓 Ustozlik so'rovlari ({requests.length})</h3>
+            {requests.map((u) => (
+              <div key={u.id} className="between" style={{ padding: "8px 0", gap: 10, flexWrap: "wrap" }}>
+                <span className="roster-name">
+                  <span className="side-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>
+                    {(u.name[0] ?? "?").toUpperCase()}
+                  </span>
+                  <span>
+                    <span>{u.teacherRequestName ?? u.name}</span>
+                    <span className="muted text-sm" style={{ display: "block" }}>
+                      {u.email} · {u.teacherRequestAt ? new Date(u.teacherRequestAt).toLocaleDateString("uz-UZ") : ""}
+                    </span>
+                  </span>
+                </span>
+                <span className="row" style={{ gap: 6 }}>
+                  <button className="btn" disabled={busy === u.id} onClick={() => resolveRequest(u, true)}>
+                    {busy === u.id ? "…" : "✓ Tasdiqlash"}
+                  </button>
+                  <button className="btn btn-ghost" disabled={busy === u.id} onClick={() => resolveRequest(u, false)}>
+                    Rad etish
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Filtrlar */}
       <div className="filter-bar">

@@ -59,6 +59,7 @@ export interface TextElement extends BaseElement {
   valign?: "top" | "middle" | "bottom";
   lineHeight?: number;
   bg?: string; // matn quti foni (ixtiyoriy)
+  link?: string; // bosilganda ochiladigan havola (ixtiyoriy; ko'rish rejimida yangi tabda)
 }
 
 export interface ImageElement extends BaseElement {

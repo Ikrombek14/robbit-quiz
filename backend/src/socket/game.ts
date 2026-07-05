@@ -552,6 +552,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       status: game.status,
       mode: game.mode,
       settings: clientSettings(game),
+      // Joriy savolga allaqachon javob bergan bo'lsa — client qayta savol
+      // ko'rsatmasdan "javob qabul qilindi" ekranida qoladi
+      answered: game.status === "active" && game.mode === "LIVE" && player.answeredCurrent,
     });
     io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
     if (game.status === "lobby") {

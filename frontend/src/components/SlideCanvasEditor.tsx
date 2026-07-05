@@ -468,6 +468,13 @@ function ColorPick({ value, onChange, title }: { value: string; onChange: (v: st
 function TextControls({ el, onPatch }: { el: TextElement; onPatch: (p: Partial<TextElement>) => void }) {
   const aligns: TextAlign[] = ["left", "center", "right"];
   const alignIcon: Record<TextAlign, string> = { left: "format_align_left", center: "format_align_center", right: "format_align_right" };
+  // Havola qo'shish/tahrirlash — prompt orqali (bo'sh qoldirilsa olib tashlanadi)
+  function editLink() {
+    const cur = el.link ?? "";
+    const v = window.prompt("Havola (URL) kiriting — bo'sh qoldirsangiz olib tashlanadi:", cur);
+    if (v === null) return; // bekor
+    onPatch({ link: v.trim() || undefined });
+  }
   return (
     <>
       <select className="sce-select" value={el.font} onChange={(e) => onPatch({ font: e.target.value })} style={{ fontFamily: el.font }}>
@@ -477,6 +484,7 @@ function TextControls({ el, onPatch }: { el: TextElement; onPatch: (p: Partial<T
       <button className={`sce-icon ${el.bold ? "on" : ""}`} title="Qalin" onClick={() => onPatch({ bold: !el.bold })}><span className="material-symbols-outlined">format_bold</span></button>
       <button className={`sce-icon ${el.italic ? "on" : ""}`} title="Qiya" onClick={() => onPatch({ italic: !el.italic })}><span className="material-symbols-outlined">format_italic</span></button>
       <button className={`sce-icon ${el.underline ? "on" : ""}`} title="Tagchiziq" onClick={() => onPatch({ underline: !el.underline })}><span className="material-symbols-outlined">format_underlined</span></button>
+      <button className={`sce-icon ${el.link ? "on" : ""}`} title={el.link ? `Havola: ${el.link} (tahrirlash)` : "Havola qo'shish"} onClick={editLink}><span className="material-symbols-outlined">link</span></button>
       {aligns.map((a) => (
         <button key={a} className={`sce-icon ${el.align === a ? "on" : ""}`} title="Tekislash" onClick={() => onPatch({ align: a })}>
           <span className="material-symbols-outlined">{alignIcon[a]}</span>

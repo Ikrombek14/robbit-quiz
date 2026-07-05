@@ -49,11 +49,12 @@ export function bgStyle(bg: SlideData["background"]): CSSProperties {
 
 /* Element ichki vizuali — qutini 100% to'ldiradi (joylashuvsiz).
    Ham SlideScene, ham muharrir shu komponentni ishlatadi. */
-export function ElementVisual({ el }: { el: SlideElement }) {
+export function ElementVisual({ el, interactive = false }: { el: SlideElement; interactive?: boolean }) {
   if (el.type === "text") {
     const t = el as TextElement;
     const valign = t.valign ?? "top";
-    return (
+    const hasLink = Boolean(t.link?.trim());
+    const body = (
       <div
         style={{
           width: "100%", height: "100%",
@@ -65,7 +66,8 @@ export function ElementVisual({ el }: { el: SlideElement }) {
           fontSize: t.size,
           fontWeight: t.bold ? 700 : 400,
           fontStyle: t.italic ? "italic" : "normal",
-          textDecoration: t.underline ? "underline" : "none",
+          // Havolali matn ko'rish rejimida tagchiziq bilan — bosish mumkinligi ko'rinsin
+          textDecoration: t.underline || (hasLink && interactive) ? "underline" : "none",
           textAlign: t.align,
           lineHeight: t.lineHeight ?? 1.25,
           whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden",
@@ -75,6 +77,20 @@ export function ElementVisual({ el }: { el: SlideElement }) {
         {t.text}
       </div>
     );
+    // Faqat ko'rish (read-only) rejimida havola sifatida ochiladi — muharrirda
+    // element tanlash/sudrash uchun oddiy div bo'lib qoladi
+    if (hasLink && interactive) {
+      const href = /^https?:\/\//i.test(t.link!.trim()) ? t.link!.trim() : `https://${t.link!.trim()}`;
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer"
+          style={{ display: "block", width: "100%", height: "100%", color: "inherit", cursor: "pointer" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {body}
+        </a>
+      );
+    }
+    return body;
   }
 
   if (el.type === "image") {
@@ -135,7 +151,8 @@ function PositionedElement({ el }: { el: SlideElement }) {
         transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined, transformOrigin: "center center",
       }}
     >
-      <ElementVisual el={el} />
+      {/* SlideScene — ko'rish rejimi: havolali matn bosiladigan bo'ladi */}
+      <ElementVisual el={el} interactive />
     </div>
   );
 }

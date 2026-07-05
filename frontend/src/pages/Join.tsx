@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { getSocket } from "../socket";
@@ -67,6 +67,10 @@ export default function Join() {
   const [matchMap, setMatchMap] = useState<Record<string, string>>({});
   const [reorder, setReorder] = useState<{ id: string; text: string }[]>([]);
 
+  // Reconnect'dan keyin joriy savolga allaqachon javob berilgan bo'lsa — slide:show
+  // kelganda savolni qayta ochmasdan "javob qabul qilindi" ekranida qolamiz
+  const answeredCurrentRef = useRef(false);
+
   useEffect(() => {
     const socket = getSocket();
     const onSlide = (s: PublicSlide) => {
@@ -75,7 +79,13 @@ export default function Join() {
       setResults(null);
       setEndsAt(s.endsAt ?? 0);
       setPracticeEndsAt(0); // yangi slaydda amaliyot taymeri tugaydi
-      setPhase(s.kind === "CONTENT" ? "content" : "question");
+      if (answeredCurrentRef.current && s.kind !== "CONTENT") {
+        answeredCurrentRef.current = false;
+        setPhase("answered");
+      } else {
+        answeredCurrentRef.current = false;
+        setPhase(s.kind === "CONTENT" ? "content" : "question");
+      }
     };
     const onPractice = (d: { endsAt: number }) => setPracticeEndsAt(d.endsAt || 0);
     const onReceived = (r: { correct: boolean; points: number; score: number }) => {
@@ -176,27 +186,49 @@ export default function Join() {
     return () => clearInterval(id);
   }, []);
 
-  // Qayta ulanish — sahifa yangilansa o'yinga qaytadi
-  useEffect(() => {
+  // Saqlangan sessiya bo'yicha o'yinga qaytish (refresh yoki socket reconnect).
+  // silent=true — reconnect: xato bo'lsa sessiyani o'chirmaymiz (vaqtinchalik uzilish bo'lishi mumkin).
+  function rejoinFromStorage(silent = false) {
     const raw = localStorage.getItem("player");
     if (!raw) return;
     try {
       const saved = JSON.parse(raw) as { pin: string; playerId: string; nickname: string };
       setPin(saved.pin);
-      setNickname(saved.nickname);
+      if (!silent) setNickname(saved.nickname);
       getSocket().emit("player:rejoin", { pin: saved.pin, playerId: saved.playerId }, (r: any) => {
         if (r.error) {
-          localStorage.removeItem("player");
+          if (!silent) localStorage.removeItem("player");
           return;
         }
         setNickname(r.nickname ?? saved.nickname);
         if (typeof r.score === "number") setScore(r.score);
         if (r.settings) setStuSettings(r.settings);
-        setPhase(r.status === "ended" ? "ended" : "lobby");
+        // Joriy savolga javob berilgan bo'lsa — keladigan slide:show savolni qayta ochmaydi
+        answeredCurrentRef.current = r.answered === true;
+        if (r.status === "ended") setPhase("ended");
+        else if (r.status === "lobby") setPhase("lobby");
+        // active bo'lsa phase'ni server yuboradigan slide:show / test:begin o'zi o'rnatadi
       });
     } catch {
       localStorage.removeItem("player");
     }
+  }
+
+  // Qayta ulanish — sahifa yangilansa o'yinga qaytadi
+  useEffect(() => {
+    rejoinFromStorage(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // MUHIM: socket uzilib qayta ulanganda (yangi socket.id) server bizni tanimay
+  // qoladi va hech narsa kelmaydi — o'quvchi "qotib qoladi". Har reconnect'da
+  // avtomatik qayta ro'yxatdan o'tamiz, o'yin kelgan joyidan davom etadi.
+  useEffect(() => {
+    const socket = getSocket();
+    const onReconnect = () => rejoinFromStorage(true);
+    socket.io.on("reconnect", onReconnect);
+    return () => { socket.io.off("reconnect", onReconnect); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Account bilan kirganlar o'yinga o'z ismi bilan qatnashadi (natijalar

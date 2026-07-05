@@ -145,6 +145,23 @@ export default function Host() {
     });
   }
 
+  // host:resume javobidan to'liq holatni tiklash (refresh yoki reconnect'dan keyin)
+  function applyResume(r: any) {
+    setPin(r.pin ?? "");
+    setTitle(r.title ?? "");
+    if (r.settings) setSettings(r.settings);
+    if (r.mode) setMode(r.mode);
+    if (r.players) setPlayers(r.players as PlayerRow[]);
+    if (r.practiceEndsAt) setPracticeEndsAt(r.practiceEndsAt); // amaliyot taymeri davom etsa, tiklaymiz
+    if (r.status === "ended") setPhase("ended");
+    else if (r.mode === "TEST" && r.status === "active") setPhase("active");
+    else if ((r.status === "active" || r.status === "reveal") && r.slide) {
+      setSlide(r.slide);
+      setEndsAt(r.slide.endsAt ?? 0);
+      setPhase(r.status === "reveal" ? "reveal" : "active");
+    } else setPhase("lobby");
+  }
+
   // 1-eslatma tasdiqlangach: davom etayotgan o'yin bo'lsa tiklaymiz, aks holda yangisini yaratamiz
   function beginSession() {
     const socket = getSocket();
@@ -153,28 +170,40 @@ export default function Host() {
     if (!savedPin) { createGame(); return; }
     socket.emit("host:resume", { pin: savedPin, token: getToken() }, (r: any) => {
       if (r.error) { localStorage.removeItem(key); createGame(); return; }
-      setPin(r.pin ?? "");
-      setTitle(r.title ?? "");
-      if (r.settings) setSettings(r.settings);
-      if (r.mode) setMode(r.mode);
-      if (r.players) setPlayers(r.players as PlayerRow[]);
-      if (r.practiceEndsAt) setPracticeEndsAt(r.practiceEndsAt); // amaliyot taymeri davom etsa, tiklaymiz
-      if (r.status === "ended") setPhase("ended");
-      else if (r.mode === "TEST" && r.status === "active") setPhase("active");
-      else if ((r.status === "active" || r.status === "reveal") && r.slide) {
-        setSlide(r.slide);
-        setEndsAt(r.slide.endsAt ?? 0);
-        setPhase(r.status === "reveal" ? "reveal" : "active");
-      } else setPhase("lobby");
+      applyResume(r);
     });
   }
+
+  // MUHIM: socket uzilib qayta ulanganda (internet blip, server idle-close) socket.id
+  // o'zgaradi va server eski id'ga yuboraveradi — host "qotib qoladi". Shu sabab har
+  // reconnect'da avtomatik host:resume yuborib, xonaga qayta yozilamiz va joriy
+  // slayd holatini tiklaymiz. O'yin davom etadi, refresh ham kerak bo'lmaydi.
+  useEffect(() => {
+    const socket = getSocket();
+    const onReconnect = () => {
+      const savedPin = localStorage.getItem(`host:${quizId}`);
+      if (!savedPin) return;
+      socket.emit("host:resume", { pin: savedPin, token: getToken() }, (r: any) => {
+        if (r.error) {
+          setError("Aloqa qayta tiklandi, lekin o'yin topilmadi (server qayta ishga tushgan bo'lishi mumkin)");
+          return;
+        }
+        applyResume(r);
+      });
+    };
+    socket.io.on("reconnect", onReconnect);
+    return () => { socket.io.off("reconnect", onReconnect); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizId]);
 
   useEffect(() => {
     const socket = getSocket();
     if (!created.current) {
       created.current = true;
-      // Har safar boshlashda avval 1-eslatma chiqadi; o'yin shundan keyin yaratiladi/davom ettiriladi
-      setReminder1(true);
+      // Davom etayotgan o'yin bo'lsa (refresh) — eslatmasiz darhol tiklaymiz;
+      // yangi sessiya bo'lsa avval 1-eslatma chiqadi
+      if (localStorage.getItem(`host:${quizId}`)) beginSession();
+      else setReminder1(true);
     }
     const onLobby = (d: { players: PlayerRow[] }) => setPlayers(d.players);
     const onSlide = (s: PublicSlide) => {
@@ -946,8 +975,18 @@ function SpinWheel({ players, onClose }: { players: string[]; onClose: () => voi
   const [winner, setWinner] = useState(-1);
   const [spinning, setSpinning] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  // Faol/g'olib qator har doim ko'rinib turishi kerak — ro'yxat uzun bo'lsa
+  // (scroll bor) belgilangan qatorga avtomatik surilamiz. Aks holda tanlov
+  // "ekranga siqqanlar orasida" bo'layotgandek tuyuladi.
+  useEffect(() => {
+    const idx = winner >= 0 ? winner : active;
+    if (idx < 0) return;
+    itemRefs.current[idx]?.scrollIntoView({ block: "center", behavior: winner >= 0 ? "smooth" : "auto" });
+  }, [active, winner]);
 
   function spin() {
     if (!players.length || spinning) return;
@@ -979,7 +1018,11 @@ function SpinWheel({ players, onClose }: { players: string[]; onClose: () => voi
       <div className="spin-winner-banner">{winner >= 0 ? `🎉 ${players[winner]} tanlandi!` : ""}</div>
       <div className="spin-list">
         {players.map((p, i) => (
-          <div className={`spin-item ${active === i ? "active" : ""} ${winner === i ? "winner" : ""}`} key={i}>
+          <div
+            ref={(el) => { itemRefs.current[i] = el; }}
+            className={`spin-item ${active === i ? "active" : ""} ${winner === i ? "winner" : ""}`}
+            key={i}
+          >
             <span className="si-ava">{initial(p)}</span>
             {p}
           </div>

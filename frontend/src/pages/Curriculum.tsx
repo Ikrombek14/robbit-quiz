@@ -5,7 +5,8 @@ import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import SearchBar, { type LessonHit } from "../components/SearchBar";
 import QuizPicker from "../components/QuizPicker";
-import type { QuizListItem, FolderItem } from "../types";
+import { slideTitle } from "../slides";
+import type { QuizListItem, FolderItem, Quiz } from "../types";
 
 // Darslar biriktirilgan slayd PAPKASI bo'yicha ranglanadi: bir papkadagi darslar bir xil
 // tusda, boshqa papkadagilar boshqa rangda. Papkasi (yoki slaydi) yo'q darslar neytral.
@@ -286,6 +287,22 @@ export default function Curriculum() {
     setNewOrder(lessons.length + 1);
     setNewTitle(""); setNewAuthor(""); setNewIsDemo(false); setNewQuizId("");
     setShowAdd(true); setEditingId(null); setShowFolderAdd(false); setShowBulkAdd(false);
+  }
+
+  // Quiz tanlanganda mavzu nomini uning BIRINCHI slaydidagi matndan oladi.
+  // Slaydda matn bo'lmasa quiz nomiga (cleanTitle) qaytadi.
+  async function titleFromFirstSlide(quizId: string, fallback: string): Promise<string> {
+    try {
+      const r = await api<{ quiz: Quiz }>(`/quizzes/${quizId}`);
+      const first = r.quiz.slides?.[0];
+      if (first) {
+        const t = slideTitle(first);
+        if (t && t !== "Slayd" && t !== "Savol") return cleanTitle(t);
+      }
+    } catch {
+      /* tarmoq xatosi — fallback ishlatiladi */
+    }
+    return fallback;
   }
 
   function openFolderAdd() {
@@ -814,9 +831,13 @@ export default function Curriculum() {
                       placeholder="— Ixtiyoriy —"
                       onChange={(id) => {
                         setNewQuizId(id);
+                        // Mavzu nomini birinchi slayd matnidan olamiz (bo'sh bo'lsa)
                         if (id && !newTitle.trim()) {
                           const q = quizList.find((x) => x.id === id);
-                          if (q) setNewTitle(cleanTitle(q.title));
+                          const fallback = q ? cleanTitle(q.title) : "";
+                          titleFromFirstSlide(id, fallback).then((t) =>
+                            setNewTitle((cur) => (cur.trim() ? cur : t)),
+                          );
                         }
                       }} />
                   </div>

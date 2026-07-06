@@ -36,6 +36,28 @@ function cleanTitle(raw: string): string {
   return (stripped || t).slice(0, 200);
 }
 
+// Slayd `data` (JSON string) ichidan asosiy matnni oladi: CONTENT (kanvas) —
+// birinchi bo'sh bo'lmagan matn elementi yoki eski `title`; QUESTION — `text`.
+// Frontend'dagi slideTitle() bilan bir xil mantiq. Topilmasa bo'sh qaytaradi.
+function slideText(kind: string, dataJson: string): string {
+  let d: any;
+  try {
+    d = JSON.parse(dataJson);
+  } catch {
+    return "";
+  }
+  if (kind === "CONTENT") {
+    if (Array.isArray(d?.elements)) {
+      const el = d.elements.find(
+        (e: any) => e?.type === "text" && typeof e.text === "string" && e.text.trim(),
+      );
+      if (el) return String(el.text).trim();
+    }
+    return typeof d?.title === "string" ? d.title.trim() : "";
+  }
+  return typeof d?.text === "string" ? d.text.trim() : "";
+}
+
 // Ro'yxat — filter bilan (faqat roster'da tasdiqlangan / admin)
 curriculumRouter.get("/", requireApproved, async (req, res) => {
   const { subject, ageGroup, year, section } = req.query;
@@ -203,6 +225,22 @@ curriculumRouter.post("/from-folder", requireAdmin, async (req: AuthedRequest, r
   const toCreate = quizzes.filter((q) => !usedQuizIds.has(q.id));
   const skipped = quizzes.length - toCreate.length;
 
+  // Mavzu nomini har quizning BIRINCHI slaydidagi matndan olamiz (order 0).
+  // Topilmasa quiz nomiga qaytamiz.
+  const firstSlides = toCreate.length
+    ? await prisma.slide.findMany({
+        where: { quizId: { in: toCreate.map((q) => q.id) }, order: 0 },
+        select: { quizId: true, kind: true, data: true },
+      })
+    : [];
+  const titleByQuiz = new Map(firstSlides.map((s) => [s.quizId, slideText(s.kind, s.data)]));
+
+  function lessonTitle(q: { id: string; title: string }): string {
+    const fromSlide = titleByQuiz.get(q.id) ?? "";
+    const raw = fromSlide || q.title; // slayd matni bo'lmasa quiz nomi
+    return stripPrefix ? cleanTitle(raw) : raw.trim().slice(0, 200);
+  }
+
   if (toCreate.length > 0) {
     await prisma.$transaction(
       toCreate.map((q) =>
@@ -213,7 +251,7 @@ curriculumRouter.post("/from-folder", requireAdmin, async (req: AuthedRequest, r
             year,
             section,
             order: nextOrder++,
-            title: stripPrefix ? cleanTitle(q.title) : q.title.trim().slice(0, 200),
+            title: lessonTitle(q),
             quizId: q.id,
             isDemo: false,
           },

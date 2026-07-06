@@ -315,27 +315,6 @@ export default function Curriculum() {
     setShowBulkAdd(true); setShowAdd(false); setShowFolderAdd(false); setEditingId(null);
   }
 
-  // Ko'rinib turgan darslar mavzusini biriktirilgan slaydning birinchi
-  // sahifasidan qayta oladi (qo'lda o'zgartirilgan nomlar ham almashadi).
-  const [retitling, setRetitling] = useState(false);
-  async function retitleFromSlides() {
-    const ids = lessons.filter((l) => l.quiz).map((l) => l.id);
-    if (ids.length === 0) { showToast("Bu bo'limda slayd biriktirilgan dars yo'q."); return; }
-    if (!confirm(`${ids.length} ta darsning mavzusi biriktirilgan slaydning birinchi sahifasidagi matndan yangilanadi.\n\nQo'lda o'zgartirilgan nomlar ham almashishi mumkin. Davom etamizmi?`)) return;
-    setRetitling(true);
-    try {
-      const r = await api<{ updated: number; checked: number }>("/curriculum/retitle-from-slides", {
-        method: "POST",
-        body: JSON.stringify({ ids }),
-      });
-      await loadLessons();
-      loadCounts();
-      showToast(`✅ ${r.updated} ta dars nomi yangilandi${r.updated < r.checked ? ` (${r.checked - r.updated} tasi o'zgarmadi)` : ""}.`);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Xatolik");
-    } finally { setRetitling(false); }
-  }
-
   function openEdit(l: LessonPlan) {
     setEditingId(l.id);
     setEditState({ title: l.title, author: l.author ?? "", isDemo: l.isDemo, quizId: l.quizId ?? "", order: l.order + 1 });
@@ -653,17 +632,7 @@ export default function Curriculum() {
                       </div>
                       {/* Mavzu */}
                       <div style={{ flex: 1, minWidth: 180 }}>
-                        <label className="f-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span>Dars mavzusi *</span>
-                          {(editState.quizId || l.quizId) && (
-                            <button type="button" className="cur-mini-btn view" style={{ padding: "2px 8px", fontSize: 11 }}
-                              title="Biriktirilgan slaydning birinchi sahifasidagi matnni olish"
-                              onClick={() => titleFromFirstSlide(editState.quizId || l.quizId!, editState.title)
-                                .then((t) => setEditState((s) => ({ ...s, title: t })))}>
-                              🔄 Slayddan
-                            </button>
-                          )}
-                        </label>
+                        <label className="f-label">Dars mavzusi *</label>
                         <input value={editState.title} autoFocus
                           onChange={(e) => setEditState((s) => ({ ...s, title: e.target.value }))}
                           onKeyDown={(e) => e.key === "Enter" && saveEdit(l)}
@@ -948,13 +917,6 @@ export default function Curriculum() {
                 <button className="btn btn-ghost" onClick={openAdd}>+ Dars qo'shish</button>
                 <button className="btn btn-ghost" onClick={openFolderAdd}>📁 Papkadan qo'shish</button>
                 <button className="btn btn-ghost" onClick={openBulkAdd}>📋 Ro'yxatdan qo'shish</button>
-                {/* Mavjud darslar nomini biriktirilgan slaydning 1-sahifasidan yangilash */}
-                {lessons.some((l) => l.quiz) && (
-                  <button className="btn btn-ghost" onClick={retitleFromSlides} disabled={retitling}
-                    title="Bu bo'limdagi darslar mavzusini biriktirilgan slaydning birinchi sahifasidan yangilaydi">
-                    {retitling ? "Yangilanmoqda…" : "🔄 Nomlarni slaydlardan yangilash"}
-                  </button>
-                )}
               </div>
             )}
             </>

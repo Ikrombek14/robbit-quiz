@@ -301,44 +301,6 @@ curriculumRouter.post("/bulk-titles", requireAdmin, async (req, res) => {
   res.json({ created: titles.length });
 });
 
-// Ommaviy: MAVJUD darslar mavzusini biriktirilgan slaydning birinchi sahifasidan
-// yangilash — faqat admin. Berilgan `ids` ichidan quizи bor darslar olinadi,
-// har birining birinchi slaydi (order 0) matnidan yangi nom hisoblanadi.
-// Bo'sh matn yoki nom o'zgarmasa — o'tkazib yuboriladi.
-const retitleSchema = z.object({ ids: z.array(z.string()).min(1) });
-curriculumRouter.post("/retitle-from-slides", requireAdmin, async (req, res) => {
-  const parsed = retitleSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
-    return;
-  }
-  const lessons = await prisma.lessonPlan.findMany({
-    where: { id: { in: parsed.data.ids }, quizId: { not: null } },
-    select: { id: true, quizId: true, title: true },
-  });
-  if (lessons.length === 0) {
-    res.json({ updated: 0, checked: 0 });
-    return;
-  }
-  const quizIds = [...new Set(lessons.map((l) => l.quizId as string))];
-  const firstSlides = await prisma.slide.findMany({
-    where: { quizId: { in: quizIds }, order: 0 },
-    select: { quizId: true, kind: true, data: true },
-  });
-  const textByQuiz = new Map(firstSlides.map((s) => [s.quizId, slideText(s.kind, s.data)]));
-
-  const updates = lessons
-    .map((l) => ({ id: l.id, title: cleanTitle(textByQuiz.get(l.quizId as string) ?? ""), old: l.title }))
-    .filter((u) => u.title && u.title !== u.old); // bo'sh matn yoki o'zgarmagan — o'tkazamiz
-
-  if (updates.length > 0) {
-    await prisma.$transaction(
-      updates.map((u) => prisma.lessonPlan.update({ where: { id: u.id }, data: { title: u.title } })),
-    );
-  }
-  res.json({ updated: updates.length, checked: lessons.length });
-});
-
 // Yangilash — faqat admin
 curriculumRouter.put("/:id", requireAdmin, async (req, res) => {
   const parsed = lessonSchema.safeParse(req.body);

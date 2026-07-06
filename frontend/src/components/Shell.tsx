@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { Quiz } from "../types";
 import { getTheme, toggleTheme, type Theme } from "../theme";
+import HomeworkReminder from "./HomeworkReminder";
 
 interface NavItem {
   key: string;
@@ -112,6 +113,8 @@ export default function Shell({ children }: { children: ReactNode }) {
       </aside>
       <main className="shell-main">{children}</main>
     </div>
+    {/* Saytga kirganda tekshirilmagan uy vazifalar haqida bir martalik ogohlantirish */}
+    <HomeworkReminder />
     </div>
   );
 }

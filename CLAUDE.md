@@ -102,6 +102,24 @@ Two-package repo: `backend/` (Express + Socket.io + Prisma) and `frontend/` (Rea
 
 Backend env (`backend/.env`, see `.env.example`): `PORT`, `DATABASE_URL` (SQLite file in dev, Postgres URL in prod — change the `provider` in `schema.prisma` for prod), `JWT_SECRET`, `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`. `NODE_ENV=production` flips on static-serving + same-origin behavior.
 
+## Offline zaxira (backup) ZIP formati
+
+Admin `/backup` sahifasidan butun bazani ZIP qilib oladi (`routes/backup.ts` +
+`pages/Backup.tsx`). **Agar foydalanuvchi shunday ZIP bersa — bu o'sha zaxira:**
+
+- `manifest.json` — `format: "robbit-quiz-backup"`, versiya, sana, yozuvlar soni
+- `data/backup.json` — ASOSIY MANBA: teachers (parol hash'lari bilan — maxfiy!), folders,
+  quizzes (ichida slides[], `data` object holatida — DB'da esa JSON-string), lessonPlans,
+  guideSections, roster, gameRecords(+players). Prisma modellariga birma-bir mos.
+- `uploads/` — slayd rasmlari (slide data ichida `/uploads/<fayl>` ko'rinishida ishora qilinadi;
+  serverda `backend/uploads/` ga ko'chiriladi)
+- `pdf/` — slaydlarning odam o'qiydigan PDF ko'rinishi (tiklashda ISHLATILMAYDI)
+
+**Tiklash:** `/backup` sahifasiga ZIP'ni yuklash yoki `POST /api/backup/restore`
+(multipart `file`, admin JWT). Restore faqat YO'Q yozuvlarni yaratadi (id bo'yicha),
+mavjudlarga tegmaydi — idempotent, dublikat qilmaydi. Qo'lda tiklash kerak bo'lsa
+`data/backup.json` ni o'qib Prisma orqali joylang.
+
 ## Design system
 
 `DESIGN.md` defines the "Nihol Learning" brand: child-friendly, large touch targets (min 48px), rounded corners everywhere, Quicksand (headings) + Nunito Sans (body), pastel palette (blue primary / mint secondary / yellow tertiary). Tokens are wired into `frontend/tailwind.config.js` and `index.css`. Follow it for any new UI.

@@ -24,6 +24,7 @@ import { guideRouter } from "./routes/guide.js";
 import { searchRouter } from "./routes/search.js";
 import { teachersRouter } from "./routes/teachers.js";
 import { adminRouter } from "./routes/admin.js";
+import { backupRouter } from "./routes/backup.js";
 import { statsRouter } from "./routes/stats.js";
 import { startStatsScheduler } from "./services/stats.js";
 
@@ -133,6 +134,7 @@ app.use("/api/guide", guideRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/teachers", teachersRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/backup", backupRouter);
 app.use("/api/stats", statsRouter);
 
 // Production: tayyor frontend'ni (statik) shu serverdan beramiz — bitta port, bitta origin

@@ -121,6 +121,10 @@ export default function Host() {
 
   // overlaylar
   const [showWheel, setShowWheel] = useState(false);
+  // Tasodifiy tanlash: bir marta tanlangan o'quvchi qayta tushmasin — playerId bo'yicha
+  // saqlanadi (ism emas, chunki anonim rejimda "O'quvchi N" nomlar takrorlanishi mumkin).
+  // Sessiya davomida saqlanadi (sahifa yangilanmaguncha yoki "qaytadan boshlash"gacha).
+  const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
   const [showBoard, setShowBoard] = useState(false);
   const [showNames, setShowNames] = useState(true);
 
@@ -785,7 +789,7 @@ export default function Host() {
               <div className="side-card">
                 <div className="names-toggle">
                   <span>
-                    Ishtirokchilar
+                    Ishtirokchilar: {players.length}
                     {settings.antiCheat && totalFlags > 0 && (
                       <span className="cheat-badge" title="Anti-cheat ogohlantirishlari">
                         <span className="material-symbols-outlined">warning</span>
@@ -915,7 +919,13 @@ export default function Host() {
         )}
 
         {showWheel && (
-          <SpinWheel players={players.map((p, i) => dispName(p.nickname, i))} onClose={() => setShowWheel(false)} />
+          <SpinWheel
+            players={players.map((p, i) => ({ id: p.id, name: dispName(p.nickname, i) }))}
+            pickedIds={pickedIds}
+            onPick={(id) => setPickedIds((s) => new Set(s).add(id))}
+            onReset={() => setPickedIds(new Set())}
+            onClose={() => setShowWheel(false)}
+          />
         )}
         {showBoard && results && (
           <LeaderboardOverlay rows={results.leaderboard} anonymous={settings.anonymous} onClose={() => setShowBoard(false)} />
@@ -1002,39 +1012,63 @@ function QrImage({ text, size }: { text: string; size: number }) {
   return <img src={url} width={size} height={size} alt="QR" style={{ display: "block", borderRadius: 6 }} />;
 }
 
-/* ---------------- Spin the wheel ---------------- */
-function SpinWheel({ players, onClose }: { players: string[]; onClose: () => void }) {
-  const [active, setActive] = useState(-1);
-  const [winner, setWinner] = useState(-1);
+/* ---------------- Tasodifiy tanlash (bir marta tanlangan qayta tushmaydi) ---------------- */
+interface PickerPlayer {
+  id: string;
+  name: string;
+}
+function SpinWheel({
+  players,
+  pickedIds,
+  onPick,
+  onReset,
+  onClose,
+}: {
+  players: PickerPlayer[];
+  pickedIds: Set<string>;
+  onPick: (id: string) => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const [winnerId, setWinnerId] = useState<string | null>(null);
   const [spinning, setSpinning] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  // Faol/g'olib qator har doim ko'rinib turishi kerak — ro'yxat uzun bo'lsa
-  // (scroll bor) belgilangan qatorga avtomatik surilamiz. Aks holda tanlov
-  // "ekranga siqqanlar orasida" bo'layotgandek tuyuladi.
-  useEffect(() => {
-    const idx = winner >= 0 ? winner : active;
-    if (idx < 0) return;
-    itemRefs.current[idx]?.scrollIntoView({ block: "center", behavior: winner >= 0 ? "smooth" : "auto" });
-  }, [active, winner]);
+  const remaining = players.filter((p) => !pickedIds.has(p.id));
+  const allPicked = players.length > 0 && remaining.length === 0;
+  const winner = winnerId ? players.find((p) => p.id === winnerId) : null;
 
+  // Faol/g'olib qator har doim ko'rinib turishi kerak — ro'yxat uzun bo'lsa
+  // (scroll bor) belgilangan qatorga avtomatik surilamiz.
+  useEffect(() => {
+    const id = winnerId ?? (activeIdx >= 0 ? players[activeIdx]?.id : null);
+    if (!id) return;
+    itemRefs.current[id]?.scrollIntoView({ block: "center", behavior: winnerId ? "smooth" : "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIdx, winnerId]);
+
+  // Tanlash FAQAT hali tanlanmaganlar orasidan bo'ladi — g'olib har doim
+  // `remaining`dan chiqadi, shu sababli bir kishi ikki marta tanlanmaydi.
   function spin() {
-    if (!players.length || spinning) return;
-    setWinner(-1);
+    if (spinning || remaining.length === 0) return;
+    setWinnerId(null);
     setSpinning(true);
-    const target = Math.floor(Math.random() * players.length);
-    const totalSteps = players.length * 4 + target + 6;
+    const target = remaining[Math.floor(Math.random() * remaining.length)];
+    const targetIdx = players.findIndex((p) => p.id === target.id);
+    const totalSteps = players.length * 4 + targetIdx + 6;
     let i = 0;
     const step = () => {
-      setActive(i % players.length);
+      setActiveIdx(i % players.length);
       i++;
       if (i > totalSteps) {
-        setActive(target);
-        setWinner(target);
+        setActiveIdx(targetIdx);
+        setWinnerId(target.id);
         setSpinning(false);
+        onPick(target.id);
         return;
       }
       // sekinlashish: oxiriga borgan sari kechikish ortadi
@@ -1047,23 +1081,46 @@ function SpinWheel({ players, onClose }: { players: string[]; onClose: () => voi
   return (
     <div className="spin-overlay">
       <button className="btn btn-ghost spin-close" onClick={onClose}>✕ Yopish</button>
-      <div className="spin-title">🎲 Tasodifiy o'quvchi</div>
-      <div className="spin-winner-banner">{winner >= 0 ? `🎉 ${players[winner]} tanlandi!` : ""}</div>
-      <div className="spin-list">
-        {players.map((p, i) => (
-          <div
-            ref={(el) => { itemRefs.current[i] = el; }}
-            className={`spin-item ${active === i ? "active" : ""} ${winner === i ? "winner" : ""}`}
-            key={i}
-          >
-            <span className="si-ava">{initial(p)}</span>
-            {p}
-          </div>
-        ))}
+      <div className="spin-title">
+        🎲 Tasodifiy o'quvchi
+        {players.length > 0 && <span className="spin-count"> ({pickedIds.size}/{players.length} tanlandi)</span>}
       </div>
-      <button className="spin-btn" onClick={spin} disabled={spinning || players.length === 0}>
-        {spinning ? "Aylanmoqda…" : winner >= 0 ? "Qayta aylantirish" : "Aylantirish"}
-      </button>
+      <div className="spin-winner-banner">{winner ? `🎉 ${winner.name} tanlandi!` : ""}</div>
+
+      {allPicked ? (
+        <div className="spin-all-picked">
+          <span className="material-symbols-outlined">celebration</span>
+          <div>Barcha o'quvchilar tanlandi</div>
+          <button className="spin-btn" onClick={onReset}>Qaytadan boshlash</button>
+        </div>
+      ) : (
+        <>
+          <div className="spin-list">
+            {players.map((p, i) => {
+              const isPicked = pickedIds.has(p.id);
+              return (
+                <div
+                  ref={(el) => { itemRefs.current[p.id] = el; }}
+                  className={`spin-item ${activeIdx === i ? "active" : ""} ${winnerId === p.id ? "winner" : ""} ${isPicked ? "picked" : ""}`}
+                  key={p.id}
+                >
+                  <span className="si-ava">{initial(p.name)}</span>
+                  {p.name}
+                  {isPicked && <span className="material-symbols-outlined si-check">check_circle</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="spin-actions">
+            <button className="spin-btn" onClick={spin} disabled={spinning || remaining.length === 0}>
+              {spinning ? "Aylanmoqda…" : winnerId ? "Qayta aylantirish" : "Aylantirish"}
+            </button>
+            {pickedIds.size > 0 && (
+              <button className="btn btn-ghost spin-reset" onClick={onReset}>Ro'yxatni tozalash</button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

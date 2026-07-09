@@ -544,7 +544,8 @@ button.quiz-card:active { transform: translateY(0); }
    sozlamalar ustuni) o'z ichida scroll qiladi. dvh — brauzer paneli hisobga olinadi. */
 .lobby-screen {
   height: 100vh; height: 100dvh;
-  display: flex; flex-direction: column; background: var(--bg);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--bg);
   overflow: hidden;
 }
 .lobby-head {
@@ -659,11 +660,14 @@ button.quiz-card:active { transform: translateY(0); }
 .start-bar { flex-shrink: 0; display: flex; justify-content: center; padding: clamp(10px, 1.8vh, 18px); border-top: 1px solid var(--border); background: var(--surface); }
 
 /* ---------- Live presentation shell ----------
-   100dvh + overflow hidden: taqdimotda sahifa scroll YO'Q. Header/footer fikslangan,
-   o'rta qism flex: 1 bilan taqsimlanadi, matnlar clamp() bilan viewportga moslashadi. */
+   100dvh + overflow hidden: taqdimotda sahifa scroll YO'Q. Grid qatorlar:
+   header (auto, fiks) / kontent (minmax(0,1fr) — qolgan joy, kichrayadi ham) /
+   footer (auto, fiks). minmax(0,…) muhim: kontent satri hech qachon o'z
+   mazmunidan kattalashib header/footer'ni siqib chiqarmaydi. */
 .live-wrap {
   height: 100vh; height: 100dvh;
-  display: flex; flex-direction: column; background: var(--bg);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--bg);
   overflow: hidden;
 }
 .live-top {
@@ -673,21 +677,38 @@ button.quiz-card:active { transform: translateY(0); }
 }
 .live-top .lt-code { font-weight: 700; color: var(--muted); font-size: 14px; }
 .live-top .lt-title { font-weight: 800; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Ustunlar minmax(0,1fr): "1fr"ning yashirin min-width:auto'si uzun savol
+   matnida yon panelni siqib yuborishiga yo'l qo'ymaydi. Yagona satr
+   minmax(0,1fr): ichki bloklar (slayd/javoblar/panel) ANIQ shu balandlikni
+   oladi — kontent oshsa satr cho'zilib pastki boshqaruvni surmaydi. */
 .live-main {
-  flex: 1; display: grid; grid-template-columns: 1fr 300px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 20px; padding: clamp(10px, 2vh, 22px) 24px;
   align-items: stretch; min-height: 0; overflow: hidden;
 }
-.live-main.no-side { grid-template-columns: 1fr; max-width: 1100px; margin: 0 auto; width: 100%; }
+/* CONTENT slaydda yon panel yo'q — slayd butun maydonni oladi (kenglik
+   cheklovi yo'q: o'lcham 16:9 nisbat va mavjud balandlikdan hisoblanadi,
+   shuning uchun proyektorda ham iloji boricha katta chiqadi) */
+.live-main.no-side { grid-template-columns: minmax(0, 1fr); }
 .live-content { display: flex; flex-direction: column; gap: clamp(10px, 1.8vh, 18px); min-height: 0; overflow: hidden; }
 /* CONTENT slayd host ekranida: 16:9 saqlanadi, balandlikka ham SIG'ADI
    (SlideScene balandligi kenglikdan hisoblanadi — shu sabab kenglikni
-   mavjud balandlikdan cheklaymiz: chrome ≈ header + footer + padding) */
-.live-slide { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-/* SlideScene inline width:100% qo'yadi — shu sabab o'lcham alohida qutiga beriladi */
+   mavjud balandlikdan cheklaymiz). container-type:size — .live-slide-box
+   o'lchamini ANIQ shu blokning haqiqiy render qilingan balandligidan (cqh)
+   hisoblaydi, header/footer balandligini taxmin qilishga hojat qolmaydi
+   (eski "185px" kabi qattiq yozilgan raqamlar boshqa ekranlarda noto'g'ri
+   chiqib, slaydni kerakligidan kichik yoki katta ko'rsatib scroll berardi). */
+.live-slide {
+  flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+  container-type: size;
+}
+/* SlideScene inline width:100% qo'yadi — shu sabab o'lcham alohida qutiga beriladi.
+   1-qator — cqh qo'llamaydigan eski brauzerlar uchun zaxira taxmin; 2-qator —
+   zamonaviy brauzerlarda haqiqiy balandlikdan aniq hisoblanadi (ustun bo'ladi). */
 .live-slide-box {
-  width: min(100%, calc((100vh - 185px) * 16 / 9));
-  width: min(100%, calc((100dvh - 185px) * 16 / 9));
+  width: min(100%, calc((100dvh - 160px) * 16 / 9));
+  width: min(100%, calc(100cqh * 16 / 9));
 }
 .live-qcard {
   background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
@@ -798,39 +819,60 @@ button.quiz-card:active { transform: translateY(0); }
 .tool-btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .tool-btn.primary:hover:not(:disabled) { background: var(--primary-strong); }
 
-/* ---------- Spin the wheel ---------- */
+/* ---------- Tasodifiy tanlash (spin) ----------
+   position:fixed;inset:0 — butun viewport, overflow:hidden bilan hech qachon
+   sahifa scroll bermaydi. Ro'yxat flex:1+overflow-y:auto bilan FAQAT o'z ichida
+   scroll qiladi (banner/tugma doim ko'rinib turadi, qancha o'quvchi bo'lmasin). */
 .spin-overlay {
   position: fixed; inset: 0; background: rgba(10,12,16,0.92); z-index: 80;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: clamp(10px, 2vh, 26px); padding: clamp(16px, 3vh, 24px);
+  overflow: hidden;
 }
-.spin-close { position: absolute; top: 20px; right: 24px; }
-.spin-title { color: #fff; font-size: 26px; font-weight: 800; }
-/* Uzun ro'yxat ekranga sig'masa — scroll; faol qator avtomatik ko'rinishga suriladi */
+.spin-close { position: absolute; top: 20px; right: 24px; flex-shrink: 0; }
+.spin-title { color: #fff; font-size: clamp(18px, 3.2vh, 26px); font-weight: 800; flex-shrink: 0; text-align: center; }
+.spin-count { color: #9aa3b2; font-weight: 700; font-size: 0.65em; }
+/* G'olib ismi — katta va markazda (proyektorda uzoqdan o'qiladi) */
+.spin-winner-banner {
+  color: #ffd23f; font-size: clamp(22px, 4.5vh, 38px); font-weight: 800;
+  min-height: clamp(30px, 5vh, 44px); flex-shrink: 0; text-align: center; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; max-width: min(92vw, 700px); white-space: nowrap;
+}
+/* Uzun ro'yxat ekranga sig'masa — FAQAT shu blok ichida scroll; faol qator avtomatik ko'rinishga suriladi */
 .spin-list {
-  display: flex; flex-direction: column; gap: 12px; width: min(440px, 92%);
-  max-height: 56vh; overflow-y: auto; padding: 6px;
+  display: flex; flex-direction: column; gap: clamp(6px, 1.2vh, 12px); width: min(440px, 92%);
+  flex: 1; min-height: 0; overflow-y: auto; padding: 6px;
   scrollbar-width: thin; scrollbar-color: #2c313a transparent;
 }
 .spin-item {
   display: flex; align-items: center; gap: 14px; background: #1c2027; border: 2px solid transparent;
-  border-radius: 14px; padding: 16px 20px; color: #cfd3da; font-weight: 700; font-size: 18px;
-  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  border-radius: 14px; padding: clamp(10px, 1.6vh, 16px) 20px; color: #cfd3da; font-weight: 700;
+  font-size: clamp(14px, 2vh, 18px);
+  transition: transform 0.12s, border-color 0.12s, background 0.12s, opacity 0.12s;
+  flex-shrink: 0;
 }
 .spin-item .si-ava {
-  width: 34px; height: 34px; border-radius: 999px; background: #2c313a; color: #fff;
-  display: flex; align-items: center; justify-content: center; font-weight: 800;
+  width: clamp(28px, 4vh, 34px); height: clamp(28px, 4vh, 34px); border-radius: 999px; background: #2c313a; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0;
 }
 .spin-item.active { border-color: var(--primary); background: #262b34; color: #fff; transform: scale(1.04); }
 .spin-item.winner {
   border-color: #ffd23f; background: linear-gradient(90deg, rgba(255,210,63,0.25), rgba(255,210,63,0.05));
   color: #fff; transform: scale(1.07); box-shadow: 0 0 28px rgba(255,210,63,0.35);
 }
+/* Avval tanlangan o'quvchi — xiralashgan + ✓ belgisi, qayta tanlanmaydi */
+.spin-item.picked { opacity: 0.4; }
+.spin-item .si-check { margin-left: auto; color: #5fe0b5; font-size: 20px; flex-shrink: 0; }
+.spin-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; flex-shrink: 0; }
 .spin-btn {
   background: var(--primary); color: var(--on-primary); border: none; border-radius: 12px;
   padding: 14px 36px; font-size: 18px; font-weight: 800; cursor: pointer;
 }
 .spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.spin-winner-banner { color: #ffd23f; font-size: 22px; font-weight: 800; min-height: 28px; }
+.spin-reset { color: #fff; border-color: rgba(255,255,255,0.3); }
+/* Hammasi tanlangandan keyingi holat */
+.spin-all-picked { display: flex; flex-direction: column; align-items: center; gap: 12px; color: #fff; font-size: clamp(16px, 2.6vh, 22px); font-weight: 800; }
+.spin-all-picked .material-symbols-outlined { font-size: clamp(36px, 6vh, 56px); color: #ffd23f; }
 
 /* ---------- Leaderboard overlay (savoldan keyin) ---------- */
 .lbo-overlay {

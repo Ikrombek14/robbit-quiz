@@ -5,6 +5,9 @@ export const config = {
   clientUrl: process.env.CLIENT_URL ?? "http://localhost:5173",
   jwtSecret: process.env.JWT_SECRET ?? "dev-secret-change-me",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  // Google Gemini (aistudio.google.com) — TEKIN reja bilan ishlaydi.
+  // Kalit qo'yilgan bo'lsa AI savol generatsiyasi Gemini orqali ketadi (Claude o'rniga).
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   production: process.env.NODE_ENV === "production",
   adminEmails: (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean),

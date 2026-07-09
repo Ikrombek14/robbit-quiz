@@ -50,14 +50,15 @@ jobs:
           DB_PASS: ${{ secrets.DB_PASS }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: |
           # Unix socket orqali ulanamiz (host=/var/run/postgresql): bu psql boshqaradigan
           # aynan o'sha cluster, 'local ... trust' qoidasiga tushadi — TCP/IPv6/parol
           # noaniqliklarisiz. Parol ham (percent-encode qilingan) qoldiriladi — ehtiyot uchun.
           DB_PASS_ENC=$(jq -rn --arg x "$DB_PASS" '$x|@uri')
-          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=postgresql://robbit:%s@localhost:5432/robbit_quiz?host=/var/run/postgresql\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com,ilkhomjon2001@gmail.com\n' \
-            "$DB_PASS_ENC" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GOOGLE_CLIENT_ID" > /tmp/app.env
+          printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=postgresql://robbit:%s@localhost:5432/robbit_quiz?host=/var/run/postgresql\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGEMINI_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com,ilkhomjon2001@gmail.com\n' \
+            "$DB_PASS_ENC" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GEMINI_API_KEY" "$GOOGLE_CLIENT_ID" > /tmp/app.env
 
       - name: sshpass o'rnatish
         run: sudo apt-get install -y sshpass

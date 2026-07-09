@@ -10,6 +10,8 @@ import {
   type GeneratedQuestion,
   type SlideImage,
 } from "../services/claude.js";
+import { generateQuestionsFromSlidesGemini } from "../services/gemini.js";
+import { config } from "../config.js";
 import { UPLOADS_DIR } from "./upload.js";
 
 const upload = multer({
@@ -59,6 +61,7 @@ const MEDIA_BY_EXT: Record<string, SlideImage["mediaType"]> = {
 };
 const MAX_IMAGES = 20; // AI so'roviga kiradigan rasmlar chegarasi (xarajat/limit)
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB dan katta rasm o'tkazib yuboriladi
+const MAX_TOTAL_IMAGE_BYTES = 13 * 1024 * 1024; // jami ~13 MB (Gemini so'rov limiti ~20MB, base64 +33%)
 
 // AI so'rovi 60s+ olishi mumkin — nginx/Cloudflare proxy javobni shuncha kutmaydi (502).
 // Shuning uchun natija darhol emas: POST job ochadi (jobId qaytaradi), frontend GET bilan
@@ -90,8 +93,9 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
   // (basename bilan path traversal'dan himoya)
   const slideImages: SlideImage[] = [];
   let skippedImages = 0;
+  let totalBytes = 0;
   for (const url of images) {
-    if (slideImages.length >= MAX_IMAGES) {
+    if (slideImages.length >= MAX_IMAGES || totalBytes >= MAX_TOTAL_IMAGE_BYTES) {
       skippedImages++;
       continue;
     }
@@ -102,10 +106,11 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
     const filePath = path.join(UPLOADS_DIR, base);
     try {
       const stat = fs.statSync(filePath);
-      if (stat.size > MAX_IMAGE_BYTES) {
+      if (stat.size > MAX_IMAGE_BYTES || totalBytes + stat.size > MAX_TOTAL_IMAGE_BYTES) {
         skippedImages++;
         continue;
       }
+      totalBytes += stat.size;
       slideImages.push({ mediaType, base64: fs.readFileSync(filePath).toString("base64") });
     } catch {
       skippedImages++; // fayl topilmadi — o'tkazib yuboramiz
@@ -128,7 +133,9 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
     createdAt: Date.now(),
   };
   aiJobs.set(jobId, job);
-  generateQuestionsFromSlides(slideImages, cleanTexts, existing, count)
+  // Provayder tanlovi: GEMINI_API_KEY bo'lsa Gemini (tekin reja), aks holda Claude
+  const generate = config.geminiApiKey ? generateQuestionsFromSlidesGemini : generateQuestionsFromSlides;
+  generate(slideImages, cleanTexts, existing, count)
     .then((questions) => {
       job.status = "done";
       job.questions = questions;

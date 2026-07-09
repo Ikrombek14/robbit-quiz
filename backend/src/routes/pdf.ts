@@ -3,8 +3,13 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { z } from "zod";
-import { requireAuth, requireCanCreate } from "../auth.js";
-import { generateQuestionsFromPdf, generateQuestionsFromSlides, type SlideImage } from "../services/claude.js";
+import { requireAuth, requireCanCreate, type AuthedRequest } from "../auth.js";
+import {
+  generateQuestionsFromPdf,
+  generateQuestionsFromSlides,
+  type GeneratedQuestion,
+  type SlideImage,
+} from "../services/claude.js";
 import { UPLOADS_DIR } from "./upload.js";
 
 const upload = multer({
@@ -55,7 +60,25 @@ const MEDIA_BY_EXT: Record<string, SlideImage["mediaType"]> = {
 const MAX_IMAGES = 20; // AI so'roviga kiradigan rasmlar chegarasi (xarajat/limit)
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB dan katta rasm o'tkazib yuboriladi
 
-pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (req, res) => {
+// AI so'rovi 60s+ olishi mumkin — nginx/Cloudflare proxy javobni shuncha kutmaydi (502).
+// Shuning uchun natija darhol emas: POST job ochadi (jobId qaytaradi), frontend GET bilan
+// har 3 soniyada holatni so'raydi. Job'lar xotirada, 15 daqiqadan keyin tozalanadi.
+interface AiJob {
+  teacherId: string;
+  status: "pending" | "done" | "error";
+  questions?: GeneratedQuestion[];
+  error?: string;
+  usedImages: number;
+  skippedImages: number;
+  createdAt: number;
+}
+const aiJobs = new Map<string, AiJob>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of aiJobs) if (now - v.createdAt > 15 * 60 * 1000) aiJobs.delete(k);
+}, 60_000).unref();
+
+pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
   const parsed = fromSlidesSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "So'rov formati noto'g'ri" });
@@ -95,10 +118,42 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
     return;
   }
 
-  try {
-    const questions = await generateQuestionsFromSlides(slideImages, cleanTexts, existing, count);
-    res.json({ questions, usedImages: slideImages.length, skippedImages });
-  } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "AI xatoligi" });
+  // Job ochamiz va darhol javob qaytaramiz — AI fon'da ishlaydi
+  const jobId = `j${Date.now().toString(36)}${Math.floor(Math.random() * 1e9).toString(36)}`;
+  const job: AiJob = {
+    teacherId: req.teacherId!,
+    status: "pending",
+    usedImages: slideImages.length,
+    skippedImages,
+    createdAt: Date.now(),
+  };
+  aiJobs.set(jobId, job);
+  generateQuestionsFromSlides(slideImages, cleanTexts, existing, count)
+    .then((questions) => {
+      job.status = "done";
+      job.questions = questions;
+    })
+    .catch((e) => {
+      job.status = "error";
+      job.error = e instanceof Error ? e.message : "AI xatoligi";
+    });
+  res.json({ jobId });
+});
+
+// Job holatini so'rash (polling). GET — aiLimiter'ga kirmaydi (index.ts'da skip).
+pdfRouter.get("/generate-from-slides/:jobId", requireAuth, requireCanCreate, (req: AuthedRequest, res) => {
+  const job = aiJobs.get(String(req.params.jobId));
+  if (!job || job.teacherId !== req.teacherId) {
+    res.status(404).json({ error: "So'rov topilmadi yoki eskirgan. Qayta urinib ko'ring." });
+    return;
   }
+  if (job.status === "pending") {
+    res.json({ status: "pending" });
+    return;
+  }
+  if (job.status === "error") {
+    res.json({ status: "error", error: job.error });
+    return;
+  }
+  res.json({ status: "done", questions: job.questions ?? [], usedImages: job.usedImages, skippedImages: job.skippedImages });
 });

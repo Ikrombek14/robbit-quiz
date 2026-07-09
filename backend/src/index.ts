@@ -69,6 +69,8 @@ const aiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "AI generatsiyasi limiti. Birozdan keyin urinib ko'ring." },
+  // GET = AI job holatini polling qilish (har 3s) — limitga kirmasin, faqat POST (AI chaqiruv) sanaladi
+  skip: (req) => req.method === "GET",
 });
 const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

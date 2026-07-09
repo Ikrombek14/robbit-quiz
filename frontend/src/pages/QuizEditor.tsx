@@ -286,16 +286,31 @@ export default function QuizEditor() {
         setAiError("Slaydlarda AI o'qiy oladigan mazmun yo'q. Avval kontent slaydlar (PDF sahifalari yoki matn) qo'shing.");
         return;
       }
-      const r = await api<{ questions: AiQuestion[]; usedImages: number; skippedImages: number }>(
-        "/pdf/generate-from-slides",
-        { method: "POST", body: JSON.stringify({ count: aiCount, texts, images: [...new Set(images)], existing }) },
-      );
-      if (!r.questions.length) {
+      // AI 1-2 daqiqa olishi mumkin — proxy timeout'iga urilmaslik uchun job + polling
+      const { jobId } = await api<{ jobId: string }>("/pdf/generate-from-slides", {
+        method: "POST",
+        body: JSON.stringify({ count: aiCount, texts, images: [...new Set(images)], existing }),
+      });
+      const deadline = Date.now() + 4 * 60 * 1000; // ko'pi bilan 4 daqiqa kutamiz
+      let questions: AiQuestion[] | null = null;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const st = await api<{ status: string; questions?: AiQuestion[]; error?: string }>(
+          `/pdf/generate-from-slides/${jobId}`,
+        );
+        if (st.status === "done") {
+          questions = st.questions ?? [];
+          break;
+        }
+        if (st.status === "error") throw new Error(st.error || "AI xatoligi");
+      }
+      if (questions === null) throw new Error("AI javobi juda uzoq kutildi. Qayta urinib ko'ring.");
+      if (!questions.length) {
         setAiError("AI savol qaytarmadi. Qayta urinib ko'ring.");
         return;
       }
-      setAiQuestions(r.questions);
-      setAiChecked(r.questions.map(() => true));
+      setAiQuestions(questions);
+      setAiChecked(questions.map(() => true));
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "AI xatoligi");
     } finally {

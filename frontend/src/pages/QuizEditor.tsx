@@ -10,6 +10,30 @@ import SlideScene from "../components/SlideScene";
 import SlideCanvasEditor from "../components/SlideCanvasEditor";
 import Preview from "./Preview";
 
+// AI taklif qilgan savol (backend services/claude.ts bilan bir xil shakl)
+interface AiQuestion {
+  type: "SINGLE" | "MULTIPLE" | "TRUE_FALSE" | "OPEN";
+  text: string;
+  options?: { text: string; isCorrect: boolean }[];
+  openAnswers?: string[];
+}
+
+// AI savolini muharrir slaydiga aylantirish
+function aiToSlide(q: AiQuestion): Slide {
+  if (q.type === "OPEN") {
+    return {
+      kind: "QUESTION", type: "OPEN",
+      data: { text: q.text, answers: q.openAnswers?.length ? q.openAnswers : [""] },
+      timeLimit: 20, points: 1000, notes: "",
+    };
+  }
+  return {
+    kind: "QUESTION", type: q.type,
+    data: { text: q.text, options: (q.options ?? []).map((o) => ({ text: o.text, isCorrect: !!o.isCorrect })) },
+    timeLimit: 20, points: 1000, notes: "",
+  };
+}
+
 // Fayl tanlab serverga yuklaydi, URL qaytaradi
 async function pickAndUploadImage(): Promise<string | null> {
   return new Promise((resolve) => {
@@ -53,6 +77,13 @@ export default function QuizEditor() {
   const [progress, setProgress] = useState("");
   const [waygroundOpen, setWaygroundOpen] = useState(false);
   const [waygroundUrl, setWaygroundUrl] = useState("");
+  // AI savollar taklifi
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiCount, setAiCount] = useState(10);
+  const [aiError, setAiError] = useState("");
+  const [aiQuestions, setAiQuestions] = useState<AiQuestion[] | null>(null);
+  const [aiChecked, setAiChecked] = useState<boolean[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const excelRef = useRef<HTMLInputElement>(null);
 
@@ -225,6 +256,68 @@ export default function QuizEditor() {
     }
   }
 
+  // ---- AI savollar taklifi: joriy slaydlar mazmunidan ----
+  async function generateAi() {
+    if (aiBusy) return;
+    setAiBusy(true);
+    setAiError("");
+    setAiQuestions(null);
+    try {
+      // Muharrirdagi (saqlanmagan bo'lishi ham mumkin) slaydlardan mazmun yig'amiz
+      const texts: string[] = [];
+      const images: string[] = [];
+      for (const s of slides) {
+        if (s.kind !== "CONTENT") continue;
+        const d = s.data;
+        if (d.title?.trim()) texts.push(d.title.trim());
+        if (d.body?.trim()) texts.push(d.body.trim());
+        if (d.imageUrl?.startsWith("/uploads/")) images.push(d.imageUrl);
+        if (d.background?.type === "image" && d.background.value.startsWith("/uploads/")) images.push(d.background.value);
+        for (const el of d.elements ?? []) {
+          if (el.type === "text" && el.text?.trim()) texts.push(el.text.trim());
+          if (el.type === "image" && el.url?.startsWith("/uploads/")) images.push(el.url);
+        }
+      }
+      const existing = slides
+        .filter((s) => s.kind === "QUESTION")
+        .map((s) => s.data.text?.trim() ?? "")
+        .filter(Boolean);
+      if (texts.length === 0 && images.length === 0) {
+        setAiError("Slaydlarda AI o'qiy oladigan mazmun yo'q. Avval kontent slaydlar (PDF sahifalari yoki matn) qo'shing.");
+        return;
+      }
+      const r = await api<{ questions: AiQuestion[]; usedImages: number; skippedImages: number }>(
+        "/pdf/generate-from-slides",
+        { method: "POST", body: JSON.stringify({ count: aiCount, texts, images: [...new Set(images)], existing }) },
+      );
+      if (!r.questions.length) {
+        setAiError("AI savol qaytarmadi. Qayta urinib ko'ring.");
+        return;
+      }
+      setAiQuestions(r.questions);
+      setAiChecked(r.questions.map(() => true));
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "AI xatoligi");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  function addSelectedAi() {
+    if (!aiQuestions) return;
+    const picked = aiQuestions.filter((_, i) => aiChecked[i]);
+    if (picked.length === 0) return;
+    setSlides((arr) => {
+      const next = [...arr, ...picked.map(aiToSlide)];
+      setSelected(arr.length);
+      return next;
+    });
+    setAiOpen(false);
+    setAiQuestions(null);
+    setProgress(`✅ ${picked.length} ta AI savol qo'shildi — tekshirib, "Saqlash"ni bosing`);
+    setTimeout(() => setProgress(""), 6000);
+  }
+
   async function save() {
     setSaving(true);
     setError("");
@@ -314,6 +407,7 @@ export default function QuizEditor() {
                         🖼️ Bo'sh slayd
                       </button>
                       <button className="add-item" onClick={() => setAddQuestion(true)}>❓ Savol →</button>
+                      <button className="add-item" onClick={() => { setAddOpen(false); setAiOpen(true); }}>✨ AI savollar</button>
                       <button className="add-item" onClick={() => fileRef.current?.click()}>📄 PDF import</button>
                       <button className="add-item" onClick={() => excelRef.current?.click()}>📊 Excel import</button>
                       <button className="add-item" onClick={() => { setAddOpen(false); setWaygroundOpen(true); }}>🎮 Quiz import</button>
@@ -400,6 +494,90 @@ export default function QuizEditor() {
       )}
 
       {showPreview && <Preview title={title} slides={slides} onClose={() => setShowPreview(false)} />}
+
+      {aiOpen && (
+        <div className="modal-overlay" onClick={() => { if (!aiBusy) setAiOpen(false); }}>
+          <div className="card" style={{ width: "min(680px, 94vw)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="between">
+              <h3 style={{ margin: 0 }}>✨ AI savollar taklifi</h3>
+              <button className="gs-close" onClick={() => setAiOpen(false)} title="Yopish" disabled={aiBusy}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {aiError && <div className="error" style={{ marginTop: 10 }}>{aiError}</div>}
+
+            {!aiQuestions ? (
+              <>
+                <p className="muted" style={{ marginTop: 8 }}>
+                  AI slaydlaringiz mazmunini (rasmlar va matnlarni) o'qib, dars oxiri uchun savollar
+                  taklif qiladi. Yoqqanlarini tanlab quizga qo'shasiz.
+                </p>
+                <label>Nechta savol kerak?</label>
+                <select value={aiCount} onChange={(e) => setAiCount(Number(e.target.value))} disabled={aiBusy}>
+                  <option value={5}>5 ta</option>
+                  <option value={10}>10 ta</option>
+                  <option value={15}>15 ta</option>
+                  <option value={20}>20 ta</option>
+                </select>
+                <button className="btn btn-block" style={{ marginTop: 10 }} onClick={generateAi} disabled={aiBusy}>
+                  {aiBusy ? "⏳ AI slaydlarni o'qimoqda… (30-60 soniya)" : "✨ Savollar yaratish"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="muted" style={{ marginTop: 8 }}>
+                  {aiQuestions.length} ta taklif — keraklilarini belgilang:
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {aiQuestions.map((q, i) => (
+                    <label
+                      key={i}
+                      style={{
+                        display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer",
+                        border: "1px solid var(--border)", borderRadius: 12, padding: "10px 12px",
+                        opacity: aiChecked[i] ? 1 : 0.55,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={aiChecked[i] ?? false}
+                        onChange={() => setAiChecked((arr) => arr.map((v, idx) => (idx === i ? !v : v)))}
+                        style={{ marginTop: 4 }}
+                      />
+                      <span style={{ minWidth: 0 }}>
+                        <span className="badge-mini" style={{ marginRight: 6 }}>{TYPE_LABELS[q.type]}</span>
+                        <b>{q.text}</b>
+                        {q.type === "OPEN" ? (
+                          <span className="muted text-sm" style={{ display: "block", marginTop: 4 }}>
+                            Javob: {(q.openAnswers ?? []).join(" / ") || "—"}
+                          </span>
+                        ) : (
+                          <span className="muted text-sm" style={{ display: "block", marginTop: 4 }}>
+                            {(q.options ?? []).map((o, oi) => (
+                              <span key={oi} style={{ display: "block", color: o.isCorrect ? "var(--olive, #4caf50)" : undefined }}>
+                                {o.isCorrect ? "✓" : "•"} {o.text}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="row" style={{ justifyContent: "space-between", marginTop: 12 }}>
+                  <button className="btn btn-ghost" onClick={generateAi} disabled={aiBusy}>
+                    {aiBusy ? "⏳…" : "🔄 Boshqa variantlar"}
+                  </button>
+                  <button className="btn" onClick={addSelectedAi} disabled={aiBusy || aiChecked.every((v) => !v)}>
+                    ＋ Tanlanganlarni qo'shish ({aiChecked.filter(Boolean).length})
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {waygroundOpen && (
         <div className="modal-overlay" onClick={() => setWaygroundOpen(false)}>

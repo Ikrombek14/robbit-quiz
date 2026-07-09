@@ -107,3 +107,64 @@ Natijani 'save_questions' tool orqali qaytaring.`;
   const input = toolUse.input as { questions?: GeneratedQuestion[] };
   return input.questions ?? [];
 }
+
+// Slayd rasmi (uploads'dan o'qilgan) — Claude'ga image block sifatida yuboriladi
+export interface SlideImage {
+  mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  base64: string;
+}
+
+// Muharrirdagi dars slaydlari (rasmlar + matnlar) asosida savollar taklif qiladi.
+// existing — quizda allaqachon bor savollar: AI ularni takrorlamasligi kerak.
+export async function generateQuestionsFromSlides(
+  images: SlideImage[],
+  texts: string[],
+  existing: string[],
+  count: number,
+): Promise<GeneratedQuestion[]> {
+  if (!config.anthropicApiKey) {
+    throw new Error("ANTHROPIC_API_KEY sozlanmagan. backend/.env faylida kalitni kiriting.");
+  }
+
+  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+
+  const prompt = `Yuqorida dars taqdimoti slaydlari berilgan (rasmlar${texts.length ? " va matnlar" : ""}). Ularni diqqat bilan o'rganing va DARS MAZMUNI asosida ${count} ta sifatli test savoli tuzing — dars oxirida o'quvchilar bilimini tekshirish uchun.
+
+${texts.length ? `Slaydlardagi matnlar:\n${texts.map((t) => `- ${t}`).join("\n")}\n` : ""}${
+    existing.length
+      ? `\nBu savollar quizda ALLAQACHON BOR — ularni va ularga o'xshashlarini TAKRORLAMANG:\n${existing.map((t) => `- ${t}`).join("\n")}\n`
+      : ""
+  }
+Talablar:
+- Barcha savollar va javoblar O'ZBEK TILIDA bo'lsin.
+- Savollar faqat slaydlardagi haqiqiy mazmunga asoslansin (umumiy bilim emas).
+- Turlarni aralashtiring: ko'pi SINGLE (4 ta variant, bittasi to'g'ri), ba'zilari TRUE_FALSE va MULTIPLE, kerak bo'lsa OPEN.
+- SINGLE va MULTIPLE uchun 4 ta variant bering; aniq belgilang qaysi(lar) to'g'ri (isCorrect=true).
+- TRUE_FALSE uchun aniq 2 ta variant: "To'g'ri" va "Noto'g'ri".
+- Oson savollardan qiyinlariga qarab tartiblang.
+
+Natijani 'save_questions' tool orqali qaytaring.`;
+
+  const content: Anthropic.ContentBlockParam[] = [
+    ...images.map((img): Anthropic.ContentBlockParam => ({
+      type: "image",
+      source: { type: "base64", media_type: img.mediaType, data: img.base64 },
+    })),
+    { type: "text", text: prompt },
+  ];
+
+  const response = await client.messages.create({
+    model: "claude-opus-4-8",
+    max_tokens: 16000,
+    tools: [QUESTION_TOOL as unknown as Anthropic.Tool],
+    tool_choice: { type: "tool", name: "save_questions" },
+    messages: [{ role: "user", content }],
+  });
+
+  const toolUse = response.content.find((b) => b.type === "tool_use");
+  if (!toolUse || toolUse.type !== "tool_use") {
+    throw new Error("AI savollarni qaytarmadi. Qayta urinib ko'ring.");
+  }
+  const input = toolUse.input as { questions?: GeneratedQuestion[] };
+  return input.questions ?? [];
+}

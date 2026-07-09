@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { getSocket } from "../socket";
@@ -70,6 +70,34 @@ interface TestProgRow {
 }
 
 const initial = (s: string) => (s?.[0] ?? "?").toUpperCase();
+
+/* Savol matni clamp() bilan katta o'lchamdan boshlanadi; juda uzun bo'lib
+   ajratilgan balandlikka (max-height) sig'masa, sig'guncha avtomatik kichrayadi —
+   sahifa hech qachon scroll bo'lmaydi. Resize'da qayta hisoblanadi. */
+function AutoFitText({ text, className }: { text: string; className: string }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.fontSize = ""; // CSS clamp() qiymatidan qayta boshlaymiz
+      let size = parseFloat(getComputedStyle(el).fontSize);
+      let guard = 0;
+      while (el.scrollHeight > el.clientHeight + 2 && size > 14 && guard++ < 40) {
+        size -= 1.5;
+        el.style.fontSize = `${size}px`;
+      }
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [text]);
+  return (
+    <h2 ref={ref} className={className}>
+      {text}
+    </h2>
+  );
+}
 
 export default function Host() {
   const { quizId } = useParams();
@@ -710,11 +738,16 @@ export default function Host() {
         <div className={`live-main ${isContent ? "no-side" : ""}`}>
           <div className="live-content">
             {isContent ? (
-              <SlideScene data={slide.content ?? {}} />
+              /* .live-slide — slayd 16:9 nisbatda viewport balandligiga sig'adi */
+              <div className="live-slide">
+                <div className="live-slide-box">
+                  <SlideScene data={slide.content ?? {}} />
+                </div>
+              </div>
             ) : (
               <>
                 <div className="live-qcard">
-                  <h2 className="live-qtext">{slide.text}</h2>
+                  <AutoFitText className="live-qtext" text={slide.text ?? ""} />
                   {slide.imageUrl && <img className="live-qimg" src={slide.imageUrl} alt="" />}
                 </div>
                 <HostAnswers slide={slide} results={phase === "reveal" ? results : null} />

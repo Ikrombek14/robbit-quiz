@@ -538,35 +538,56 @@ button.quiz-card:active { transform: translateY(0); }
    LIVE HOST — lobby, taqdimot, taymer, spin wheel, podium
    ============================================================ */
 
-/* ---------- Lobby (o'quvchilarni kutish) ---------- */
-.lobby-screen { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+/* ---------- Lobby (o'quvchilarni kutish) ----------
+   Taqdimot ekrani 100% viewport ichiga sig'adi: sahifa o'zi HECH QACHON scroll
+   bo'lmaydi (overflow: hidden), faqat ichki bloklar (o'quvchilar ro'yxati,
+   sozlamalar ustuni) o'z ichida scroll qiladi. dvh — brauzer paneli hisobga olinadi. */
+.lobby-screen {
+  height: 100vh; height: 100dvh;
+  display: flex; flex-direction: column; background: var(--bg);
+  overflow: hidden;
+}
 .lobby-head {
+  flex-shrink: 0;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--surface);
+  padding: clamp(8px, 1.8vh, 16px) 28px; border-bottom: 1px solid var(--border); background: var(--surface);
 }
 .lobby-head .lobby-title { font-weight: 800; font-size: 18px; display: flex; align-items: center; gap: 10px; }
 .lobby-body {
-  flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 28px;
-  max-width: 1080px; width: 100%; margin: 0 auto; padding: 32px; align-items: start;
-  overflow-y: auto;
+  flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr;
+  gap: clamp(14px, 2.5vw, 28px);
+  max-width: 1080px; width: 100%; margin: 0 auto;
+  padding: clamp(10px, 2.6vh, 32px) clamp(16px, 3vw, 32px);
+  align-items: stretch;
+  overflow: hidden; /* sahifa emas — faqat ichki bloklar scroll bo'ladi */
 }
 .join-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
-  padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 18px;
+  padding: clamp(16px, 3vh, 32px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: clamp(10px, 2vh, 18px);
   box-shadow: 0 4px 24px rgba(0,0,0,0.05);
+  min-height: 0; overflow-y: auto; /* juda past ekranda PIN/QR karta o'z ichida scroll qiladi */
 }
 .join-step { color: var(--muted); font-size: 14px; font-weight: 600; align-self: flex-start; }
-.join-url { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+.join-url { font-size: clamp(19px, 3vh, 26px); font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
 .join-code {
-  font-size: 60px; font-weight: 800; letter-spacing: 12px; color: var(--primary);
+  font-size: clamp(40px, 8.5vh, 60px); font-weight: 800; letter-spacing: clamp(6px, 1.6vh, 12px); color: var(--primary);
   line-height: 1; font-variant-numeric: tabular-nums;
 }
 .qr-wrap { background: var(--surface); padding: 10px; border-radius: 14px; border: 1px solid var(--border); }
-.lobby-right { display: flex; flex-direction: column; gap: 16px; }
+/* O'ng ustun (o'quvchilar + sozlamalar): sig'masa faqat shu ustun ichida scroll */
+.lobby-right { display: flex; flex-direction: column; gap: clamp(10px, 1.8vh, 16px); min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .players-head { display: flex; align-items: center; justify-content: space-between; }
 .players-count { font-weight: 800; font-size: 20px; display: flex; align-items: center; gap: 8px; }
-/* Ko'p o'quvchida ro'yxat kesilmasin — scroll bilan hammasi ko'rinadi */
-.players-grid { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; min-height: 80px; max-height: 46vh; overflow-y: auto; scrollbar-width: thin; }
+/* Ko'p o'quvchida ro'yxat sahifani cho'zmaydi — faqat shu blok ichida scroll */
+.players-grid {
+  display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start;
+  min-height: 80px; flex-shrink: 0;
+  max-height: clamp(110px, 30vh, 420px);
+  max-height: clamp(110px, 30dvh, 420px);
+  overflow-y: auto; scrollbar-width: thin;
+}
 .players-empty { color: var(--muted); font-size: 15px; padding: 20px 0; }
 .player-pill {
   display: flex; align-items: center; gap: 8px; background: var(--surface); color: var(--ink);
@@ -635,41 +656,80 @@ button.quiz-card:active { transform: translateY(0); }
 .stu-prac-banner .material-symbols-outlined { font-size: 22px; }
 .stu-prac-banner.low { background: var(--danger, #e5484d); animation: pracPulse 1s ease infinite; }
 
-.start-bar { display: flex; justify-content: center; padding: 18px; border-top: 1px solid var(--border); background: var(--surface); }
+.start-bar { flex-shrink: 0; display: flex; justify-content: center; padding: clamp(10px, 1.8vh, 18px); border-top: 1px solid var(--border); background: var(--surface); }
 
-/* ---------- Live presentation shell ---------- */
-.live-wrap { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+/* ---------- Live presentation shell ----------
+   100dvh + overflow hidden: taqdimotda sahifa scroll YO'Q. Header/footer fikslangan,
+   o'rta qism flex: 1 bilan taqsimlanadi, matnlar clamp() bilan viewportga moslashadi. */
+.live-wrap {
+  height: 100vh; height: 100dvh;
+  display: flex; flex-direction: column; background: var(--bg);
+  overflow: hidden;
+}
 .live-top {
+  flex-shrink: 0;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+  padding: clamp(6px, 1.2vh, 12px) 24px; border-bottom: 1px solid var(--border); background: var(--surface);
 }
 .live-top .lt-code { font-weight: 700; color: var(--muted); font-size: 14px; }
 .live-top .lt-title { font-weight: 800; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.live-main { flex: 1; display: grid; grid-template-columns: 1fr 300px; gap: 20px; padding: 22px 24px; align-items: start; min-height: 0; }
+.live-main {
+  flex: 1; display: grid; grid-template-columns: 1fr 300px;
+  gap: 20px; padding: clamp(10px, 2vh, 22px) 24px;
+  align-items: stretch; min-height: 0; overflow: hidden;
+}
 .live-main.no-side { grid-template-columns: 1fr; max-width: 1100px; margin: 0 auto; width: 100%; }
-.live-content { display: flex; flex-direction: column; gap: 18px; }
+.live-content { display: flex; flex-direction: column; gap: clamp(10px, 1.8vh, 18px); min-height: 0; overflow: hidden; }
+/* CONTENT slayd host ekranida: 16:9 saqlanadi, balandlikka ham SIG'ADI
+   (SlideScene balandligi kenglikdan hisoblanadi — shu sabab kenglikni
+   mavjud balandlikdan cheklaymiz: chrome ≈ header + footer + padding) */
+.live-slide { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+/* SlideScene inline width:100% qo'yadi — shu sabab o'lcham alohida qutiga beriladi */
+.live-slide-box {
+  width: min(100%, calc((100vh - 185px) * 16 / 9));
+  width: min(100%, calc((100dvh - 185px) * 16 / 9));
+}
 .live-qcard {
   background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
-  padding: 28px 32px; box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  padding: clamp(12px, 2.4vh, 28px) clamp(16px, 2.5vw, 32px);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  flex-shrink: 0; overflow: hidden;
 }
-.live-qtext { font-size: 28px; font-weight: 700; color: var(--ink); text-align: center; margin: 0; line-height: 1.3; }
-.live-qimg { display: block; max-height: 220px; max-width: 100%; margin: 16px auto 0; border-radius: 12px; object-fit: contain; }
+.live-qtext {
+  font-size: clamp(1.25rem, 3.5vh, 2.5rem);
+  font-weight: 700; color: var(--ink); text-align: center; margin: 0; line-height: 1.25;
+  /* AutoFit uchun chegara: matn shu balandlikka sig'maguncha JS kichraytiradi */
+  max-height: 26vh; max-height: 26dvh; overflow: hidden;
+}
+.live-qimg {
+  display: block; max-width: 100%; margin: clamp(8px, 1.6vh, 16px) auto 0; border-radius: 12px; object-fit: contain;
+  max-height: clamp(120px, 28vh, 40vh);
+  max-height: clamp(120px, 28dvh, 40vh);
+}
 
-/* rangli javob plitkalari (proyeksiya uchun) */
-.live-answers { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* rangli javob plitkalari (proyeksiya uchun) — bo'sh joyni TO'LIQ egallaydi:
+   fikslangan balandlik yo'q, qatorlar minmax(0,1fr) bilan teng taqsimlanadi */
+.live-answers {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 1fr 1fr;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(8px, 1.6vh, 14px);
+}
 .live-answers.cols-1 { grid-template-columns: 1fr; }
 .live-opt {
-  position: relative; border-radius: 16px; min-height: 96px; padding: 18px 22px;
-  display: flex; align-items: center; gap: 16px; color: #fff; font-size: 20px; font-weight: 700;
+  position: relative; border-radius: 16px; min-height: 0; height: 100%;
+  padding: clamp(8px, 1.8vh, 18px) clamp(12px, 1.8vw, 22px);
+  display: flex; align-items: center; gap: clamp(10px, 1.5vw, 16px);
+  color: #fff; font-size: clamp(1rem, 2.6vh, 1.5rem); font-weight: 700;
   transition: opacity 0.2s, transform 0.1s; overflow: hidden;
 }
 .live-opt.c-0 { background: var(--c0); } .live-opt.c-1 { background: var(--c1); }
 .live-opt.c-2 { background: var(--c2); } .live-opt.c-3 { background: var(--c3); }
 .live-opt .lo-letter {
-  width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.22);
-  display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
+  width: clamp(28px, 4.6vh, 40px); height: clamp(28px, 4.6vh, 40px); border-radius: 10px; background: rgba(255,255,255,0.22);
+  display: flex; align-items: center; justify-content: center; font-size: clamp(14px, 2.4vh, 20px); flex-shrink: 0;
 }
-.live-opt .lo-img { width: 90px; height: 70px; object-fit: cover; border-radius: 10px; }
+.live-opt .lo-img { width: clamp(56px, 8vh, 90px); height: clamp(44px, 7vh, 70px); object-fit: cover; border-radius: 10px; }
 .live-opt .lo-text { flex: 1; }
 .live-opt .lo-votes {
   background: rgba(0,0,0,0.28); border-radius: 999px; padding: 4px 12px; font-size: 15px; font-weight: 700;
@@ -681,19 +741,23 @@ button.quiz-card:active { transform: translateY(0); }
 /* javob matni (OPEN/FILL/MATCH/REORDER) */
 .live-textans { text-align: center; padding: 14px; }
 
-/* ---------- Yon panel (taymer + ishtirokchilar) ---------- */
-.live-side { display: flex; flex-direction: column; gap: 16px; }
-.side-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
-.timer-card { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+/* ---------- Yon panel (taymer + ishtirokchilar) ----------
+   Ustun viewport balandligiga sig'adi: oxirgi karta (ishtirokchilar) flex: 1
+   bilan qolgan joyni oladi, ro'yxat faqat o'z ichida scroll qiladi. */
+.live-side { display: flex; flex-direction: column; gap: clamp(10px, 1.6vh, 16px); min-height: 0; overflow: hidden; }
+.side-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: clamp(12px, 1.8vh, 18px); flex-shrink: 0; }
+.live-side .side-card:last-child { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.timer-card { display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 1.4vh, 12px); }
 .timer-ring {
-  --pct: 100; width: 120px; height: 120px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  --pct: 100; --ring: clamp(84px, 15vh, 120px);
+  width: var(--ring); height: var(--ring); border-radius: 999px; display: flex; align-items: center; justify-content: center;
   background: conic-gradient(var(--primary) calc(var(--pct) * 1%), var(--surface-2) 0);
   transition: background 0.3s linear;
 }
 .timer-ring.low { background: conic-gradient(var(--danger) calc(var(--pct) * 1%), var(--surface-2) 0); }
 .timer-ring .tr-inner {
-  width: 96px; height: 96px; border-radius: 999px; background: var(--surface);
-  display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 800; color: var(--ink);
+  width: calc(var(--ring) - 24px); height: calc(var(--ring) - 24px); border-radius: 999px; background: var(--surface);
+  display: flex; align-items: center; justify-content: center; font-size: clamp(22px, 4.4vh, 34px); font-weight: 800; color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 .timer-controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
@@ -707,8 +771,8 @@ button.quiz-card:active { transform: translateY(0); }
 .answered-stat .as-num { font-size: 28px; font-weight: 800; color: var(--ink); }
 .answered-stat .as-lbl { color: var(--muted); font-size: 13px; }
 .names-toggle { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
-/* O'quvchilar ro'yxati — balandlik ekranga qarab, hammasi scroll bilan ko'rinadi */
-.attendee-list { display: flex; flex-direction: column; gap: 6px; max-height: min(58vh, 640px); overflow-y: auto; }
+/* O'quvchilar ro'yxati — kartaning qolgan joyini oladi, faqat o'z ichida scroll */
+.attendee-list { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .attendee {
   display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px;
   background: var(--surface-2); font-size: 14px; font-weight: 600;
@@ -719,8 +783,9 @@ button.quiz-card:active { transform: translateY(0); }
 
 /* ---------- Pastki boshqaruv paneli ---------- */
 .live-bottom {
+  flex-shrink: 0;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 24px; border-top: 1px solid var(--border); background: var(--surface);
+  padding: clamp(8px, 1.4vh, 14px) 24px; border-top: 1px solid var(--border); background: var(--surface);
 }
 .lb-left, .lb-right { display: flex; align-items: center; gap: 10px; }
 .lb-center { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--muted); font-size: 14px; }
@@ -770,9 +835,11 @@ button.quiz-card:active { transform: translateY(0); }
 /* ---------- Leaderboard overlay (savoldan keyin) ---------- */
 .lbo-overlay {
   position: fixed; inset: 0; background: rgba(10,12,16,0.94); z-index: 75;
-  display: flex; flex-direction: column; align-items: center; padding: 56px 24px; gap: 6px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center;
+  padding: clamp(20px, 5vh, 56px) 24px; gap: 6px; cursor: pointer;
+  overflow-y: auto; /* past ekranda 10 qator sig'masa overlay ichida scroll */
 }
-.lbo-title { color: #fff; font-size: 34px; font-weight: 800; }
+.lbo-title { color: #fff; font-size: clamp(24px, 4.5vh, 34px); font-weight: 800; }
 .lbo-skip { color: var(--primary); font-weight: 700; margin-bottom: 22px; font-size: 15px; }
 .lbo-head, .lbo-row { width: min(820px, 94%); display: grid; grid-template-columns: 70px 1fr 90px; align-items: center; }
 .lbo-head { color: #8b909a; font-weight: 700; padding: 0 18px 8px; font-size: 14px; }
@@ -785,13 +852,13 @@ button.quiz-card:active { transform: translateY(0); }
 .lbo-row .lbo-score { text-align: right; font-variant-numeric: tabular-nums; }
 .lbo-gain { color: var(--olive); font-size: 13px; font-weight: 700; margin-left: 8px; }
 
-/* ---------- Podium (yakuniy) ---------- */
+/* ---------- Podium (yakuniy) — 100dvh ichiga sig'adi ---------- */
 .podium-screen {
-  min-height: 100vh; background: var(--bg); display: flex; flex-direction: column;
-  align-items: center; justify-content: flex-end; padding: 40px 24px 0; overflow: hidden;
+  height: 100vh; height: 100dvh; background: var(--bg); display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end; padding: clamp(10px, 3vh, 40px) 24px 0; overflow: hidden;
 }
-.podium-head { text-align: center; margin-bottom: auto; margin-top: 40px; }
-.podium-head h1 { font-size: 40px; margin: 0 0 6px; }
+.podium-head { text-align: center; margin-bottom: auto; margin-top: clamp(4px, 2.5vh, 40px); flex-shrink: 0; }
+.podium-head h1 { font-size: clamp(24px, 5vh, 40px); margin: 0 0 6px; }
 .podium-row { display: flex; align-items: flex-end; justify-content: center; gap: 24px; width: 100%; max-width: 760px; }
 .podium-col { display: flex; flex-direction: column; align-items: center; flex: 1; }
 .podium-person {
@@ -813,23 +880,37 @@ button.quiz-card:active { transform: translateY(0); }
   display: flex; align-items: flex-start; justify-content: center; padding-top: 14px;
   font-size: 30px; font-weight: 800; transform-origin: bottom; animation: grow-up 0.8s ease backwards;
 }
-.podium-bar.p1 { height: 230px; background: linear-gradient(180deg, var(--primary), var(--primary-strong)); color: var(--on-primary); }
-.podium-bar.p2 { height: 170px; background: var(--navy); }
-.podium-bar.p3 { height: 120px; background: var(--olive); color: var(--on-olive); }
+.podium-bar.p1 { height: clamp(120px, 24vh, 230px); height: clamp(120px, 24dvh, 230px); background: linear-gradient(180deg, var(--primary), var(--primary-strong)); color: var(--on-primary); }
+.podium-bar.p2 { height: clamp(90px, 18vh, 170px); height: clamp(90px, 18dvh, 170px); background: var(--navy); }
+.podium-bar.p3 { height: clamp(64px, 12vh, 120px); height: clamp(64px, 12dvh, 120px); background: var(--olive); color: var(--on-olive); }
 .podium-col.col-1 .podium-person { animation-delay: 0.5s; }
 .podium-col.col-2 .podium-person { animation-delay: 0.2s; }
 .podium-col.col-3 .podium-person { animation-delay: 0.35s; }
 .podium-col.col-1 .podium-bar { animation-delay: 0.4s; }
 .podium-col.col-2 .podium-bar { animation-delay: 0.1s; }
 .podium-col.col-3 .podium-bar { animation-delay: 0.25s; }
-.podium-rest { width: min(620px, 94%); margin: 28px auto; }
+.podium-rest { width: min(620px, 94%); margin: clamp(8px, 2vh, 28px) auto; flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 @keyframes rise-in { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes grow-up { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 
 @media (max-width: 820px) {
+  /* Telefon/planshetda ustunlar tik teriladi — bunda "scroll'siz 100dvh" mantiqi
+     ishlamaydi (kontent baribir sig'maydi), shuning uchun oddiy scroll'ga qaytamiz.
+     Proyektor/noutbuk (>820px) rejimida esa sahifa scroll'siz qoladi. */
   .lobby-body { grid-template-columns: 1fr; }
   .live-main { grid-template-columns: 1fr; }
   .live-side { flex-direction: row; flex-wrap: wrap; }
+  .live-wrap, .lobby-screen, .podium-screen { height: auto; min-height: 100dvh; overflow: visible; }
+  .live-main, .lobby-body, .live-content, .live-side, .live-qcard { overflow: visible; }
+  .lobby-right, .join-card { overflow: visible; }
+  .live-answers { flex: none; grid-auto-rows: auto; }
+  .live-opt { min-height: 72px; height: auto; }
+  .live-qtext { max-height: none; }
+  .live-slide { flex: none; }
+  .live-slide-box { width: 100%; }
+  .live-side .side-card:last-child { flex: none; display: block; }
+  .attendee-list { max-height: 40vh; }
+  .players-grid { max-height: 40vh; }
 }
 
 /* ---------- O'quvchi taqdimot ko'rinishi (full-screen) ---------- */
@@ -853,7 +934,11 @@ button.quiz-card:active { transform: translateY(0); }
 .stu-icon-btn:hover { background: #2a2f38; }
 .stu-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px 16px; }
 /* slayd 16:9 — iloji boricha katta, kichiklashmaydi (balandlik bilan cheklangan) */
-.stu-slide { width: min(100%, calc((100vh - 150px) * 16 / 9)); aspect-ratio: 16 / 9; }
+.stu-slide {
+  width: min(100%, calc((100vh - 150px) * 16 / 9));
+  width: min(100%, calc((100dvh - 150px) * 16 / 9));
+  aspect-ratio: 16 / 9;
+}
 .stu-slide .slide-canvas {
   width: 100%; height: 100%; border: none; border-radius: 14px; padding: 0;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
@@ -926,8 +1011,8 @@ button.quiz-card:active { transform: translateY(0); }
 .mode-name { font-weight: 800; font-size: 14px; }
 .mode-desc { color: var(--muted); font-size: 12px; }
 
-/* ---------- Test monitor (host) ---------- */
-.test-monitor { flex: 1; padding: 24px; max-width: 980px; width: 100%; margin: 0 auto; overflow-y: auto; }
+/* ---------- Test monitor (host) — jadval uzun bo'lsa faqat shu blok scroll qiladi ---------- */
+.test-monitor { flex: 1; min-height: 0; padding: clamp(12px, 2.4vh, 24px) 24px; max-width: 980px; width: 100%; margin: 0 auto; overflow-y: auto; scrollbar-width: thin; }
 .tm-stats { display: flex; gap: 14px; margin-bottom: 20px; }
 .tm-stat { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; text-align: center; }
 .tm-num { font-size: 30px; font-weight: 800; }

@@ -5,3 +5,4 @@ uploads/
 *.db
 *.db-journal
 prisma/dev.db*
+game-state.snapshot.json

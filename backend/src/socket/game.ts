@@ -1,4 +1,6 @@
 import type { Server, Socket } from "socket.io";
+import fs from "fs";
+import path from "path";
 import { prisma } from "../prisma.js";
 import { verifyToken } from "../auth.js";
 
@@ -94,6 +96,10 @@ interface GameState {
 }
 
 const games = new Map<string, GameState>();
+
+// Socket.io serveriga modul darajasidagi ishora — modul-darajali yordamchilar
+// (scheduleTimer/revealCurrent/...) va restart'dan keyin o'yinlarni tiklashda kerak.
+let ioRef: Server | null = null;
 
 function genPin(): string {
   let pin: string;
@@ -364,7 +370,238 @@ async function persistGame(game: GameState) {
   }
 }
 
+// Quyidagi 5 ta funksiya avval registerGameHandlers ichida edi (har socket'ga alohida
+// yaratilardi, lekin `io` doim bitta xil instance bo'lgani uchun xatti-harakat bir xil
+// edi). Modul darajasiga ko'chirildi — chunki restart'dan keyin o'yinlarni tiklash
+// (restoreGame) ham savol taymerini qayta rejalashtirishi kerak, socket ulanishini
+// kutmasdan turib.
+function IO(): Server {
+  return ioRef as Server;
+}
+
+function clearGameTimer(game: GameState) {
+  if (game.timer) {
+    clearTimeout(game.timer);
+    game.timer = null;
+  }
+}
+
+function scheduleTimer(game: GameState) {
+  clearGameTimer(game);
+  const ms = Math.max(game.timerEndsAt - Date.now(), 0);
+  game.timer = setTimeout(() => {
+    game.timer = null;
+    if (game.status === "active") revealCurrent(game);
+  }, ms);
+}
+
+function showCurrent(game: GameState) {
+  clearGameTimer(game);
+  game.status = "active";
+  game.questionStartedAt = Date.now();
+  game.votes = {};
+  // Yangi slaydda amaliyot taymeri ham bekor bo'ladi (savol/slayd taymeriga aralashmasin)
+  game.practiceEndsAt = 0;
+  game.players.forEach((p) => {
+    p.answeredCurrent = false;
+    p.currentCorrect = false;
+  });
+  const s = game.slides[game.currentIndex];
+  if (s.kind === "QUESTION") {
+    if (!game.stats.has(game.currentIndex)) {
+      game.stats.set(game.currentIndex, {
+        index: game.currentIndex,
+        text: s.data?.text ?? `Savol ${game.currentIndex + 1}`,
+        correct: 0,
+        total: 0,
+      });
+    }
+    // Savol taymeri yoqilgan bo'lsagina avtomatik hisoblash/yopilish
+    if (game.settings.questionTimer) {
+      game.timerEndsAt = Date.now() + s.timeLimit * 1000;
+      scheduleTimer(game);
+    } else {
+      game.timerEndsAt = 0;
+    }
+  } else {
+    game.timerEndsAt = 0;
+  }
+  IO().to(game.pin).emit("slide:show", publicSlide(game));
+}
+
+function revealCurrent(game: GameState) {
+  if (game.status === "reveal") return;
+  clearGameTimer(game);
+  game.timerEndsAt = 0;
+  game.status = "reveal";
+  const s = game.slides[game.currentIndex];
+  // Kim to'g'ri/xato belgilagani (POLL'da to'g'ri/xato yo'q — faqat ovoz)
+  const conn = connectedPlayers(game);
+  const answers =
+    s.kind === "QUESTION" && s.type !== "POLL"
+      ? {
+          correct: conn.filter((p) => p.answeredCurrent && p.currentCorrect).map((p) => p.nickname),
+          wrong: conn.filter((p) => p.answeredCurrent && !p.currentCorrect).map((p) => p.nickname),
+          noAnswer: conn.filter((p) => !p.answeredCurrent).map((p) => p.nickname),
+        }
+      : undefined;
+  IO().to(game.pin).emit("slide:results", {
+    ...correctSummary(s, game.votes),
+    leaderboard: leaderboard(game),
+    answers,
+  });
+}
+
+function emitTestProgress(game: GameState) {
+  const total = game.questionIndices.length;
+  IO().to(game.hostSocketId).emit("test:progress", {
+    total,
+    players: [...game.players.values()].map((p) => ({
+      id: p.playerId,
+      nickname: p.nickname,
+      answered: Math.min(p.testIndex, total),
+      score: testScore(p, total),
+      correct: p.correctCount,
+      finished: p.finished,
+      flags: p.flags,
+      connected: p.connected,
+    })),
+  });
+}
+
+// Host uzilganda (sahifa yangilash, internet blip, YOKI server restart/deploy) darhol
+// o'yinni tugatmaymiz — grace davri beramiz. Shu vaqtda host:resume kelsa (eski yoki
+// tiklangan o'yinga), timer bekor qilinadi. staleHostId — timer o'rnatilgan paytdagi
+// hostSocketId ("" restore holatida): agar shu muddatda o'zgarmagan bo'lsa, host qaytmagan.
+function armHostGraceTimer(game: GameState, staleHostId: string, ms = 30 * 60 * 1000) {
+  if (game.hostGraceTimer) clearTimeout(game.hostGraceTimer);
+  game.hostGraceTimer = setTimeout(async () => {
+    game.hostGraceTimer = null;
+    if (game.hostSocketId !== staleHostId) return; // qaytib keldi
+    clearGameTimer(game);
+    await persistGame(game);
+    IO().to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game), hostLeft: true });
+    games.delete(game.pin);
+  }, ms);
+}
+
+// ----- O'yin holatini diskka saqlash / tiklash (deploy/restart paytida o'yinlar o'lmasin) -----
+// PM2 fork-rejimda bitta instance ishlaydi va deploy uni SIGTERM bilan qayta ishga
+// tushiradi (backend/src/index.ts shutdown()). Xotiradagi `games` Map shu jarayonda
+// yo'qoladi — shuning uchun o'chishdan oldin diskka yozamiz, ko'tarilganda o'qib
+// tiklaymiz. Ustoz/o'quvchi klientlari socket qayta ulanganda avtomatik host:resume /
+// player:rejoin yuboradi (Host.tsx, Join.tsx) — shu snapshot bilan ular "davom etayotgan"
+// o'yinni topadi.
+const SNAPSHOT_PATH = path.join(process.cwd(), "game-state.snapshot.json");
+
+function serializeGame(game: GameState) {
+  return {
+    pin: game.pin,
+    teacherId: game.teacherId,
+    quizId: game.quizId,
+    title: game.title,
+    slides: game.slides,
+    mode: game.mode,
+    questionIndices: game.questionIndices,
+    currentIndex: game.currentIndex,
+    status: game.status,
+    players: [...game.players.values()],
+    questionStartedAt: game.questionStartedAt,
+    timerEndsAt: game.timerEndsAt,
+    votes: game.votes,
+    stats: [...game.stats.values()],
+    saved: game.saved,
+    settings: game.settings,
+  };
+}
+
+function restoreGame(sg: any): void {
+  if (!sg || typeof sg.pin !== "string" || sg.status === "ended") return;
+  const players = new Map<string, GamePlayer>();
+  for (const p of sg.players ?? []) {
+    players.set(p.playerId, { ...p, socketId: "", connected: false });
+  }
+  const stats = new Map<number, QStat>();
+  for (const s of sg.stats ?? []) stats.set(s.index, s);
+
+  const game: GameState = {
+    pin: sg.pin,
+    hostSocketId: "", // eski socket endi haqiqiy emas — host:resume qayta yozadi
+    teacherId: sg.teacherId,
+    quizId: sg.quizId,
+    title: sg.title,
+    slides: sg.slides ?? [],
+    mode: sg.mode === "TEST" ? "TEST" : "LIVE",
+    questionIndices: sg.questionIndices ?? [],
+    currentIndex: sg.currentIndex ?? -1,
+    status: sg.status,
+    players,
+    questionStartedAt: sg.questionStartedAt ?? 0,
+    timerEndsAt: sg.timerEndsAt ?? 0,
+    practiceEndsAt: 0, // qisqa amaliyot taymeri restart oralig'ida ma'nosini yo'qotadi — tiklanmaydi
+    timer: null,
+    hostGraceTimer: null,
+    votes: sg.votes ?? {},
+    stats,
+    saved: sg.saved === true,
+    settings: sg.settings ?? defaultSettings(),
+  };
+  games.set(game.pin, game);
+
+  // LIVE faol savol taymeri bilan edi — qolgan vaqtni hisoblab qayta rejalashtiramiz
+  // (yoki vaqt allaqachon tugagan bo'lsa, darhol natijani ochamiz)
+  if (game.status === "active" && game.mode === "LIVE" && game.timerEndsAt > 0) {
+    if (game.timerEndsAt <= Date.now()) revealCurrent(game);
+    else scheduleTimer(game);
+  }
+  // Host hali qaytmagan — grace davri beramiz (deploy odatda soniyalarda tiklanadi)
+  armHostGraceTimer(game, "");
+}
+
+function saveGameSnapshotInternal(): void {
+  try {
+    const list = [...games.values()].filter((g) => g.status !== "ended").map(serializeGame);
+    fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify({ savedAt: Date.now(), games: list }), "utf8");
+  } catch (e) {
+    console.error("O'yin holatini saqlashda xato:", e);
+  }
+}
+
+// index.ts shutdown() dan SIGTERM/SIGINT kelganda chaqiriladi (jarayon o'lishidan oldin).
+export function saveGameSnapshot(): void {
+  saveGameSnapshotInternal();
+}
+
+function loadGameSnapshot(): void {
+  try {
+    if (!fs.existsSync(SNAPSHOT_PATH)) return;
+    const raw = fs.readFileSync(SNAPSHOT_PATH, "utf8");
+    // Bir martalik — qayta ishga tushirilsa eskirgan holat takror o'qilib qolmasin
+    // (keyingi avtosaqlash/graceful shutdown yangisini yozadi).
+    fs.unlinkSync(SNAPSHOT_PATH);
+    const parsed = JSON.parse(raw) as { savedAt: number; games: any[] };
+    // Host grace muddati 30 daqiqa — 40 daqiqadan eski snapshot allaqachon ma'nosiz
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > 40 * 60 * 1000) return;
+    for (const sg of parsed.games ?? []) restoreGame(sg);
+    if (parsed.games?.length) {
+      console.log(`♻️  ${parsed.games.length} ta faol o'yin tiklandi (restart/deploy'dan keyin)`);
+    }
+  } catch (e) {
+    console.error("O'yin holatini tiklashda xato:", e);
+  }
+}
+
+// index.ts'dan server ko'tarilganda (birinchi ulanishdan OLDIN) bir marta chaqiriladi:
+// oldingi snapshot'ni tiklaydi va muntazam avtosaqlashni yoqadi (SIGTERM kelmasdan
+// qulasa — masalan max_memory_restart yoki OOM — ham oxirgi holat yo'qolmasligi uchun).
+export function initGamePersistence(io: Server): void {
+  ioRef = io;
+  loadGameSnapshot();
+  setInterval(saveGameSnapshotInternal, 20_000).unref();
+}
+
 export function registerGameHandlers(io: Server, socket: Socket) {
+  ioRef = io;
   socket.on("host:create", async (data: { token: string; quizId: string }, cb?: (r: unknown) => void) => {
     const teacherId = verifyToken(data?.token ?? "");
     if (!teacherId) {
@@ -600,96 +837,6 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     io.to(game.pin).emit("typing:board", { rows });
     io.to(game.hostSocketId).emit("typing:board", { rows });
   });
-
-  function clearGameTimer(game: GameState) {
-    if (game.timer) {
-      clearTimeout(game.timer);
-      game.timer = null;
-    }
-  }
-
-  function scheduleTimer(game: GameState) {
-    clearGameTimer(game);
-    const ms = Math.max(game.timerEndsAt - Date.now(), 0);
-    game.timer = setTimeout(() => {
-      game.timer = null;
-      if (game.status === "active") revealCurrent(game);
-    }, ms);
-  }
-
-  function showCurrent(game: GameState) {
-    clearGameTimer(game);
-    game.status = "active";
-    game.questionStartedAt = Date.now();
-    game.votes = {};
-    // Yangi slaydda amaliyot taymeri ham bekor bo'ladi (savol/slayd taymeriga aralashmasin)
-    game.practiceEndsAt = 0;
-    game.players.forEach((p) => {
-      p.answeredCurrent = false;
-      p.currentCorrect = false;
-    });
-    const s = game.slides[game.currentIndex];
-    if (s.kind === "QUESTION") {
-      if (!game.stats.has(game.currentIndex)) {
-        game.stats.set(game.currentIndex, {
-          index: game.currentIndex,
-          text: s.data?.text ?? `Savol ${game.currentIndex + 1}`,
-          correct: 0,
-          total: 0,
-        });
-      }
-      // Savol taymeri yoqilgan bo'lsagina avtomatik hisoblash/yopilish
-      if (game.settings.questionTimer) {
-        game.timerEndsAt = Date.now() + s.timeLimit * 1000;
-        scheduleTimer(game);
-      } else {
-        game.timerEndsAt = 0;
-      }
-    } else {
-      game.timerEndsAt = 0;
-    }
-    io.to(game.pin).emit("slide:show", publicSlide(game));
-  }
-
-  function revealCurrent(game: GameState) {
-    if (game.status === "reveal") return;
-    clearGameTimer(game);
-    game.timerEndsAt = 0;
-    game.status = "reveal";
-    const s = game.slides[game.currentIndex];
-    // Kim to'g'ri/xato belgilagani (POLL'da to'g'ri/xato yo'q — faqat ovoz)
-    const conn = connectedPlayers(game);
-    const answers =
-      s.kind === "QUESTION" && s.type !== "POLL"
-        ? {
-            correct: conn.filter((p) => p.answeredCurrent && p.currentCorrect).map((p) => p.nickname),
-            wrong: conn.filter((p) => p.answeredCurrent && !p.currentCorrect).map((p) => p.nickname),
-            noAnswer: conn.filter((p) => !p.answeredCurrent).map((p) => p.nickname),
-          }
-        : undefined;
-    io.to(game.pin).emit("slide:results", {
-      ...correctSummary(s, game.votes),
-      leaderboard: leaderboard(game),
-      answers,
-    });
-  }
-
-  function emitTestProgress(game: GameState) {
-    const total = game.questionIndices.length;
-    io.to(game.hostSocketId).emit("test:progress", {
-      total,
-      players: [...game.players.values()].map((p) => ({
-        id: p.playerId,
-        nickname: p.nickname,
-        answered: Math.min(p.testIndex, total),
-        score: testScore(p, total),
-        correct: p.correctCount,
-        finished: p.finished,
-        flags: p.flags,
-        connected: p.connected,
-      })),
-    });
-  }
 
   socket.on("host:start", (data: { pin: string; mode?: "LIVE" | "TEST" }) => {
     const game = games.get(data?.pin);
@@ -976,17 +1123,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       // Host uzildi — sahifa yangilangan bo'lishi mumkin. Darhol tugatmaymiz:
       // grace davri beramiz. Shu vaqtda host:resume kelsa, davom etadi.
       // Savol taymeri ham ishlab turaveradi (auto-reveal yo'qolmaydi).
-      if (game.hostGraceTimer) clearTimeout(game.hostGraceTimer);
-      game.hostGraceTimer = setTimeout(async () => {
-        game.hostGraceTimer = null;
-        // Hali ham shu (eski) socket host bo'lsa — demak qaytmadi → tugatamiz
-        if (game.hostSocketId !== socket.id) return;
-        clearGameTimer(game);
-        await persistGame(game);
-        io.to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game), hostLeft: true });
-        games.delete(game.pin);
-      }, 30 * 60 * 1000); // 30 daqiqa kutamiz — ustoz internet uzilsa ham dars o'chmaydi,
-      // qaytib kirsa kelgan joyidan davom ettiradi
+      // 30 daqiqa kutamiz — ustoz internet uzilsa ham dars o'chmaydi, qaytib kirsa
+      // kelgan joyidan davom ettiradi.
+      armHostGraceTimer(game, socket.id);
       return;
     }
     if (socket.data.role === "player") {

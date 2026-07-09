@@ -9,7 +9,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { config } from "./config.js";
 import { prisma } from "./prisma.js";
-import { registerGameHandlers } from "./socket/game.js";
+import { registerGameHandlers, initGamePersistence, saveGameSnapshot } from "./socket/game.js";
 import { authRouter } from "./routes/auth.js";
 import { quizRouter } from "./routes/quizzes.js";
 import { folderRouter } from "./routes/folders.js";
@@ -192,6 +192,10 @@ const io = new Server(httpServer, {
   cors: { origin: true },
 });
 
+// Deploy/restart paytida oldingi jarayonda saqlangan faol o'yinlarni tiklaydi
+// (birinchi socket ulanishidan OLDIN chaqirilishi kerak — shu joyda).
+initGamePersistence(io);
+
 io.on("connection", (socket) => {
   registerGameHandlers(io, socket);
 });
@@ -207,6 +211,10 @@ function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`↩️  ${signal} qabul qilindi — toza to'xtatilmoqda…`);
+  // Faol o'yinlarni diskka yozamiz (sinxron) — deploy/restart jarayonni o'chiradi,
+  // lekin keyingi ko'tarilishda initGamePersistence() shu faylni o'qib tiklaydi va
+  // ustoz/o'quvchi klientlari socket qayta ulanganda o'yinni o'zi topib davom ettiradi.
+  saveGameSnapshot();
   httpServer.close(() => {
     prisma.$disconnect().finally(() => process.exit(0));
   });

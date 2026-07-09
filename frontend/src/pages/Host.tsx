@@ -928,7 +928,15 @@ export default function Host() {
           />
         )}
         {showBoard && results && (
-          <LeaderboardOverlay rows={results.leaderboard} anonymous={settings.anonymous} onClose={() => setShowBoard(false)} />
+          <LeaderboardOverlay
+            rows={results.leaderboard}
+            anonymous={settings.anonymous}
+            onClose={() => setShowBoard(false)}
+            // Ustoz ro'yxatni ko'rayotganda (scroll/tegish) 5s avto-yopilish bekor bo'ladi
+            onInteract={() => {
+              if (lbTimer.current) { clearTimeout(lbTimer.current); lbTimer.current = null; }
+            }}
+          />
         )}
         {reminder3 && (
           <ReminderModal
@@ -1125,10 +1133,18 @@ function SpinWheel({
   );
 }
 
-/* ---------------- Leaderboard overlay ---------------- */
-function LeaderboardOverlay({ rows, anonymous, onClose }: { rows: LeaderRow[]; anonymous?: boolean; onClose: () => void }) {
+/* ---------------- Leaderboard overlay ----------------
+   BARCHA o'quvchilar ko'rsatiladi (TOP-10 emas): sarlavha joyida turadi,
+   ro'yxat faqat o'z ichida scroll bo'ladi — ustoz 1-o'rindan oxirgigacha
+   ko'ra oladi. Scroll/tegish avto-yopilish taymerini bekor qiladi (onInteract),
+   ro'yxat ichiga bosish ham oynani yopmaydi. */
+function LeaderboardOverlay({
+  rows, anonymous, onClose, onInteract,
+}: {
+  rows: LeaderRow[]; anonymous?: boolean; onClose: () => void; onInteract?: () => void;
+}) {
   return (
-    <div className="lbo-overlay" onClick={onClose}>
+    <div className="lbo-overlay" onClick={onClose} onWheel={onInteract} onTouchMove={onInteract}>
       <div className="lbo-title">🏆 Reyting</div>
       <div className="lbo-skip">Yopish uchun bosing</div>
       <div className="lbo-head">
@@ -1136,20 +1152,22 @@ function LeaderboardOverlay({ rows, anonymous, onClose }: { rows: LeaderRow[]; a
         <span>Ism</span>
         <span style={{ textAlign: "right" }}>Ball</span>
       </div>
-      {rows.slice(0, 10).map((r, i) => {
-        const name = anonymous ? `O'quvchi ${i + 1}` : r.nickname;
-        return (
-          <div className="lbo-row" key={i} style={{ animationDelay: `${i * 0.05}s` }}>
-            <span>#{i + 1}</span>
-            <span className="lbo-name">
-              <span className="pp-ava">{initial(name)}</span>
-              {name}
-              {r.lastGain > 0 && <span className="lbo-gain">+{r.lastGain}</span>}
-            </span>
-            <span className="lbo-score">{r.score}</span>
-          </div>
-        );
-      })}
+      <div className="lbo-list" onClick={(e) => { e.stopPropagation(); onInteract?.(); }}>
+        {rows.map((r, i) => {
+          const name = anonymous ? `O'quvchi ${i + 1}` : r.nickname;
+          return (
+            <div className="lbo-row" key={i} style={{ animationDelay: `${Math.min(i * 0.05, 0.9)}s` }}>
+              <span>#{i + 1}</span>
+              <span className="lbo-name">
+                <span className="pp-ava">{initial(name)}</span>
+                {name}
+                {r.lastGain > 0 && <span className="lbo-gain">+{r.lastGain}</span>}
+              </span>
+              <span className="lbo-score">{r.score}</span>
+            </div>
+          );
+        })}
+      </div>
       {rows.length === 0 && <p style={{ color: "#fff" }}>Hali natija yo'q</p>}
     </div>
   );

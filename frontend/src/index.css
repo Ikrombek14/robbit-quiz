@@ -728,6 +728,30 @@ button.quiz-card:active { transform: translateY(0); }
   max-height: clamp(120px, 28dvh, 40vh);
 }
 
+/* Savol kartasidagi KATTA taymer — asosiy ekranda aniq ko'rinadi (yon paneldagi
+   kichik halqadan tashqari). Oxirgi 10 soniyada qizarib puls qiladi. */
+.qcard-timer {
+  display: flex; align-items: center; justify-content: center; gap: clamp(8px, 1.2vw, 14px);
+  margin-bottom: clamp(6px, 1.2vh, 12px);
+}
+.qcard-timer .material-symbols-outlined { font-size: clamp(22px, 4vh, 34px); color: var(--primary); }
+.qcard-timer .qt-num {
+  font-size: clamp(26px, 5vh, 44px); font-weight: 900; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--primary); min-width: 2ch; text-align: center;
+}
+.qcard-timer .qt-track {
+  flex: 0 1 clamp(120px, 24vw, 320px); height: 8px; border-radius: 999px;
+  background: var(--surface-2); overflow: hidden;
+}
+.qcard-timer .qt-fill { display: block; height: 100%; border-radius: 999px; background: var(--primary); transition: width 0.25s linear; }
+.qcard-timer.low .material-symbols-outlined, .qcard-timer.low .qt-num { color: var(--danger); }
+.qcard-timer.low .qt-fill { background: var(--danger); }
+.qcard-timer.low { animation: qtPulse 1s ease infinite; }
+@keyframes qtPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+/* Yon panel: taymer o'chirilgan holatda boshlash tugmasi (o'lik "0" halqa o'rniga) */
+.tc-btn.timer-start { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; font-size: 15px; }
+
 /* rangli javob plitkalari (proyeksiya uchun) — 2 ustunli grid:
    2 variant = yonma-yon (1 qator), 4 = 2x2, toq sonda (3/5) oxirgisi
    pastda markazda. Plitkalar ULKAN bo'lib ketmasin: blok balandligi qator
@@ -741,7 +765,7 @@ button.quiz-card:active { transform: translateY(0); }
   display: grid; grid-template-columns: 1fr 1fr;
   grid-auto-rows: minmax(0, 1fr);
   gap: var(--ans-gap);
-  max-height: calc(var(--ans-rows, 2) * clamp(96px, 20vh, 190px) + (var(--ans-rows, 2) - 1) * var(--ans-gap));
+  max-height: calc(var(--ans-rows, 2) * clamp(84px, 17vh, 160px) + (var(--ans-rows, 2) - 1) * var(--ans-gap));
   margin-top: auto; margin-bottom: auto;
 }
 /* Toq sonda (3/5 variant) oxirgi plitka: to'liq qatorni oladi, lekin kengligi
@@ -753,8 +777,10 @@ button.quiz-card:active { transform: translateY(0); }
 }
 .live-opt {
   position: relative; border-radius: 16px; min-height: 0; height: 100%;
-  padding: clamp(8px, 1.8vh, 18px) clamp(12px, 1.8vw, 22px);
-  display: flex; align-items: center; gap: clamp(10px, 1.5vw, 16px);
+  padding: clamp(8px, 1.4vh, 14px) clamp(12px, 1.6vw, 20px);
+  /* Harf + matn markazda — chapga yopishib, o'ngda katta bo'shliq qolmasin */
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  gap: clamp(10px, 1.5vw, 16px);
   color: #fff; font-size: clamp(1rem, 2.6vh, 1.5rem); font-weight: 700;
   transition: opacity 0.2s, transform 0.1s; overflow: hidden;
 }
@@ -765,7 +791,7 @@ button.quiz-card:active { transform: translateY(0); }
   display: flex; align-items: center; justify-content: center; font-size: clamp(14px, 2.4vh, 20px); flex-shrink: 0;
 }
 .live-opt .lo-img { width: clamp(56px, 8vh, 90px); height: clamp(44px, 7vh, 70px); object-fit: cover; border-radius: 10px; }
-.live-opt .lo-text { flex: 1; }
+.live-opt .lo-text { flex: 0 1 auto; }
 .live-opt .lo-votes {
   background: rgba(0,0,0,0.28); border-radius: 999px; padding: 4px 12px; font-size: 15px; font-weight: 700;
 }

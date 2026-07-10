@@ -1020,14 +1020,33 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     io.to(game.pin).emit("practice:timer", { endsAt: 0 });
   });
 
+  // Savol taymerini qo'lda boshlash — sozlamada o'chirilgan (yoki hali yo'q) bo'lsa
+  // ham ustoz halqadagi tugma bilan ishga tushira oladi. Slaydga biriktirilgan
+  // vaqtdan (yoki berilgan soniyadan) teskari sanaydi, tugaganda avtomatik reveal.
+  socket.on("host:startTimer", (data: { pin: string; seconds?: number }) => {
+    const game = games.get(data?.pin);
+    if (!game || game.hostSocketId !== socket.id || game.status !== "active") return;
+    const s = game.slides[game.currentIndex];
+    if (!s || s.kind !== "QUESTION") return;
+    const secs = Math.min(Math.max(Math.round(Number(data?.seconds) || s.timeLimit || 30), 5), 3600);
+    game.timerEndsAt = Date.now() + secs * 1000;
+    scheduleTimer(game);
+    io.to(game.pin).emit("timer:update", { endsAt: game.timerEndsAt });
+  });
+
   // Taymerni boshqarish — vaqt qo'shish (+/- soniya)
   socket.on("host:addTime", (data: { pin: string; seconds: number }) => {
     const game = games.get(data?.pin);
     if (!game || game.hostSocketId !== socket.id || game.status !== "active") return;
     const delta = Math.round(Number(data?.seconds) || 0) * 1000;
     if (!delta) return;
+    // Taymer yurmayotganda minus ma'nosiz; plus esa HOZIRdan boshlaydi.
+    // (Avval 0 + delta epoch-1970 deb hisoblanib, Math.max natijasi 1 soniyalik
+    //  taymer bo'lardi — "+15s" bosilganda savol darhol yopilib qolardi.)
+    if (game.timerEndsAt <= 0 && delta < 0) return;
+    const base = game.timerEndsAt > 0 ? game.timerEndsAt : Date.now();
     // Joriy vaqtdan kamida 1 soniya qolsin
-    game.timerEndsAt = Math.max(game.timerEndsAt + delta, Date.now() + 1000);
+    game.timerEndsAt = Math.max(base + delta, Date.now() + 1000);
     scheduleTimer(game);
     io.to(game.pin).emit("timer:update", { endsAt: game.timerEndsAt });
   });

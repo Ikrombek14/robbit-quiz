@@ -751,6 +751,14 @@ export default function Host() {
             ) : (
               <>
                 <div className="live-qcard">
+                  {/* KATTA taymer — asosiy ekranda, savol matni tepasida; oxirgi 10s da qizaradi */}
+                  {phase === "active" && endsAt > 0 && (
+                    <div className={`qcard-timer ${secs <= 10 ? "low" : ""}`}>
+                      <span className="material-symbols-outlined">timer</span>
+                      <span className="qt-num">{secs}</span>
+                      <span className="qt-track"><span className="qt-fill" style={{ width: `${pct}%` }} /></span>
+                    </div>
+                  )}
                   <AutoFitText className="live-qtext" text={slide.text ?? ""} />
                   {slide.imageUrl && <img className="live-qimg" src={slide.imageUrl} alt="" />}
                 </div>
@@ -763,16 +771,26 @@ export default function Host() {
             <aside className="live-side">
               {phase === "active" ? (
                 <div className="side-card timer-card">
-                  <div className={`timer-ring ${pct <= 25 ? "low" : ""}`} style={{ ["--pct" as any]: pct }}>
-                    <div className="tr-inner">{secs}</div>
-                  </div>
-                  <div className="timer-controls">
-                    <button className="tc-btn" onClick={() => socket.emit("host:addTime", { pin, seconds: -10 })}>−10s</button>
-                    <button className="tc-btn" onClick={() => socket.emit("host:addTime", { pin, seconds: 15 })}>+15s</button>
-                  </div>
-                  <button className="tc-btn danger" style={{ width: "100%" }} onClick={() => socket.emit("host:endTimer", { pin })}>
-                    Vaqtni tugatish
-                  </button>
+                  {endsAt > 0 ? (
+                    <>
+                      <div className={`timer-ring ${pct <= 25 ? "low" : ""}`} style={{ ["--pct" as any]: pct }}>
+                        <div className="tr-inner">{secs}</div>
+                      </div>
+                      <div className="timer-controls">
+                        <button className="tc-btn" onClick={() => socket.emit("host:addTime", { pin, seconds: -10 })}>−10s</button>
+                        <button className="tc-btn" onClick={() => socket.emit("host:addTime", { pin, seconds: 15 })}>+15s</button>
+                      </div>
+                      <button className="tc-btn danger" style={{ width: "100%" }} onClick={() => socket.emit("host:endTimer", { pin })}>
+                        Vaqtni tugatish
+                      </button>
+                    </>
+                  ) : (
+                    /* Taymer o'chirilgan/boshlanmagan — o'lik "0" halqa o'rniga boshlash tugmasi */
+                    <button className="tc-btn timer-start" onClick={() => socket.emit("host:startTimer", { pin })}>
+                      <span className="material-symbols-outlined">play_arrow</span>
+                      Taymerni boshlash ({slide.timeLimit}s)
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="side-card answered-stat">

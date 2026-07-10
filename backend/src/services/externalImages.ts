@@ -43,32 +43,39 @@ function safeExternalUrl(raw: string): URL | null {
   return url;
 }
 
-export interface FetchedImage {
-  mediaType: SlideImage["mediaType"];
-  buffer: Buffer;
-}
+export type FetchedImage =
+  | { ok: true; mediaType: SlideImage["mediaType"]; buffer: Buffer }
+  | { ok: false; reason: string }; // diagnostika uchun qisqa sabab (xato xabariga kiradi)
 
 // Bitta tashqi rasmni yuklab oladi. Har qanday muammoda (xavfli URL, katta hajm,
-// rasm emas, timeout) null qaytaradi — chaqiruvchi o'tkazib yuboradi.
-export async function fetchExternalImage(rawUrl: string, maxBytes: number): Promise<FetchedImage | null> {
+// rasm emas, timeout) ok:false + sabab qaytaradi — chaqiruvchi o'tkazib yuboradi.
+export async function fetchExternalImage(rawUrl: string, maxBytes: number): Promise<FetchedImage> {
   const url = safeExternalUrl(rawUrl);
-  if (!url) return null;
+  if (!url) return { ok: false, reason: "xavfli URL" };
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { "User-Agent": "Mozilla/5.0", Accept: "image/*" },
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        Accept: "image/*",
+        // Ba'zi CDN'lar (hotlink himoyasi) Referer'siz so'rovni rad etadi
+        Referer: `${url.origin}/`,
+      },
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
     const ct = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const mediaType = MEDIA_BY_CONTENT_TYPE[ct];
-    if (!mediaType) return null;
+    if (!mediaType) return { ok: false, reason: `rasm emas (${ct || "content-type yo'q"})` };
     const len = Number(res.headers.get("content-length"));
-    if (Number.isFinite(len) && len > maxBytes) return null;
+    if (Number.isFinite(len) && len > maxBytes) return { ok: false, reason: "hajmi katta" };
     const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength === 0 || buffer.byteLength > maxBytes) return null;
-    return { mediaType, buffer };
-  } catch {
-    return null; // timeout / tarmoq xatosi
+    if (buffer.byteLength === 0) return { ok: false, reason: "bo'sh javob" };
+    if (buffer.byteLength > maxBytes) return { ok: false, reason: "hajmi katta" };
+    return { ok: true, mediaType, buffer };
+  } catch (e) {
+    const name = e instanceof Error ? e.name : "";
+    return { ok: false, reason: name === "TimeoutError" || name === "AbortError" ? "timeout" : "tarmoq xatosi" };
   }
 }
 
@@ -116,8 +123,9 @@ export async function localizeSlideImages(slides: any[]): Promise<{ saved: numbe
     await Promise.all(
       batch.map(async (url) => {
         const img = await fetchExternalImage(url, LOCALIZE_MAX_IMAGE_BYTES);
-        if (!img) {
+        if (!img.ok) {
           failed++;
+          console.warn(`[import] rasm ko'chirilmadi (${img.reason}): ${url.slice(0, 120)}`);
           return;
         }
         // upload.ts bilan bir xil nomlash uslubi

@@ -74,6 +74,7 @@ interface AiJob {
   error?: string;
   usedImages: number;
   skippedImages: number;
+  skipReasons: string[]; // rasm o'tkazib yuborilish sabablari (diagnostika)
   createdAt: number;
 }
 const aiJobs = new Map<string, AiJob>();
@@ -104,17 +105,26 @@ async function collectSlideImages(urls: string[], job: AiJob): Promise<SlideImag
         const stat = fs.statSync(filePath);
         if (stat.size > MAX_IMAGE_BYTES || totalBytes + stat.size > MAX_TOTAL_IMAGE_BYTES) {
           job.skippedImages++;
+          job.skipReasons.push("hajmi katta");
           continue;
         }
         totalBytes += stat.size;
         out.push({ mediaType, base64: fs.readFileSync(filePath).toString("base64") });
       } catch {
         job.skippedImages++; // fayl topilmadi — o'tkazib yuboramiz
+        job.skipReasons.push("fayl topilmadi");
       }
     } else if (url.startsWith("https://")) {
       const img = await fetchExternalImage(url, MAX_IMAGE_BYTES);
-      if (!img || totalBytes + img.buffer.byteLength > MAX_TOTAL_IMAGE_BYTES) {
+      if (!img.ok) {
         job.skippedImages++;
+        job.skipReasons.push(img.reason);
+        console.warn(`[ai] tashqi rasm o'qilmadi (${img.reason}): ${url.slice(0, 120)}`);
+        continue;
+      }
+      if (totalBytes + img.buffer.byteLength > MAX_TOTAL_IMAGE_BYTES) {
+        job.skippedImages++;
+        job.skipReasons.push("umumiy hajm to'ldi");
         continue;
       }
       totalBytes += img.buffer.byteLength;
@@ -147,6 +157,7 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
     status: "pending",
     usedImages: 0,
     skippedImages: 0,
+    skipReasons: [],
     createdAt: Date.now(),
   };
   aiJobs.set(jobId, job);
@@ -155,7 +166,9 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
   collectSlideImages(imageUrls, job)
     .then((slideImages) => {
       if (slideImages.length === 0 && cleanTexts.length === 0) {
-        throw new Error("Slayd rasmlarini o'qib bo'lmadi. Qayta urinib ko'ring.");
+        // Sabablarni xabarga qo'shamiz — muammoni uzoqdan aniqlash oson bo'lsin
+        const reasons = [...new Set(job.skipReasons)].slice(0, 3).join("; ");
+        throw new Error(`Slayd rasmlarini o'qib bo'lmadi${reasons ? ` (${reasons})` : ""}. Qayta urinib ko'ring.`);
       }
       return generate(slideImages, cleanTexts, existing, count);
     })

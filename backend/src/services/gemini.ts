@@ -7,7 +7,6 @@ import type { GeneratedQuestion, SlideImage } from "./claude.js";
 // REST orqali chaqiramiz (SDK'siz) — qo'shimcha dependency kerak emas.
 
 const MODEL = "gemini-2.5-flash"; // tekin kvotada mavjud, rasm tahlili kuchli
-const IMAGE_MODEL = "gemini-2.5-flash-image"; // "Nano Banana" — rasm tahrirlash (matnni qayta chizish)
 
 // Gemini structured output sxemasi (OpenAPI subset) — savollar massivi
 const RESPONSE_SCHEMA = {
@@ -57,84 +56,6 @@ Natijani faqat JSON massiv sifatida qaytaring.`;
 interface GeminiResponse {
   candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
   error?: { message?: string; status?: string };
-}
-
-// ---- Rasm tahrirlash (imloviy xatolarni rasm ichida tuzatish sinovi) ----
-
-interface GeminiImagePart {
-  text?: string;
-  // REST javobida camelCase keladi; so'rovda snake_case ham qabul qilinadi
-  inlineData?: { mimeType?: string; data?: string };
-  inline_data?: { mime_type?: string; data?: string };
-}
-interface GeminiImageResponse {
-  candidates?: { content?: { parts?: GeminiImagePart[] }; finishReason?: string }[];
-  error?: { message?: string; status?: string };
-}
-
-// Slayd rasmini beriladi + tahrir buyrug'i — tahrirlangan rasm (base64) qaytadi.
-// Model rasmni to'liq qayta chizadi, shuning uchun natija foydalanuvchi tasdig'idan
-// o'tishi shart (chaqiruvchi tomonda oldin/keyin ko'rsatiladi).
-export async function editSlideImageGemini(
-  image: SlideImage,
-  instruction: string,
-): Promise<{ mediaType: SlideImage["mediaType"]; base64: string }> {
-  if (!config.geminiApiKey) {
-    throw new Error("GEMINI_API_KEY sozlanmagan");
-  }
-
-  const prompt = `Bu o'quv taqdimoti slaydining rasmi. Quyidagi tahrirni bajar:
-
-${instruction}
-
-MUHIM QOIDALAR:
-- Rasmning boshqa BARCHA qismlarini aynan asl holicha saqla: ranglar, fon, joylashuv, shrift uslubi va o'lchami, rasmlar, logotiplar, diagrammalar.
-- Faqat so'ralgan tahrirni bajar, boshqa hech narsani "yaxshilama".
-- Matn o'zbek lotin alifbosida to'g'ri yozilsin (tutuq belgisi: o', g', ma'lumot kabi).
-- Natijani rasm sifatida qaytar.`;
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent?key=${config.geminiApiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { inline_data: { mime_type: image.mediaType, data: image.base64 } },
-              { text: prompt },
-            ],
-          },
-        ],
-        generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-      }),
-    },
-  );
-
-  const data = (await res.json().catch(() => ({}))) as GeminiImageResponse;
-  if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error("Rasm tahrirlash limiti tugadi (Gemini tekin reja). Birozdan keyin qayta urinib ko'ring.");
-    }
-    throw new Error(data.error?.message || `Gemini xatosi (${res.status})`);
-  }
-
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  for (const p of parts) {
-    const b64 = p.inlineData?.data ?? p.inline_data?.data;
-    if (b64) {
-      const mime = ((p.inlineData?.mimeType ?? p.inline_data?.mime_type) || "image/png").toLowerCase();
-      const mediaType: SlideImage["mediaType"] =
-        mime === "image/jpeg" || mime === "image/webp" || mime === "image/gif"
-          ? (mime as SlideImage["mediaType"])
-          : "image/png";
-      return { mediaType, base64: b64 };
-    }
-  }
-  // Model rasm o'rniga faqat matn qaytargan bo'lishi mumkin (rad etish sababi)
-  const text = parts.map((p) => p.text ?? "").join("").trim();
-  throw new Error(text ? `AI rasm qaytarmadi: ${text.slice(0, 200)}` : "AI tahrirlangan rasm qaytarmadi. Qayta urinib ko'ring.");
 }
 
 export async function generateQuestionsFromSlidesGemini(

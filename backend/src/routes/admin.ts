@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../auth.js";
-import { computeApproved, isAdminEmail } from "../lib/approval.js";
+import { computeApproved, isAdminEmail, findApprovedByNameKey } from "../lib/approval.js";
 
 // Foydalanuvchilar (saytga kirgan ustoz accountlari) ustidan admin nazorati.
 // Faqat admin: ustoz huquqini (approved) berish/olib tashlash va admin huquqini boshqarish.
@@ -98,6 +98,55 @@ adminRouter.post("/users/:id/teacher-request", async (req: AuthedRequest, res) =
     data: parsed.data.approve
       ? { accessOverride: true, approved: true, teacherRequestAt: null, teacherRequestName: null }
       : { teacherRequestAt: null, teacherRequestName: null },
+    select: {
+      id: true, email: true, name: true, picture: true, isAdmin: true,
+      approved: true, canCreate: true, accessOverride: true, createdAt: true,
+      teacherRequestAt: true, teacherRequestName: true,
+      _count: { select: { quizzes: true } },
+    },
+  });
+  res.json({ user: publicUser(updated) });
+});
+
+// ---- Foydalanuvchini ro'yxatdagi ustozga biriktirish (har qanday admin) ----
+// Ism imlosi farq qilganda (o'/g' belgilari, bitta harf xatosi) roster bilan avtomatik
+// moslik ishlamaydi va ustoz statistikasi ko'rinmaydi. Biriktirish account ismini
+// ro'yxatdagi ANIQ imloga tenglashtiradi — butun tizim (approved, statistika, tahlil)
+// nameKey orqali ishlagani uchun hammasi o'z-o'zidan to'g'ri bog'lanadi.
+const bindSchema = z.object({ rosterId: z.string().min(1) });
+adminRouter.post("/users/:id/bind-roster", async (req: AuthedRequest, res) => {
+  const parsed = bindSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Noto'g'ri so'rov" });
+    return;
+  }
+  const id = String(req.params.id);
+  const target = await prisma.teacher.findUnique({ where: { id } });
+  if (!target) {
+    res.status(404).json({ error: "Foydalanuvchi topilmadi" });
+    return;
+  }
+  const roster = await prisma.rosterTeacher.findUnique({ where: { id: parsed.data.rosterId } });
+  if (!roster) {
+    res.status(404).json({ error: "Ro'yxatdagi ustoz topilmadi" });
+    return;
+  }
+  // Bu ism bilan allaqachon tasdiqlangan BOSHQA account bo'lsa — bloklaymiz
+  // (bitta ustoz nomini ikki account egallamasin)
+  const taken = await findApprovedByNameKey(roster.name, id);
+  if (taken) {
+    res.status(409).json({ error: `"${roster.name}" allaqachon boshqa accountga (${taken.email}) biriktirilgan` });
+    return;
+  }
+  const updated = await prisma.teacher.update({
+    where: { id },
+    data: {
+      name: roster.name, // roster imlosi bilan almashtiriladi — moslikning kaliti shu
+      approved: await computeApproved(target.email, roster.name, target.accessOverride),
+      // Ochiq ustozlik so'rovi bo'lsa, biriktirish uni ham yopadi
+      teacherRequestAt: null,
+      teacherRequestName: null,
+    },
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, accessOverride: true, createdAt: true,

@@ -90,6 +90,16 @@ export default function Home() {
             Darsga qo'shilish →
           </button>
         </div>
+
+        {/* Ro'yxatdan o'tgan ustozlar uchun kirish — karta tagida, ko'zga tashlanadigan joyda */}
+        <button
+          className="btn btn-ghost"
+          style={{ marginTop: 18, padding: "10px 22px", fontSize: 15 }}
+          onClick={() => navigate("/login")}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 19 }}>login</span>
+          Ustoz sifatida kirish
+        </button>
       </section>
 
       {/* ---- SEO va tanishtiruv (birinchi ekrandan pastda — Google uchun) ---- */}

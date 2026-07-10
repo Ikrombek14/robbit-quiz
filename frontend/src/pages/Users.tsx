@@ -12,6 +12,52 @@ function accessSource(u: AppUser): string {
   return u.approved ? "Ro'yxatda (avto)" : "Ro'yxatda yo'q";
 }
 
+// ---- Ism o'xshashligi (ro'yxatga biriktirish takliflari uchun) ----
+// Backend nameKey bilan bir xil normalizatsiya: kichik harf, apostrof variantlari
+// birlashadi, so'zlar alifbo tartibida (ism/familiya tartibi farq qilmasin)
+function normName(s: string): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .replace(/[`'']/g, "'")
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+}
+
+// Levenshtein masofasi — "1 harf farqi", "o'/g' tushib qolgan" holatlarni topadi
+function lev(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// 0..1 oralig'ida o'xshashlik: 1 = aynan bir xil (normalizatsiyadan keyin)
+function nameSim(a: string, b: string): number {
+  const x = normName(a), y = normName(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  return 1 - lev(x, y) / Math.max(x.length, y.length);
+}
+
+interface RosterItem {
+  id: string;
+  name: string;
+  branch?: string | null;
+}
+
 export default function Users() {
   const { teacher: me } = useAuth();
   const isSuper = me?.isSuperAdmin === true; // super admin: admin huquqi, parol, ustoz huquqi
@@ -23,6 +69,10 @@ export default function Users() {
   const [filter, setFilter] = useState<"all" | "approved" | "pending" | "admin">("all");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState<string | null>(null); // patch ketayotgan user id
+  // Ro'yxatga biriktirish oynasi
+  const [bindUser, setBindUser] = useState<AppUser | null>(null);
+  const [roster, setRoster] = useState<RosterItem[] | null>(null); // null = hali yuklanmagan
+  const [bindQ, setBindQ] = useState("");
 
   async function load() {
     setLoading(true);
@@ -107,6 +157,46 @@ export default function Users() {
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Xatolik");
       setTimeout(() => setMsg(""), 5000);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Biriktirish oynasini ochish — roster ro'yxati birinchi ochilishda yuklanadi
+  async function openBind(u: AppUser) {
+    setBindUser(u);
+    setBindQ("");
+    if (roster === null) {
+      try {
+        const r = await api<{ teachers: RosterItem[] }>("/teachers");
+        setRoster(r.teachers);
+      } catch {
+        setRoster([]);
+      }
+    }
+  }
+
+  // Foydalanuvchini tanlangan roster ustoziga biriktirish.
+  // DIQQAT: account ismi ro'yxatdagi imlo bilan almashadi — moslik shu orqali tiklanadi.
+  async function bindToRoster(u: AppUser, r: RosterItem) {
+    if (!confirm(
+      `"${u.name}" accountini ro'yxatdagi "${r.name}" ustoziga biriktirasizmi?\n\n` +
+      `Account ismi "${r.name}" deb o'zgaradi — shunda ustoz huquqi va statistika avtomatik bog'lanadi.`,
+    )) return;
+    setBusy(u.id);
+    setMsg("");
+    try {
+      const resp = await api<{ user: AppUser }>(`/admin/users/${u.id}/bind-roster`, {
+        method: "POST",
+        body: JSON.stringify({ rosterId: r.id }),
+      });
+      setRows((rs) => rs.map((x) => (x.id === u.id ? resp.user : x)));
+      setBindUser(null);
+      setMsg(`🔗 "${resp.user.name}" ro'yxatga biriktirildi`);
+      setTimeout(() => setMsg(""), 5000);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Biriktirishda xatolik");
+      setTimeout(() => setMsg(""), 6000);
     } finally {
       setBusy(null);
     }
@@ -240,6 +330,20 @@ export default function Users() {
                       )}
                     </span>
                     <span className="muted text-sm" style={{ display: "block" }}>{u.email}</span>
+                    {/* Roster bilan ism mos kelmagan foydalanuvchini qo'lda biriktirish */}
+                    {!u.approved && !u.isAdmin && (
+                      <button
+                        style={{
+                          background: "none", border: "none", padding: 0, marginTop: 2,
+                          color: "var(--primary)", cursor: "pointer", fontSize: 13, textDecoration: "underline",
+                        }}
+                        disabled={working}
+                        onClick={() => openBind(u)}
+                        title="Ro'yxatdagi ustozga biriktirish — ism imlosi farq qilsa ham statistika bog'lanadi"
+                      >
+                        🔗 Ro'yxatga biriktirish
+                      </button>
+                    )}
                   </span>
                 </span>
 
@@ -338,6 +442,97 @@ export default function Users() {
           })}
         </div>
       )}
+
+      {/* ---- Ro'yxatga biriktirish oynasi ---- */}
+      {bindUser && (() => {
+        // Allaqachon boshqa approved account egallagan roster ismlari — belgilab qo'yamiz
+        const takenKeys = new Set(
+          rows.filter((x) => x.approved && x.id !== bindUser.id).map((x) => normName(x.name)),
+        );
+        // O'xshashlik: account ismi va (bo'lsa) ustozlik so'rovida yozgan ismi bilan
+        const simFor = (r: RosterItem) =>
+          Math.max(nameSim(bindUser.name, r.name), bindUser.teacherRequestName ? nameSim(bindUser.teacherRequestName, r.name) : 0);
+        const needle = bindQ.trim().toLowerCase();
+        const list = (roster ?? [])
+          .map((r) => ({ r, sim: simFor(r), taken: takenKeys.has(normName(r.name)) }))
+          .filter(({ r }) => !needle || r.name.toLowerCase().includes(needle))
+          .sort((a, b) => b.sim - a.sim)
+          .slice(0, 30);
+        return (
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.5)",
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+            }}
+            onClick={() => setBindUser(null)}
+          >
+            <div
+              className="card"
+              style={{ maxWidth: 520, width: "100%", maxHeight: "80vh", overflow: "auto", margin: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="between" style={{ alignItems: "flex-start" }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>🔗 Ro'yxatga biriktirish</h3>
+                  <p className="muted text-sm" style={{ margin: "4px 0 0" }}>
+                    <b>{bindUser.name}</b> ({bindUser.email})
+                    {bindUser.teacherRequestName && bindUser.teacherRequestName !== bindUser.name && (
+                      <> · so'rovda: <b>{bindUser.teacherRequestName}</b></>
+                    )}
+                  </p>
+                </div>
+                <button className="icon-btn" onClick={() => setBindUser(null)} title="Yopish">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <p className="muted text-sm" style={{ margin: "8px 0" }}>
+                Eng o'xshash ismlar tepada. Tanlangach account ismi ro'yxatdagi imlo bilan
+                almashadi — ustoz huquqi va statistika avtomatik bog'lanadi.
+              </p>
+              <input
+                className="filter-search"
+                style={{ width: "100%" }}
+                placeholder="🔍 Ro'yxatdan qidirish…"
+                value={bindQ}
+                onChange={(e) => setBindQ(e.target.value)}
+                autoFocus
+              />
+              {roster === null ? (
+                <p className="muted">Yuklanmoqda…</p>
+              ) : list.length === 0 ? (
+                <p className="muted">Topilmadi.</p>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  {list.map(({ r, sim, taken }) => (
+                    <button
+                      key={r.id}
+                      disabled={taken || busy === bindUser.id}
+                      onClick={() => bindToRoster(bindUser, r)}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                        width: "100%", textAlign: "left", padding: "9px 12px", marginBottom: 4,
+                        borderRadius: 10, border: "1px solid var(--surface-2, rgba(0,0,0,0.08))",
+                        background: sim >= 0.75 && !taken ? "var(--primary-soft, rgba(70,130,240,0.10))" : "transparent",
+                        cursor: taken ? "not-allowed" : "pointer", opacity: taken ? 0.5 : 1, font: "inherit",
+                        color: "inherit",
+                      }}
+                      title={taken ? "Bu ism allaqachon boshqa accountga biriktirilgan" : `Biriktirish: ${r.name}`}
+                    >
+                      <span>
+                        {r.name}
+                        {r.branch && <span className="muted text-sm"> · {r.branch}</span>}
+                      </span>
+                      <span className="muted text-sm" style={{ whiteSpace: "nowrap" }}>
+                        {taken ? "band" : sim >= 0.99 ? "aynan mos" : sim >= 0.75 ? `~${Math.round(sim * 100)}% o'xshash` : ""}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </Shell>
   );
 }

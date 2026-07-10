@@ -10,8 +10,8 @@ import {
   type GeneratedQuestion,
   type SlideImage,
 } from "../services/claude.js";
-import { generateQuestionsFromSlidesGemini } from "../services/gemini.js";
-import { fetchExternalImage } from "../services/externalImages.js";
+import { generateQuestionsFromSlidesGemini, editSlideImageGemini } from "../services/gemini.js";
+import { fetchExternalImage, EXT_BY_MEDIA } from "../services/externalImages.js";
 import { config } from "../config.js";
 import { UPLOADS_DIR } from "./upload.js";
 
@@ -181,6 +181,88 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
       job.error = e instanceof Error ? e.message : "AI xatoligi";
     });
   res.json({ jobId });
+});
+
+// ---- SINOV: rasm ichidagi matnni AI bilan tahrirlash (Nano Banana) ----
+// Maqsad: PDF'dan yuklangan slayd rasmlaridagi imloviy xatolarni tuzatish mumkinligini
+// baholash. Natija uploads/ ga yangi fayl bo'lib tushadi — asl rasm O'ZGARMAYDI.
+const editImageSchema = z.object({
+  image: z.string().min(1).max(2000), // /uploads/<fayl> yoki https://... URL
+  instruction: z.string().min(3).max(2000), // masalan: "'malumot' so'zini 'ma'lumot'ga almashtir"
+});
+
+interface ImgJob {
+  teacherId: string;
+  status: "pending" | "done" | "error";
+  resultUrl?: string;
+  error?: string;
+  createdAt: number;
+}
+const imgJobs = new Map<string, ImgJob>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of imgJobs) if (now - v.createdAt > 15 * 60 * 1000) imgJobs.delete(k);
+}, 60_000).unref();
+
+pdfRouter.post("/edit-image", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
+  const parsed = editImageSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "So'rov formati noto'g'ri" });
+    return;
+  }
+  const { image, instruction } = parsed.data;
+
+  const jobId = `i${Date.now().toString(36)}${Math.floor(Math.random() * 1e9).toString(36)}`;
+  const job: ImgJob = { teacherId: req.teacherId!, status: "pending", createdAt: Date.now() };
+  imgJobs.set(jobId, job);
+
+  (async () => {
+    // Rasmni olamiz: serverdagi fayl yoki tashqi URL
+    let slideImage: SlideImage;
+    if (image.startsWith("/uploads/")) {
+      const base = path.basename(image);
+      const mediaType = MEDIA_BY_EXT[path.extname(base).toLowerCase()];
+      if (!mediaType) throw new Error("Rasm formati qo'llanmaydi");
+      const buf = fs.readFileSync(path.join(UPLOADS_DIR, base)); // topilmasa catch'ga tushadi
+      if (buf.byteLength > MAX_IMAGE_BYTES) throw new Error("Rasm juda katta (4 MB dan oshmasin)");
+      slideImage = { mediaType, base64: buf.toString("base64") };
+    } else if (image.startsWith("https://")) {
+      const img = await fetchExternalImage(image, MAX_IMAGE_BYTES);
+      if (!img.ok) throw new Error(`Rasmni yuklab bo'lmadi (${img.reason})`);
+      slideImage = { mediaType: img.mediaType, base64: img.buffer.toString("base64") };
+    } else {
+      throw new Error("Rasm URL'i /uploads/ yoki https:// bilan boshlanishi kerak");
+    }
+
+    const edited = await editSlideImageGemini(slideImage, instruction);
+    // upload.ts bilan bir xil nomlash — natija oddiy yuklangan rasm kabi saqlanadi
+    const name = `${Date.now()}-${Math.round(Math.random() * 1e9)}${EXT_BY_MEDIA[edited.mediaType]}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, name), Buffer.from(edited.base64, "base64"));
+    job.status = "done";
+    job.resultUrl = `/uploads/${name}`;
+  })().catch((e) => {
+    job.status = "error";
+    job.error = e instanceof Error ? e.message : "AI xatoligi";
+  });
+
+  res.json({ jobId });
+});
+
+pdfRouter.get("/edit-image/:jobId", requireAuth, requireCanCreate, (req: AuthedRequest, res) => {
+  const job = imgJobs.get(String(req.params.jobId));
+  if (!job || job.teacherId !== req.teacherId) {
+    res.status(404).json({ error: "So'rov topilmadi yoki eskirgan. Qayta urinib ko'ring." });
+    return;
+  }
+  if (job.status === "pending") {
+    res.json({ status: "pending" });
+    return;
+  }
+  if (job.status === "error") {
+    res.json({ status: "error", error: job.error });
+    return;
+  }
+  res.json({ status: "done", url: job.resultUrl });
 });
 
 // Job holatini so'rash (polling). GET — aiLimiter'ga kirmaydi (index.ts'da skip).

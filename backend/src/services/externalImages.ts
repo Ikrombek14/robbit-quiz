@@ -20,7 +20,7 @@ const MEDIA_BY_CONTENT_TYPE: Record<string, SlideImage["mediaType"]> = {
   "image/gif": "image/gif",
 };
 
-const EXT_BY_MEDIA: Record<SlideImage["mediaType"], string> = {
+export const EXT_BY_MEDIA: Record<SlideImage["mediaType"], string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
   "image/webp": ".webp",

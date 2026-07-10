@@ -24,6 +24,7 @@ import Settings from "./pages/Settings";
 import BulkImport from "./pages/BulkImport";
 import StudentProfile from "./pages/StudentProfile";
 import Backup from "./pages/Backup";
+import ImageEditTest from "./pages/ImageEditTest";
 import Shell from "./components/Shell";
 
 function Protected({ children, approved, admin, create, student }: { children: ReactNode; approved?: boolean; admin?: boolean; create?: boolean; student?: boolean }) {
@@ -91,6 +92,7 @@ export default function App() {
       <Route path="/activity/:id" element={<Protected><ActivityDetail /></Protected>} />
       <Route path="/quiz/:id" element={<Protected create><QuizEditor /></Protected>} />
       <Route path="/bulk-import" element={<Protected create><BulkImport /></Protected>} />
+      <Route path="/image-test" element={<Protected create><ImageEditTest /></Protected>} />
       <Route path="/host/:quizId" element={<Protected><Host /></Protected>} />
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />

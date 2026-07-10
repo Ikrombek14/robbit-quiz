@@ -11,6 +11,7 @@ import {
   type SlideImage,
 } from "../services/claude.js";
 import { generateQuestionsFromSlidesGemini } from "../services/gemini.js";
+import { fetchExternalImage } from "../services/externalImages.js";
 import { config } from "../config.js";
 import { UPLOADS_DIR } from "./upload.js";
 
@@ -81,6 +82,49 @@ setInterval(() => {
   for (const [k, v] of aiJobs) if (now - v.createdAt > 15 * 60 * 1000) aiJobs.delete(k);
 }, 60_000).unref();
 
+// Rasm URL'laridan AI'ga beriladigan base64 to'plamni yig'adi.
+// Ikki manba: /uploads/<fayl> — serverdagi fayl (sinxron o'qiladi),
+// https://... — tashqi CDN (Wayground importidan qolgan) — yuklab olinadi.
+// Job ichida (async) chaqiriladi — tashqi yuklab olish so'rov javobini kechiktirmasin.
+async function collectSlideImages(urls: string[], job: AiJob): Promise<SlideImage[]> {
+  const out: SlideImage[] = [];
+  let totalBytes = 0;
+  for (const url of urls) {
+    if (out.length >= MAX_IMAGES || totalBytes >= MAX_TOTAL_IMAGE_BYTES) {
+      job.skippedImages++;
+      continue;
+    }
+    if (url.startsWith("/uploads/")) {
+      // basename bilan path traversal'dan himoya
+      const base = path.basename(url);
+      const mediaType = MEDIA_BY_EXT[path.extname(base).toLowerCase()];
+      if (!mediaType) continue;
+      const filePath = path.join(UPLOADS_DIR, base);
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.size > MAX_IMAGE_BYTES || totalBytes + stat.size > MAX_TOTAL_IMAGE_BYTES) {
+          job.skippedImages++;
+          continue;
+        }
+        totalBytes += stat.size;
+        out.push({ mediaType, base64: fs.readFileSync(filePath).toString("base64") });
+      } catch {
+        job.skippedImages++; // fayl topilmadi — o'tkazib yuboramiz
+      }
+    } else if (url.startsWith("https://")) {
+      const img = await fetchExternalImage(url, MAX_IMAGE_BYTES);
+      if (!img || totalBytes + img.buffer.byteLength > MAX_TOTAL_IMAGE_BYTES) {
+        job.skippedImages++;
+        continue;
+      }
+      totalBytes += img.buffer.byteLength;
+      out.push({ mediaType: img.mediaType, base64: img.buffer.toString("base64") });
+    }
+  }
+  job.usedImages = out.length;
+  return out;
+}
+
 pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
   const parsed = fromSlidesSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -89,53 +133,32 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
   }
   const { count, texts, images, existing } = parsed.data;
 
-  // Rasmlarni uploads/ dan o'qiymiz — faqat /uploads/<fayl> ko'rinishidagi URL'lar
-  // (basename bilan path traversal'dan himoya)
-  const slideImages: SlideImage[] = [];
-  let skippedImages = 0;
-  let totalBytes = 0;
-  for (const url of images) {
-    if (slideImages.length >= MAX_IMAGES || totalBytes >= MAX_TOTAL_IMAGE_BYTES) {
-      skippedImages++;
-      continue;
-    }
-    if (!url.startsWith("/uploads/")) continue;
-    const base = path.basename(url);
-    const mediaType = MEDIA_BY_EXT[path.extname(base).toLowerCase()];
-    if (!mediaType) continue;
-    const filePath = path.join(UPLOADS_DIR, base);
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.size > MAX_IMAGE_BYTES || totalBytes + stat.size > MAX_TOTAL_IMAGE_BYTES) {
-        skippedImages++;
-        continue;
-      }
-      totalBytes += stat.size;
-      slideImages.push({ mediaType, base64: fs.readFileSync(filePath).toString("base64") });
-    } catch {
-      skippedImages++; // fayl topilmadi — o'tkazib yuboramiz
-    }
-  }
-
+  const imageUrls = images.filter((u) => u.startsWith("/uploads/") || u.startsWith("https://"));
   const cleanTexts = texts.map((t) => t.trim()).filter(Boolean).slice(0, 100);
-  if (slideImages.length === 0 && cleanTexts.length === 0) {
+  if (imageUrls.length === 0 && cleanTexts.length === 0) {
     res.status(400).json({ error: "Slaydlarda AI o'qiy oladigan mazmun topilmadi. Avval kontent slaydlar (PDF sahifalari yoki matn) qo'shing." });
     return;
   }
 
-  // Job ochamiz va darhol javob qaytaramiz — AI fon'da ishlaydi
+  // Job ochamiz va darhol javob qaytaramiz — rasm yig'ish ham, AI ham fon'da ishlaydi
   const jobId = `j${Date.now().toString(36)}${Math.floor(Math.random() * 1e9).toString(36)}`;
   const job: AiJob = {
     teacherId: req.teacherId!,
     status: "pending",
-    usedImages: slideImages.length,
-    skippedImages,
+    usedImages: 0,
+    skippedImages: 0,
     createdAt: Date.now(),
   };
   aiJobs.set(jobId, job);
   // Provayder tanlovi: GEMINI_API_KEY bo'lsa Gemini (tekin reja), aks holda Claude
   const generate = config.geminiApiKey ? generateQuestionsFromSlidesGemini : generateQuestionsFromSlides;
-  generate(slideImages, cleanTexts, existing, count)
+  collectSlideImages(imageUrls, job)
+    .then((slideImages) => {
+      if (slideImages.length === 0 && cleanTexts.length === 0) {
+        throw new Error("Slayd rasmlarini o'qib bo'lmadi. Qayta urinib ko'ring.");
+      }
+      return generate(slideImages, cleanTexts, existing, count);
+    })
     .then((questions) => {
       job.status = "done";
       job.questions = questions;

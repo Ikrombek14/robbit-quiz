@@ -263,7 +263,10 @@ export default function QuizEditor() {
     setAiError("");
     setAiQuestions(null);
     try {
-      // Muharrirdagi (saqlanmagan bo'lishi ham mumkin) slaydlardan mazmun yig'amiz
+      // Muharrirdagi (saqlanmagan bo'lishi ham mumkin) slaydlardan mazmun yig'amiz.
+      // Rasm ikki xil bo'ladi: /uploads/... (serverimizda) va https://... (import
+      // qilingan quizlarda tashqi CDN) — backend ikkalasini ham o'qiy oladi.
+      const usableImg = (u?: string) => !!u && (u.startsWith("/uploads/") || u.startsWith("https://"));
       const texts: string[] = [];
       const images: string[] = [];
       for (const s of slides) {
@@ -271,11 +274,11 @@ export default function QuizEditor() {
         const d = s.data;
         if (d.title?.trim()) texts.push(d.title.trim());
         if (d.body?.trim()) texts.push(d.body.trim());
-        if (d.imageUrl?.startsWith("/uploads/")) images.push(d.imageUrl);
-        if (d.background?.type === "image" && d.background.value.startsWith("/uploads/")) images.push(d.background.value);
+        if (usableImg(d.imageUrl)) images.push(d.imageUrl!);
+        if (d.background?.type === "image" && usableImg(d.background.value)) images.push(d.background.value);
         for (const el of d.elements ?? []) {
           if (el.type === "text" && el.text?.trim()) texts.push(el.text.trim());
-          if (el.type === "image" && el.url?.startsWith("/uploads/")) images.push(el.url);
+          if (el.type === "image" && usableImg(el.url)) images.push(el.url!);
         }
       }
       const existing = slides

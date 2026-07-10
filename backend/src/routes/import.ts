@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requireCanCreate, type AuthedRequest } from "../auth.js";
 import { prisma } from "../prisma.js";
+import { localizeSlideImages } from "../services/externalImages.js";
 
 export const importRouter = Router();
 
@@ -399,6 +400,9 @@ importRouter.post("/wayground", requireAuth, requireCanCreate, async (req, res) 
     res.status(r.status).json({ error: r.error });
     return;
   }
+  // Rasmlarni serverga ko'chiramiz — quiz tashqi CDN'ga bog'liq bo'lmasin
+  // (CDN'dan o'chsa ham bizda qoladi; AI generatsiyasi ham to'g'ridan o'qiy oladi)
+  await localizeSlideImages(r.slides);
   res.json({ title: r.title, slides: r.slides, summary: r.summary });
 });
 
@@ -460,6 +464,10 @@ importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: 
     res.json({ quizId: existing.id, title: finalTitle, summary: r.summary, existed: true });
     return;
   }
+
+  // Yangi quiz yaratilyapti — rasmlarni serverga ko'chiramiz (mavjudi topilsa
+  // yuqorida qaytdik, qayta yuklab yurmaymiz)
+  await localizeSlideImages(r.slides);
 
   const quiz = await prisma.quiz.create({
     data: {

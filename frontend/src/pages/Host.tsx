@@ -969,9 +969,17 @@ export default function Host() {
 function HostAnswers({ slide, results }: { slide: PublicSlide; results: Results | null }) {
   const t = slide.type;
   if (slide.options && ["SINGLE", "MULTIPLE", "TRUE_FALSE", "DROPDOWN", "POLL"].includes(t ?? "")) {
-    const single = slide.options.length <= 2;
+    // Joylashuv: 2 ta → yonma-yon (1 qator); 3 ta → 2 tepada + 1 pastda markazda;
+    // 4 ta → 2x2; 5-6 → juft qatorlar, toq bo'lsa oxirgisi markazda.
+    // --ans-rows — CSS'da blok balandligini qator soniga qarab cheklash uchun.
+    const n = slide.options.length;
+    const rows = Math.max(1, Math.ceil(n / 2));
+    const oddLast = n > 2 && n % 2 === 1;
     return (
-      <div className={`live-answers ${single ? "cols-1" : ""}`}>
+      <div
+        className={`live-answers ${oddLast ? "odd-last" : ""}`}
+        style={{ ["--ans-rows" as any]: rows }}
+      >
         {slide.options.map((o, i) => {
           const isRight = results?.correctOptionIds?.includes(o.id);
           const cls = results

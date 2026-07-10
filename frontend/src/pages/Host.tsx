@@ -17,6 +17,7 @@ interface PublicSlide {
   type: string | null;
   timeLimit: number;
   endsAt?: number;
+  now?: number; // server soati — endsAt'ni mijoz soatiga o'girish uchun
   content?: SlideData;
   text?: string;
   imageUrl?: string;
@@ -70,6 +71,14 @@ interface TestProgRow {
 }
 
 const initial = (s: string) => (s?.[0] ?? "?").toUpperCase();
+
+/* Server va mijoz soati farq qilishi mumkin (masalan serverda soat 2 soat orqada
+   bo'lgan — taymerlar darhol "0" bo'lib qolardi). Server har endsAt bilan o'zining
+   "now"ini ham yuboradi; farqni chiqarib endsAt'ni MIJOZ soatiga o'giramiz. */
+function toLocalEnds(ends?: number, serverNow?: number): number {
+  if (!ends) return 0;
+  return serverNow ? Date.now() + (ends - serverNow) : ends;
+}
 
 /* Savol matni clamp() bilan katta o'lchamdan boshlanadi; juda uzun bo'lib
    ajratilgan balandlikka (max-height) sig'masa, sig'guncha avtomatik kichrayadi —
@@ -184,12 +193,12 @@ export default function Host() {
     if (r.settings) setSettings(r.settings);
     if (r.mode) setMode(r.mode);
     if (r.players) setPlayers(r.players as PlayerRow[]);
-    if (r.practiceEndsAt) setPracticeEndsAt(r.practiceEndsAt); // amaliyot taymeri davom etsa, tiklaymiz
+    if (r.practiceEndsAt) setPracticeEndsAt(toLocalEnds(r.practiceEndsAt, r.now)); // amaliyot taymeri davom etsa, tiklaymiz
     if (r.status === "ended") setPhase("ended");
     else if (r.mode === "TEST" && r.status === "active") setPhase("active");
     else if ((r.status === "active" || r.status === "reveal") && r.slide) {
       setSlide(r.slide);
-      setEndsAt(r.slide.endsAt ?? 0);
+      setEndsAt(toLocalEnds(r.slide.endsAt, r.slide.now ?? r.now));
       setPhase(r.status === "reveal" ? "reveal" : "active");
     } else setPhase("lobby");
   }
@@ -243,7 +252,7 @@ export default function Host() {
       setResults(null);
       setProgress({ answered: 0, total: 0 });
       setAnsweredNames([]);
-      setEndsAt(s.endsAt ?? 0);
+      setEndsAt(toLocalEnds(s.endsAt, s.now));
       setShowBoard(false);
       setPracticeEndsAt(0); // yangi slaydda amaliyot taymeri ham tugaydi
       if (lbTimer.current) { clearTimeout(lbTimer.current); lbTimer.current = null; }
@@ -255,7 +264,7 @@ export default function Host() {
       setProgress({ answered: d.answered, total: d.total });
       if (d.answeredNames) setAnsweredNames(d.answeredNames);
     };
-    const onTimer = (d: { endsAt: number }) => setEndsAt(d.endsAt);
+    const onTimer = (d: { endsAt: number; now?: number }) => setEndsAt(toLocalEnds(d.endsAt, d.now));
     const onResults = (d: Results) => {
       setResults(d);
       setEndsAt(0);
@@ -266,8 +275,8 @@ export default function Host() {
       setShowBoard(true);
       lbTimer.current = setTimeout(() => setShowBoard(false), 5000);
     };
-    const onPractice = (d: { endsAt: number }) => {
-      setPracticeEndsAt(d.endsAt || 0);
+    const onPractice = (d: { endsAt: number; now?: number }) => {
+      setPracticeEndsAt(toLocalEnds(d.endsAt, d.now));
       lastPracTick.current = 0;
       pracEndPlayed.current = false;
     };
@@ -751,14 +760,6 @@ export default function Host() {
             ) : (
               <>
                 <div className="live-qcard">
-                  {/* KATTA taymer — asosiy ekranda, savol matni tepasida; oxirgi 10s da qizaradi */}
-                  {phase === "active" && endsAt > 0 && (
-                    <div className={`qcard-timer ${secs <= 10 ? "low" : ""}`}>
-                      <span className="material-symbols-outlined">timer</span>
-                      <span className="qt-num">{secs}</span>
-                      <span className="qt-track"><span className="qt-fill" style={{ width: `${pct}%` }} /></span>
-                    </div>
-                  )}
                   <AutoFitText className="live-qtext" text={slide.text ?? ""} />
                   {slide.imageUrl && <img className="live-qimg" src={slide.imageUrl} alt="" />}
                 </div>

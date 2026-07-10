@@ -216,9 +216,11 @@ function buildSlide(game: GameState, idx: number, total?: number) {
   }
 }
 
-// Jonli rejim — joriy slayd + taymer tugash vaqti
+// Jonli rejim — joriy slayd + taymer tugash vaqti.
+// `now` — server soati: mijoz undan farqni chiqarib endsAt'ni O'Z soatiga o'giradi
+// (server soati noto'g'ri bo'lsa ham taymerlar to'g'ri sanaydi — clock skew himoyasi).
 function publicSlide(game: GameState) {
-  return { ...buildSlide(game, game.currentIndex), endsAt: game.timerEndsAt };
+  return { ...buildSlide(game, game.currentIndex), endsAt: game.timerEndsAt, now: Date.now() };
 }
 
 function correctSummary(s: LoadedSlide, votes: Record<string, number>) {
@@ -700,6 +702,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       slide:
         game.mode === "LIVE" && (game.status === "active" || game.status === "reveal") ? publicSlide(game) : null,
       practiceEndsAt: game.practiceEndsAt > Date.now() ? game.practiceEndsAt : 0,
+      now: Date.now(), // mijoz soat farqini hisoblashi uchun
     });
     if (game.mode === "TEST" && game.status === "active") emitTestProgress(game);
   });
@@ -754,7 +757,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       const rows = typingBoard(game);
       if (rows.length) socket.emit("typing:board", { rows });
     }
-    if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt });
+    if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt, now: Date.now() });
     // Kech qo'shilgan o'quvchini darhol jonli o'yinga/testga tushiramiz
     if (game.status !== "lobby") {
       if (game.mode === "TEST") {
@@ -799,7 +802,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       if (rows.length) socket.emit("typing:board", { rows });
     }
     // Amaliyot taymeri davom etayotgan bo'lsa, qaytgan o'quvchiga ham ko'rsatamiz
-    if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt });
+    if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt, now: Date.now() });
     if (game.status === "active") {
       if (game.mode === "TEST") socket.emit("test:begin", { total: game.questionIndices.length });
       else socket.emit("slide:show", publicSlide(game));
@@ -1009,7 +1012,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     if (!game || game.hostSocketId !== socket.id) return;
     const secs = Math.min(Math.max(Math.round(Number(data?.seconds) || 0), 5), 3600); // 5s..60min
     game.practiceEndsAt = Date.now() + secs * 1000;
-    io.to(game.pin).emit("practice:timer", { endsAt: game.practiceEndsAt });
+    io.to(game.pin).emit("practice:timer", { endsAt: game.practiceEndsAt, now: Date.now() });
   });
 
   // Amaliyot taymerini to'xtatish
@@ -1017,7 +1020,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     const game = games.get(data?.pin);
     if (!game || game.hostSocketId !== socket.id) return;
     game.practiceEndsAt = 0;
-    io.to(game.pin).emit("practice:timer", { endsAt: 0 });
+    io.to(game.pin).emit("practice:timer", { endsAt: 0, now: Date.now() });
   });
 
   // Savol taymerini qo'lda boshlash — sozlamada o'chirilgan (yoki hali yo'q) bo'lsa
@@ -1031,7 +1034,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     const secs = Math.min(Math.max(Math.round(Number(data?.seconds) || s.timeLimit || 30), 5), 3600);
     game.timerEndsAt = Date.now() + secs * 1000;
     scheduleTimer(game);
-    io.to(game.pin).emit("timer:update", { endsAt: game.timerEndsAt });
+    io.to(game.pin).emit("timer:update", { endsAt: game.timerEndsAt, now: Date.now() });
   });
 
   // Taymerni boshqarish — vaqt qo'shish (+/- soniya)
@@ -1048,7 +1051,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     // Joriy vaqtdan kamida 1 soniya qolsin
     game.timerEndsAt = Math.max(base + delta, Date.now() + 1000);
     scheduleTimer(game);
-    io.to(game.pin).emit("timer:update", { endsAt: game.timerEndsAt });
+    io.to(game.pin).emit("timer:update", { endsAt: game.timerEndsAt, now: Date.now() });
   });
 
   // Taymerni darhol tugatish → natijani ochish

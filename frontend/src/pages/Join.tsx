@@ -21,6 +21,7 @@ interface PublicSlide {
   type: string | null;
   timeLimit?: number;
   endsAt?: number;
+  now?: number; // server soati — endsAt'ni mijoz soatiga o'girish uchun
   content?: SlideData;
   text?: string;
   imageUrl?: string;
@@ -35,6 +36,13 @@ interface Results {
   correctText?: string;
   poll?: boolean;
   leaderboard: LeaderRow[];
+}
+
+/* Server va mijoz (o'quvchi telefoni) soati farq qilishi mumkin — endsAt'ni server
+   yuborgan "now" bilan mijoz soatiga o'giramiz, aks holda taymer noto'g'ri sanaydi */
+function toLocalEnds(ends?: number, serverNow?: number): number {
+  if (!ends) return 0;
+  return serverNow ? Date.now() + (ends - serverNow) : ends;
 }
 
 export default function Join() {
@@ -77,7 +85,7 @@ export default function Join() {
       setSlide(s);
       setResult(null);
       setResults(null);
-      setEndsAt(s.endsAt ?? 0);
+      setEndsAt(toLocalEnds(s.endsAt, s.now));
       setPracticeEndsAt(0); // yangi slaydda amaliyot taymeri tugaydi
       if (answeredCurrentRef.current && s.kind !== "CONTENT") {
         answeredCurrentRef.current = false;
@@ -87,12 +95,12 @@ export default function Join() {
         setPhase(s.kind === "CONTENT" ? "content" : "question");
       }
     };
-    const onPractice = (d: { endsAt: number }) => setPracticeEndsAt(d.endsAt || 0);
+    const onPractice = (d: { endsAt: number; now?: number }) => setPracticeEndsAt(toLocalEnds(d.endsAt, d.now));
     const onReceived = (r: { correct: boolean; points: number; score: number }) => {
       setResult(r);
       setScore(r.score);
     };
-    const onTimer = (d: { endsAt: number }) => setEndsAt(d.endsAt);
+    const onTimer = (d: { endsAt: number; now?: number }) => setEndsAt(toLocalEnds(d.endsAt, d.now));
     const onResults = (d: Results) => {
       setResults(d);
       setEndsAt(0);

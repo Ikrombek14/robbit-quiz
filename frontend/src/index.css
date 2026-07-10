@@ -634,17 +634,25 @@ button.quiz-card:active { transform: translateY(0); }
   border-radius: 8px; padding: 8px 10px; font-weight: 700; cursor: pointer; font-size: 13px;
 }
 .prac-opt:hover { background: var(--primary-soft); }
+/* "Vaqt berish" sanog'i — EKRAN MARKAZIDA katta ko'rinadi (proyektorda butun
+   sinf ko'radi), orqaga sanaydi, oz vaqt qolganda qizarib puls qiladi */
 .prac-banner {
-  position: fixed; top: 72px; left: 50%; transform: translateX(-50%); z-index: 90;
-  display: flex; align-items: center; gap: 12px;
-  background: var(--surface); border: 2px solid var(--primary); border-radius: 16px;
-  padding: 12px 24px; box-shadow: 0 14px 40px rgba(0,0,0,0.22);
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 90;
+  display: flex; flex-direction: column; align-items: center; gap: clamp(4px, 1vh, 10px);
+  background: var(--surface); border: 3px solid var(--primary); border-radius: 28px;
+  padding: clamp(20px, 4.5vh, 40px) clamp(40px, 7vw, 80px);
+  box-shadow: 0 28px 90px rgba(0,0,0,0.4);
 }
-.prac-banner .material-symbols-outlined { font-size: 34px; color: var(--primary); }
-.prac-banner .prac-time { font-size: 40px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
-.prac-banner .prac-lbl { font-size: 14px; color: var(--muted); font-weight: 700; }
-.prac-banner.low { border-color: var(--danger, #e5484d); animation: pracPulse 1s ease infinite; }
+.prac-banner .material-symbols-outlined { font-size: clamp(30px, 5vh, 44px); color: var(--primary); }
+.prac-banner .prac-time {
+  font-size: clamp(64px, 18vh, 140px); font-weight: 900; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.prac-banner .prac-lbl { font-size: clamp(14px, 2vh, 18px); color: var(--muted); font-weight: 700; }
+.prac-banner.low { border-color: var(--danger, #e5484d); animation: pracPulseCenter 1s ease infinite; }
 .prac-banner.low .material-symbols-outlined, .prac-banner.low .prac-time { color: var(--danger, #e5484d); }
+@keyframes pracPulseCenter { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.05); } }
+/* O'quvchi banneri (tepada kichik) uchun eski puls saqlanadi */
 @keyframes pracPulse { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.06); } }
 
 /* O'quvchi ekranidagi amaliyot taymeri (telefon) */
@@ -727,27 +735,6 @@ button.quiz-card:active { transform: translateY(0); }
   max-height: clamp(120px, 28vh, 40vh);
   max-height: clamp(120px, 28dvh, 40vh);
 }
-
-/* Savol kartasidagi KATTA taymer — asosiy ekranda aniq ko'rinadi (yon paneldagi
-   kichik halqadan tashqari). Oxirgi 10 soniyada qizarib puls qiladi. */
-.qcard-timer {
-  display: flex; align-items: center; justify-content: center; gap: clamp(8px, 1.2vw, 14px);
-  margin-bottom: clamp(6px, 1.2vh, 12px);
-}
-.qcard-timer .material-symbols-outlined { font-size: clamp(22px, 4vh, 34px); color: var(--primary); }
-.qcard-timer .qt-num {
-  font-size: clamp(26px, 5vh, 44px); font-weight: 900; line-height: 1;
-  font-variant-numeric: tabular-nums; color: var(--primary); min-width: 2ch; text-align: center;
-}
-.qcard-timer .qt-track {
-  flex: 0 1 clamp(120px, 24vw, 320px); height: 8px; border-radius: 999px;
-  background: var(--surface-2); overflow: hidden;
-}
-.qcard-timer .qt-fill { display: block; height: 100%; border-radius: 999px; background: var(--primary); transition: width 0.25s linear; }
-.qcard-timer.low .material-symbols-outlined, .qcard-timer.low .qt-num { color: var(--danger); }
-.qcard-timer.low .qt-fill { background: var(--danger); }
-.qcard-timer.low { animation: qtPulse 1s ease infinite; }
-@keyframes qtPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
 /* Yon panel: taymer o'chirilgan holatda boshlash tugmasi (o'lik "0" halqa o'rniga) */
 .tc-btn.timer-start { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; font-size: 15px; }

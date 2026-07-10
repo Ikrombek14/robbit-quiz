@@ -84,6 +84,11 @@ jobs:
           $SSH $USER@$HOST "
             set -e
 
+            # Server soatini NTP bilan sinxronlash — soat 2 soat orqada bo'lib,
+            # taymer endsAt hisob-kitoblarini buzardi (kod endi skew'ga chidamli,
+            # lekin loglar/backuplar vaqti to'g'ri bo'lishi uchun baribir kerak)
+            timedatectl set-ntp true 2>/dev/null || true
+
             # PostgreSQL o'rnatish (agar yo'q bo'lsa)
             if ! command -v psql &>/dev/null; then
               apt-get update -qq && apt-get install -y postgresql

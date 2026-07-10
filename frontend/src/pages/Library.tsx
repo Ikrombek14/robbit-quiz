@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
-import type { QuizListItem, Quiz, FolderItem } from "../types";
+import type { QuizListItem, FolderItem } from "../types";
 
 const EMOJIS = ["🚀", "🌍", "📐", "🔬", "🎨", "📚", "🧮", "🌟", "🦋", "🎯"];
 
@@ -70,19 +70,12 @@ export default function Library() {
     load();
   }, []);
 
-  async function createQuiz() {
-    const r = await api<{ quiz: Quiz }>("/quizzes", {
-      method: "POST",
-      body: JSON.stringify({ title: "Yangi loyiha", slides: [] }),
-    });
-    // Papka ichida turgan bo'lsak — yangi loyiha o'sha papkaga tushadi
-    if (folderFilter !== "ALL" && folderFilter !== "NONE") {
-      await api("/quizzes/move", {
-        method: "POST",
-        body: JSON.stringify({ ids: [r.quiz.id], folderId: folderFilter }),
-      }).catch(() => {});
-    }
-    navigate(`/quiz/${r.quiz.id}`);
+  function createQuiz() {
+    // Quiz darhol yaratilmaydi — muharrirda birinchi "Saqlash"da yaratiladi
+    // (bo'sh "Yangi loyiha"lar to'planib qolmasligi uchun).
+    // Papka ichida turgan bo'lsak — saqlanganda o'sha papkaga tushadi.
+    const inFolder = folderFilter !== "ALL" && folderFilter !== "NONE";
+    navigate(inFolder ? `/quiz/new?folder=${encodeURIComponent(folderFilter)}` : "/quiz/new");
   }
 
   async function remove(id: string, e: React.MouseEvent) {

@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import { METRICS, TONE_STYLE, ballTone, fmtNum } from "../stats";
-import type { QuizListItem, Quiz, TeacherStat } from "../types";
+import type { QuizListItem, TeacherStat } from "../types";
 
 const EMOJIS = ["🚀", "🌍", "📐", "🔬", "🎨", "📚", "🧮", "🌟", "🦋", "🎯"];
 
@@ -67,12 +67,10 @@ export default function Dashboard() {
     ]).finally(() => setStatLoading(false));
   }, []);
 
-  async function createQuiz() {
-    const r = await api<{ quiz: Quiz }>("/quizzes", {
-      method: "POST",
-      body: JSON.stringify({ title: "Yangi loyiha", slides: [] }),
-    });
-    navigate(`/quiz/${r.quiz.id}`);
+  function createQuiz() {
+    // Quiz darhol yaratilmaydi — muharrirda birinchi "Saqlash"da yaratiladi
+    // (bo'sh "Yangi loyiha"lar to'planib qolmasligi uchun)
+    navigate("/quiz/new");
   }
 
   const recent = quizzes.slice(0, 4);

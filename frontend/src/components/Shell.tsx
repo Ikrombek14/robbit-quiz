@@ -1,8 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
-import { api } from "../api";
-import type { Quiz } from "../types";
 import { getTheme, toggleTheme, type Theme } from "../theme";
 import HomeworkReminder from "./HomeworkReminder";
 
@@ -43,12 +41,10 @@ export default function Shell({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getTheme());
   const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati
 
-  async function createQuiz() {
-    const r = await api<{ quiz: Quiz }>("/quizzes", {
-      method: "POST",
-      body: JSON.stringify({ title: "Yangi loyiha", slides: [] }),
-    });
-    navigate(`/quiz/${r.quiz.id}`);
+  function createQuiz() {
+    // Quiz darhol YARATILMAYDI — muharrirda birinchi "Saqlash"da yaratiladi.
+    // Aks holda slayd qo'shmay chiqib ketilsa, bo'sh "Yangi loyiha"lar to'planib qolardi.
+    navigate("/quiz/new");
   }
 
   return (

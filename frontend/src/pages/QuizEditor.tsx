@@ -58,6 +58,9 @@ export default function QuizEditor() {
   const navigate = useNavigate();
   const { teacher } = useAuth();
   const isAdmin = teacher?.isAdmin === true;
+  // "new" — hali bazada yo'q loyiha: birinchi "Saqlash"da yaratiladi.
+  // Shu tufayli slayd qo'shilmay chiqib ketilsa, bo'sh quiz qolib ketmaydi.
+  const isNew = id === "new";
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -88,6 +91,12 @@ export default function QuizEditor() {
   const excelRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (isNew) {
+      // Yangi loyiha — bazadan yuklamaymiz, bo'sh muharrir ochiladi
+      setTitle("Yangi loyiha");
+      setLoading(false);
+      return;
+    }
     api<{ quiz: Quiz }>(`/quizzes/${id}`)
       .then((r) => {
         // Begona quiz (masalan, o'quv dasturdan ochilgan) — tahrirlab bo'lmaydi, ko'rish sahifasiga
@@ -102,7 +111,7 @@ export default function QuizEditor() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Xatolik"))
       .finally(() => setLoading(false));
-  }, [id, navigate]);
+  }, [id, isNew, navigate]);
 
   function updateSlide(i: number, s: Slide) {
     setSlides((arr) => arr.map((x, idx) => (idx === i ? s : x)));
@@ -337,13 +346,34 @@ export default function QuizEditor() {
   }
 
   async function save() {
+    // Bo'sh (0 slaydli) loyiha saqlanmaydi — kutubxona bo'sh quizlar bilan to'lmasin
+    if (slides.length === 0) {
+      setError("Bo'sh loyiha saqlanmaydi — avval kamida bitta slayd qo'shing.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      await api(`/quizzes/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ title, description, shuffle, slides }),
-      });
+      if (isNew) {
+        // Birinchi saqlash — quiz endi yaratiladi
+        const r = await api<{ quiz: { id: string } }>("/quizzes", {
+          method: "POST",
+          body: JSON.stringify({ title, description, shuffle, slides }),
+        });
+        // Kutubxonada papka ichidan ochilgan bo'lsa — o'sha papkaga joylaymiz
+        const folder = new URLSearchParams(window.location.search).get("folder");
+        if (folder) {
+          await api("/quizzes/move", {
+            method: "POST",
+            body: JSON.stringify({ ids: [r.quiz.id], folderId: folder }),
+          }).catch(() => {});
+        }
+      } else {
+        await api(`/quizzes/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({ title, description, shuffle, slides }),
+        });
+      }
       // Saqlangach kutubxonaga o'tamiz
       navigate("/library");
     } catch (e) {
@@ -501,7 +531,7 @@ export default function QuizEditor() {
           description={description}
           shuffle={shuffle}
           isAdmin={isAdmin}
-          quizId={id}
+          quizId={isNew ? undefined : id}
           onChange={(p) => {
             if (p.title !== undefined) setTitle(p.title);
             if (p.description !== undefined) setDescription(p.description);

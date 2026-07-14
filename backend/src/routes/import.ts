@@ -220,9 +220,44 @@ function answerIndices(answer: any): Set<number> {
   return out;
 }
 
+// DRAGNDROP/DND: savol matnida <blank id="..."> joylar bo'ladi, o'quvchi options'dan
+// so'z sudrab qo'yadi. Bizdagi eng mos tur — FILL_BLANK (har bo'sh joy uchun to'g'ri
+// javob matni). Blank/javob topilmasa null — umumiy yo'l ishlayveradi.
+function mapDragndrop(st: any, q: any): any | null {
+  const rawText = String(st?.query?.text ?? "");
+  const ids = [...rawText.matchAll(/<blank\s+id="([^"]+)"/gi)].map((m) => m[1]);
+  if (ids.length === 0) return null;
+  const rawOptions: any[] = Array.isArray(st?.options) ? st.options : [];
+  const optById = new Map(rawOptions.map((o: any) => [String(o?.id ?? o?._id ?? ""), optionText(o)]));
+  const answerMap = new Map<string, string[]>();
+  for (const a of Array.isArray(st?.answer) ? st.answer : []) {
+    const opts = (Array.isArray(a?.optionId) ? a.optionId : [a?.optionId])
+      .map((x: any) => optById.get(String(x)) ?? "")
+      .filter(Boolean);
+    answerMap.set(String(a?.targetId), opts);
+  }
+  const blanks = ids.map((id) => answerMap.get(id) ?? []);
+  if (blanks.every((b) => b.length === 0)) return null;
+  const text = stripHtml(rawText.replace(/<blank[^>]*>(<\/blank>)?/gi, " _____ "));
+  return {
+    kind: "QUESTION",
+    type: "FILL_BLANK",
+    notes: stripHtml(st?.explain?.text ?? "") || null,
+    timeLimit: clampTime(q?.time ?? st?.time),
+    points: 1000,
+    data: { text, imageUrl: firstImage(st?.query), blanks, answers: blanks.flat() },
+  };
+}
+
 function mapQuestion(q: any): any | null {
   const st = q?.structure ?? q;
   if (!st) return null;
+  // DRAGNDROP alohida ko'riladi — u "tartiblash" emas, matndagi bo'sh joyga so'z qo'yish
+  const rawKind = String(q?.type ?? st?.kind ?? "").trim().toUpperCase();
+  if (rawKind === "DRAGNDROP" || rawKind === "DND") {
+    const dnd = mapDragndrop(st, q);
+    if (dnd) return dnd;
+  }
   const type = mapQuestionType(q?.type ?? st?.kind);
   const text = stripHtml(st?.query?.text ?? st?.query ?? q?.text ?? "");
   const imageUrl = firstImage(st?.query);
@@ -252,8 +287,20 @@ function mapQuestion(q: any): any | null {
     return { ...base, data: { text, imageUrl, options } };
   }
   if (type === "MATCH") {
+    // Wayground MATCH: options[] = chap tomon, matches[] = o'ng tomon,
+    // answer[i] = i-chap element mos keladigan matches indeksi.
+    // (Oldin o'ng tomon o'qilmay bo'sh qolar edi — o.match degan maydon yo'q.)
+    const rawMatches: any[] = Array.isArray(st?.matches) ? st.matches : [];
+    const answer: any[] = Array.isArray(st?.answer) ? st.answer : [];
     const pairs = rawOptions
-      .map((o: any) => ({ left: stripHtml(o?.text ?? o?.left ?? ""), right: stripHtml(o?.match ?? o?.right ?? "") }))
+      .map((o: any, i: number) => {
+        const mi = Number(answer[i]);
+        const m = rawMatches[Number.isFinite(mi) && mi >= 0 ? mi : i];
+        return {
+          left: optionText(o),
+          right: optionText(m) || stripHtml(o?.match ?? o?.right ?? ""),
+        };
+      })
       .filter((p) => p.left || p.right);
     return { ...base, data: { text, imageUrl, pairs } };
   }

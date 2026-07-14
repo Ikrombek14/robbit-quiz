@@ -59,6 +59,22 @@ async function autoReorderGroup(group: OrderGroup): Promise<number> {
   return updates.length;
 }
 
+// Guruh raqamlarini ZICHLAYDI (0..n-1) — mavjud nisbiy tartibni saqlagan holda.
+// O'chirish/ko'chirishdan keyin teshik va dublikat qolmasligi uchun.
+async function compactGroup(group: OrderGroup): Promise<void> {
+  const ls = await prisma.lessonPlan.findMany({
+    where: { subject: group.subject, ageGroup: group.ageGroup, year: group.year, section: group.section },
+    orderBy: { order: "asc" },
+    select: { id: true, order: true },
+  });
+  const fixes = ls.map((l, i) => ({ id: l.id, from: l.order, to: i })).filter((x) => x.from !== x.to);
+  if (fixes.length > 0) {
+    await prisma.$transaction(
+      fixes.map((x) => prisma.lessonPlan.update({ where: { id: x.id }, data: { order: x.to } })),
+    );
+  }
+}
+
 // Ro'yxat — filter bilan (faqat roster'da tasdiqlangan / admin)
 curriculumRouter.get("/", requireApproved, async (req, res) => {
   const { subject, ageGroup, year, section } = req.query;
@@ -322,26 +338,59 @@ curriculumRouter.post("/auto-sort", requireAdmin, async (req, res) => {
   res.json({ moved });
 });
 
-// Yangilash — faqat admin
+// Yangilash — faqat admin. Tartib raqami o'zgartirilsa dars yangi o'rniga
+// KIRITILADI va butun guruh 0..n-1 qilib qayta raqamlanadi — raqamlar har doim
+// unik va uzluksiz qoladi (masalan 30-darsni 4 qilsangiz, eski 4..29 bir
+// pog'ona pastga suriladi).
 curriculumRouter.put("/:id", requireAdmin, async (req, res) => {
   const parsed = lessonSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
     return;
   }
-  try {
-    const lesson = await prisma.lessonPlan.update({
-      where: { id: String(req.params.id) },
-      data: {
-        ...parsed.data,
-        section: parsed.data.section ?? null,
-        quizId: parsed.data.quizId ?? null,
-      },
-    });
-    res.json({ lesson });
-  } catch {
+  const id = String(req.params.id);
+  const existing = await prisma.lessonPlan.findUnique({ where: { id } });
+  if (!existing) {
     res.status(404).json({ error: "Dars topilmadi" });
+    return;
   }
+  const { order: requestedOrder, ...rest } = parsed.data;
+  const data = { ...rest, section: parsed.data.section ?? null, quizId: parsed.data.quizId ?? null };
+
+  // Yangi guruhdagi boshqa darslar (tahrirlanayotgan darsdan tashqari)
+  const others = await prisma.lessonPlan.findMany({
+    where: {
+      subject: data.subject, ageGroup: data.ageGroup, year: data.year, section: data.section,
+      id: { not: id },
+    },
+    orderBy: { order: "asc" },
+    select: { id: true, order: true },
+  });
+
+  // So'ralgan o'ringa kiritamiz (chegaradan chiqsa — boshi/oxiriga)
+  const idx = Math.max(0, Math.min(requestedOrder, others.length));
+  const seq = [...others.slice(0, idx).map((o) => o.id), id, ...others.slice(idx).map((o) => o.id)];
+
+  await prisma.$transaction([
+    prisma.lessonPlan.update({ where: { id }, data }),
+    ...seq.map((sid, i) => prisma.lessonPlan.update({ where: { id: sid }, data: { order: i } })),
+  ]);
+
+  // Dars boshqa guruhga ko'chirilgan bo'lsa — eski guruhni ham zichlab qayta raqamlaymiz
+  const groupChanged =
+    existing.subject !== data.subject ||
+    existing.ageGroup !== data.ageGroup ||
+    existing.year !== data.year ||
+    (existing.section ?? null) !== data.section;
+  if (groupChanged) {
+    await compactGroup({
+      subject: existing.subject, ageGroup: existing.ageGroup,
+      year: existing.year, section: existing.section,
+    });
+  }
+
+  const lesson = await prisma.lessonPlan.findUnique({ where: { id } });
+  res.json({ lesson });
 });
 
 // Darsga quiz biriktirish/yechish — "slayd qilish" ruxsati bo'lgan ustoz ham qila oladi.
@@ -371,14 +420,27 @@ curriculumRouter.post("/bulk-delete", requireAdmin, async (req, res) => {
     res.status(400).json({ error: "ids bo'sh" });
     return;
   }
+  // O'chirilayotgan darslarning guruhlarini eslab qolamiz — keyin zichlaymiz
+  const doomed = await prisma.lessonPlan.findMany({
+    where: { id: { in: ids } },
+    select: { subject: true, ageGroup: true, year: true, section: true },
+  });
   const r = await prisma.lessonPlan.deleteMany({ where: { id: { in: ids } } });
+  const seen = new Set<string>();
+  for (const g of doomed) {
+    const key = `${g.subject}|${g.ageGroup}|${g.year}|${g.section ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await compactGroup(g);
+  }
   res.json({ deleted: r.count });
 });
 
-// O'chirish — faqat admin
+// O'chirish — faqat admin (guruh raqamlari zichlanadi, teshik qolmaydi)
 curriculumRouter.delete("/:id", requireAdmin, async (req, res) => {
   try {
-    await prisma.lessonPlan.delete({ where: { id: String(req.params.id) } });
+    const removed = await prisma.lessonPlan.delete({ where: { id: String(req.params.id) } });
+    await compactGroup(removed);
     res.json({ ok: true });
   } catch {
     res.status(404).json({ error: "Dars topilmadi" });

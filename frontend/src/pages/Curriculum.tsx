@@ -174,7 +174,8 @@ export default function Curriculum() {
         method: "POST",
         body: JSON.stringify({ ids: [...selectedIds] }),
       });
-      setLessons((ls) => ls.filter((l) => !selectedIds.has(l.id)));
+      // Server qolgan raqamlarni zichlaydi — qayta yuklaymiz
+      await loadLessons();
       loadCounts();
       exitSelectMode();
       showToast(`🗑️ ${r.deleted} ta dars o'chirildi.`);
@@ -325,12 +326,12 @@ export default function Curriculum() {
         isDemo: newIsDemo,
         quizId: newQuizId || null,
       };
-      const r = await api<{ lesson: LessonPlan }>("/curriculum", {
+      await api<{ lesson: LessonPlan }>("/curriculum", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      const lesson = { ...r.lesson, quiz: newQuizId ? quizForId(newQuizId) : null };
-      setLessons((ls) => [...ls, lesson].sort((a, b) => a.order - b.order));
+      // Server butun guruhni qayta raqamlashi mumkin — ro'yxatni qayta yuklaymiz
+      await loadLessons();
       loadCounts();
       // Forma ochiq qoladi — ketma-ket tez kiritish (tartib +1, fokus mavzuga)
       setNewTitle(""); setNewAuthor(""); setNewIsDemo(false); setNewQuizId("");
@@ -419,13 +420,9 @@ export default function Curriculum() {
         quizId: editState.quizId || null,
       };
       await api(`/curriculum/${l.id}`, { method: "PUT", body: JSON.stringify(body) });
-      setLessons((ls) =>
-        ls.map((x) =>
-          x.id === l.id
-            ? { ...x, ...body, order: body.order, quiz: editState.quizId ? quizForId(editState.quizId) : null }
-            : x
-        ).sort((a, b) => a.order - b.order)
-      );
+      // Tartib o'zgarganda server BUTUN guruhni qayta raqamlaydi (unik 1..n) —
+      // shuning uchun ro'yxatni serverdan qayta yuklaymiz
+      await loadLessons();
       loadCounts();
       setEditingId(null);
     } finally { setEditSaving(false); }
@@ -434,7 +431,8 @@ export default function Curriculum() {
   async function removeLesson(id: string) {
     if (!confirm("Darsni o'chirishni tasdiqlaysizmi?")) return;
     await api(`/curriculum/${id}`, { method: "DELETE" });
-    setLessons((ls) => ls.filter((l) => l.id !== id));
+    // Server qolgan raqamlarni zichlaydi — qayta yuklaymiz
+    await loadLessons();
     loadCounts();
   }
 

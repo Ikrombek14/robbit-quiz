@@ -2,6 +2,7 @@ import { Router, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireApproved, requireCanCreate, type AuthedRequest } from "../auth.js";
+import { sortLessons, type OrderGroup } from "../services/curriculumOrder.js";
 
 export const curriculumRouter = Router();
 curriculumRouter.use(requireAuth);
@@ -34,6 +35,28 @@ function cleanTitle(raw: string): string {
   const t = String(raw ?? "").trim();
   const stripped = t.replace(/^\s*\d+\s*[-.)]?\s*(dars\s*[.:]?)?\s*/i, "").trim();
   return (stripped || t).slice(0, 200);
+}
+
+// Guruhdagi barcha darslarni o'quv reja bo'yicha AVTOMATIK qayta tartiblaydi.
+// Stabil: reja-signali bo'lmagan darslar mavjud tartibda oxirida qoladi.
+// Qaytaradi: nechta darsning o'rni o'zgargani.
+async function autoReorderGroup(group: OrderGroup): Promise<number> {
+  const lessons = await prisma.lessonPlan.findMany({
+    where: { subject: group.subject, ageGroup: group.ageGroup, year: group.year, section: group.section },
+    orderBy: { order: "asc" },
+    select: { id: true, title: true, order: true },
+  });
+  if (lessons.length < 2) return 0;
+  const sorted = sortLessons(lessons, group);
+  const updates = sorted
+    .map((l, i) => ({ id: l.id, from: l.order, to: i }))
+    .filter((u) => u.from !== u.to);
+  if (updates.length > 0) {
+    await prisma.$transaction(
+      updates.map((u) => prisma.lessonPlan.update({ where: { id: u.id }, data: { order: u.to } })),
+    );
+  }
+  return updates.length;
 }
 
 // Ro'yxat — filter bilan (faqat roster'da tasdiqlangan / admin)
@@ -152,7 +175,12 @@ curriculumRouter.post("/", requireAdmin, async (req, res) => {
       quizId: parsed.data.quizId ?? null,
     },
   });
-  res.json({ lesson });
+  // Yangi dars o'quv reja bo'yicha avtomatik joyiga tushadi
+  await autoReorderGroup({
+    subject: lesson.subject, ageGroup: lesson.ageGroup, year: lesson.year, section: lesson.section,
+  });
+  const fresh = await prisma.lessonPlan.findUnique({ where: { id: lesson.id } });
+  res.json({ lesson: fresh ?? lesson });
 });
 
 // Ommaviy: PAPKADAN darslar yaratish — faqat admin.
@@ -182,15 +210,21 @@ curriculumRouter.post("/from-folder", requireAdmin, async (req: AuthedRequest, r
     res.status(404).json({ error: "Papka topilmadi" });
     return;
   }
-  const quizzes = await prisma.quiz.findMany({
+  const rawQuizzes = await prisma.quiz.findMany({
     where: { folderId },
-    orderBy: { updatedAt: "desc" }, // kutubxona tartibi: 1-dars birinchi
+    orderBy: { updatedAt: "desc" },
     select: { id: true, title: true },
   });
-  if (quizzes.length === 0) {
+  if (rawQuizzes.length === 0) {
     res.status(400).json({ error: "Papkada quiz yo'q" });
     return;
   }
+  // O'quv reja bo'yicha tartiblab olamiz (updatedAt tasodifiy tartib edi)
+  const group: OrderGroup = { subject, ageGroup, year, section };
+  const quizzes = sortLessons(
+    rawQuizzes.map((q, i) => ({ ...q, order: i })),
+    group,
+  );
 
   // Shu bo'limdagi mavjud darslar: dedup (quizId) + joriy eng katta order
   const existing = await prisma.lessonPlan.findMany({
@@ -220,6 +254,8 @@ curriculumRouter.post("/from-folder", requireAdmin, async (req: AuthedRequest, r
         }),
       ),
     );
+    // Butun guruh o'quv reja bo'yicha avtomatik tartibga tushadi
+    await autoReorderGroup(group);
   }
   res.json({ created: toCreate.length, skipped });
 });
@@ -260,7 +296,30 @@ curriculumRouter.post("/bulk-titles", requireAdmin, async (req, res) => {
       }),
     ),
   );
+  // Butun guruh o'quv reja bo'yicha avtomatik tartibga tushadi
+  await autoReorderGroup({ subject, ageGroup, year, section });
   res.json({ created: titles.length });
+});
+
+// AVTOMATIK TARTIBLASH — tanlangan guruhdagi mavjud darslarni o'quv reja
+// ketma-ketligi bo'yicha saralaydi (faqat admin). Signal topilmagan darslar
+// mavjud tartibda ro'yxat oxirida qoladi.
+const autoSortSchema = z.object({
+  subject: z.enum(["ROBOTEXNIKA", "DASTURLASH"]),
+  ageGroup: z.enum(["MIDDLE", "SENIOR"]),
+  year: z.number().int().min(1).max(4),
+  section: z.string().nullable().optional(),
+});
+curriculumRouter.post("/auto-sort", requireAdmin, async (req, res) => {
+  const parsed = autoSortSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
+    return;
+  }
+  const { subject, ageGroup, year } = parsed.data;
+  const section = subject === "ROBOTEXNIKA" ? (parsed.data.section ?? null) : null;
+  const moved = await autoReorderGroup({ subject, ageGroup, year, section });
+  res.json({ moved });
 });
 
 // Yangilash — faqat admin

@@ -384,6 +384,28 @@ export default function Curriculum() {
     } finally { setSaving(false); }
   }
 
+  // O'quv reja bo'yicha avtomatik tartiblash — mavjud darslarni rasmiy reja
+  // ketma-ketligiga soladi (faqat admin ko'radigan tugma orqali)
+  async function autoSort() {
+    if (!allFiltersSet) return;
+    setSaving(true);
+    try {
+      const r = await api<{ moved: number }>("/curriculum/auto-sort", {
+        method: "POST",
+        body: JSON.stringify({
+          subject, ageGroup, year,
+          section: subject === "ROBOTEXNIKA" ? section : null,
+        }),
+      });
+      await loadLessons();
+      showToast(r.moved > 0
+        ? `🪄 ${r.moved} ta dars o'quv reja tartibiga tushirildi.`
+        : "✅ Darslar allaqachon o'quv reja tartibida.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Xatolik");
+    } finally { setSaving(false); }
+  }
+
   async function saveEdit(l: LessonPlan) {
     if (!editState.title.trim()) return;
     setEditSaving(true);
@@ -896,6 +918,10 @@ export default function Curriculum() {
                 <button className="btn btn-ghost" onClick={openAdd}>+ Dars qo'shish</button>
                 <button className="btn btn-ghost" onClick={openFolderAdd}>📁 Papkadan qo'shish</button>
                 <button className="btn btn-ghost" onClick={openBulkAdd}>📋 Ro'yxatdan qo'shish</button>
+                <button className="btn btn-ghost" onClick={autoSort} disabled={saving || lessons.length < 2}
+                  title="Darslarni rasmiy o'quv reja ketma-ketligi bo'yicha avtomatik tartiblaydi">
+                  🪄 Avto tartiblash
+                </button>
               </div>
             )}
             </>

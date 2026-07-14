@@ -529,3 +529,55 @@ importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: 
   });
   res.json({ quizId: quiz.id, title: finalTitle, summary: r.summary, existed: false });
 });
+
+// Ommaviy importda ODDIY MAVZU NOMI (havola emas) uchun: bo'sh quiz yaratadi.
+// Slaydlar keyin to'ldiriladi — mavzu papkada joy egallab, o'quv dasturga
+// qo'shilishga tayyor turadi. Dedup: o'z kutubxonasida bir xil nomli quiz
+// bo'lsa qayta yaratilmaydi — tanlangan papkaga ko'chiriladi.
+importRouter.post("/title/save", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
+  const { title, folderId, sortTs } = (req.body ?? {}) as {
+    title?: string; folderId?: string | null; sortTs?: number;
+  };
+  const finalTitle = String(title ?? "").trim().slice(0, 200);
+  if (!finalTitle) {
+    res.status(400).json({ error: "Mavzu nomi bo'sh" });
+    return;
+  }
+  // Papka ko'rsatilsa — egasi (joriy foydalanuvchi) ekanini tekshiramiz
+  let useFolderId: string | null = null;
+  if (folderId) {
+    const folder = await prisma.folder.findFirst({ where: { id: folderId, teacherId: req.teacherId } });
+    if (folder) useFolderId = folder.id;
+  }
+  // Tartib tamg'asi — havolalar bilan bir xil mexanizm (papkada kiritilgan tartib saqlansin)
+  const ts = Number(sortTs);
+  const stamp = Number.isFinite(ts) && ts > 0 ? new Date(ts) : undefined;
+
+  // Dedup — sarlavha bo'yicha (harf registriga befarq)
+  const existing = await prisma.quiz.findFirst({
+    where: { teacherId: req.teacherId!, title: { equals: finalTitle, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existing) {
+    await prisma.quiz.update({
+      where: { id: existing.id },
+      data: {
+        ...(useFolderId ? { folderId: useFolderId } : {}),
+        ...(stamp ? { updatedAt: stamp } : {}),
+      },
+    });
+    res.json({ quizId: existing.id, title: finalTitle, summary: { total: 0 }, existed: true });
+    return;
+  }
+
+  const quiz = await prisma.quiz.create({
+    data: {
+      title: finalTitle,
+      teacherId: req.teacherId!,
+      folderId: useFolderId,
+      ...(stamp ? { createdAt: stamp, updatedAt: stamp } : {}),
+    },
+    select: { id: true },
+  });
+  res.json({ quizId: quiz.id, title: finalTitle, summary: { total: 0 }, existed: false });
+});

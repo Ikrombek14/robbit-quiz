@@ -385,6 +385,38 @@ export default function Curriculum() {
     } finally { setSaving(false); }
   }
 
+  // Mavzularni slayddan olish — har dars nomi biriktirilgan quizning birinchi
+  // (titul) slaydidan o'qiladi (matn bo'lsa tekin, rasm bo'lsa Gemini vision).
+  // Bir necha o'n soniya davom etishi mumkin — alohida holat ko'rsatiladi.
+  const [extracting, setExtracting] = useState(false);
+  async function extractTitles() {
+    if (!allFiltersSet || extracting) return;
+    if (!confirm("Quiz biriktirilgan darslarning nomlari birinchi slayddan qayta o'qilib ALMASHTIRILADI. O'qib bo'lmaganlari o'z nomida qoladi. Davom etasizmi?")) return;
+    setExtracting(true);
+    try {
+      const r = await api<{ updated: number; unchanged: number; failed: number; total: number }>(
+        "/curriculum/extract-titles",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            subject, ageGroup, year,
+            section: subject === "ROBOTEXNIKA" ? section : null,
+          }),
+        },
+      );
+      await loadLessons();
+      showToast(
+        r.total === 0
+          ? "Bu bo'limda quiz biriktirilgan dars yo'q."
+          : `📷 ${r.total} ta darsdan: ${r.updated} ta nom yangilandi` +
+            `${r.unchanged ? `, ${r.unchanged} ta allaqachon mos` : ""}` +
+            `${r.failed ? `, ${r.failed} ta o'qilmadi` : ""}.`,
+      );
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Xatolik");
+    } finally { setExtracting(false); }
+  }
+
   // O'quv reja bo'yicha avtomatik tartiblash — mavjud darslarni rasmiy reja
   // ketma-ketligiga soladi (faqat admin ko'radigan tugma orqali)
   async function autoSort() {
@@ -919,6 +951,10 @@ export default function Curriculum() {
                 <button className="btn btn-ghost" onClick={autoSort} disabled={saving || lessons.length < 2}
                   title="Darslarni rasmiy o'quv reja ketma-ketligi bo'yicha avtomatik tartiblaydi">
                   🪄 Avto tartiblash
+                </button>
+                <button className="btn btn-ghost" onClick={extractTitles} disabled={extracting || saving || lessons.length === 0}
+                  title="Har dars nomini biriktirilgan quizning birinchi (titul) slaydidan o'qib yangilaydi (AI vision)">
+                  {extracting ? "📷 Slayddan o'qilmoqda…" : "📷 Mavzularni slayddan olish"}
                 </button>
               </div>
             )}

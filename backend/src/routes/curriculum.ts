@@ -2,7 +2,8 @@ import { Router, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireApproved, requireCanCreate, type AuthedRequest } from "../auth.js";
-import { sortLessons, type OrderGroup } from "../services/curriculumOrder.js";
+import { sortLessons, bestKey, type OrderGroup } from "../services/curriculumOrder.js";
+import { extractTopicForQuiz } from "../services/slideTopics.js";
 
 export const curriculumRouter = Router();
 curriculumRouter.use(requireAuth);
@@ -44,10 +45,20 @@ async function autoReorderGroup(group: OrderGroup): Promise<number> {
   const lessons = await prisma.lessonPlan.findMany({
     where: { subject: group.subject, ageGroup: group.ageGroup, year: group.year, section: group.section },
     orderBy: { order: "asc" },
-    select: { id: true, title: true, order: true },
+    select: { id: true, title: true, order: true, quizId: true },
   });
   if (lessons.length < 2) return 0;
-  const sorted = sortLessons(lessons, group);
+  // Biriktirilgan quiz sarlavhalari — dars nomi tozalangan bo'lsa kanonik
+  // raqam quiz nomida qolgan bo'lishi mumkin (bestKey ikkalasini ko'radi)
+  const quizIds = lessons.map((l) => l.quizId).filter((x): x is string => Boolean(x));
+  const quizzes = quizIds.length
+    ? await prisma.quiz.findMany({ where: { id: { in: quizIds } }, select: { id: true, title: true } })
+    : [];
+  const qmap = new Map(quizzes.map((q) => [q.id, q.title]));
+  const sorted = lessons
+    .map((l, i) => ({ l, key: bestKey(l.title, l.quizId ? qmap.get(l.quizId) : undefined, group), i }))
+    .sort((a, b) => a.key.pos - b.key.pos || a.key.sub - b.key.sub || a.l.order - b.l.order || a.i - b.i)
+    .map((x) => x.l);
   const updates = sorted
     .map((l, i) => ({ id: l.id, from: l.order, to: i }))
     .filter((u) => u.from !== u.to);
@@ -336,6 +347,55 @@ curriculumRouter.post("/auto-sort", requireAdmin, async (req, res) => {
   const section = subject === "ROBOTEXNIKA" ? (parsed.data.section ?? null) : null;
   const moved = await autoReorderGroup({ subject, ageGroup, year, section });
   res.json({ moved });
+});
+
+// MAVZULARNI SLAYDDAN OLISH — tanlangan guruhdagi quiz biriktirilgan darslar
+// uchun mavzu nomi quizning BIRINCHI slaydidan o'qiladi (matn elementi bo'lsa
+// tekin, aks holda Gemini vision rasmni o'qiydi) va dars nomi yangilanadi.
+// O'qib bo'lmagan darslar nomi O'ZGARMAYDI. Faqat admin.
+const extractTitlesSchema = z.object({
+  subject: z.enum(["ROBOTEXNIKA", "DASTURLASH"]),
+  ageGroup: z.enum(["MIDDLE", "SENIOR"]),
+  year: z.number().int().min(1).max(4),
+  section: z.string().nullable().optional(),
+});
+curriculumRouter.post("/extract-titles", requireAdmin, async (req, res) => {
+  const parsed = extractTitlesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
+    return;
+  }
+  const { subject, ageGroup, year } = parsed.data;
+  const section = subject === "ROBOTEXNIKA" ? (parsed.data.section ?? null) : null;
+
+  const lessons = await prisma.lessonPlan.findMany({
+    where: { subject, ageGroup, year, section, quizId: { not: null } },
+    select: { id: true, title: true, quizId: true },
+  });
+  if (lessons.length === 0) {
+    res.json({ updated: 0, unchanged: 0, failed: 0, total: 0 });
+    return;
+  }
+
+  let updated = 0, unchanged = 0, failed = 0;
+  // Gemini tekin rejasini bosmaslik uchun 3 talik guruhlarda parallel ishlaymiz
+  const CHUNK = 3;
+  for (let i = 0; i < lessons.length; i += CHUNK) {
+    await Promise.all(
+      lessons.slice(i, i + CHUNK).map(async (l) => {
+        try {
+          const topic = await extractTopicForQuiz(l.quizId!);
+          if (!topic) { failed++; return; }
+          if (topic === l.title) { unchanged++; return; }
+          await prisma.lessonPlan.update({ where: { id: l.id }, data: { title: topic } });
+          updated++;
+        } catch {
+          failed++;
+        }
+      }),
+    );
+  }
+  res.json({ updated, unchanged, failed, total: lessons.length });
 });
 
 // Yangilash — faqat admin. Tartib raqami o'zgartirilsa dars yangi o'rniga

@@ -15,6 +15,22 @@ import type { FolderItem } from "../types";
 interface ParsedRow {
   kind: "link" | "title"; // link — Wayground havolasi, title — oddiy mavzu nomi
   value: string;
+  // Havola qatorida havoladan TASHQARI matn ham bo'lsa (masalan
+  // "43. Figma: Dastur bilan tanishuv https://wayground.com/...") — u quiz
+  // nomi sifatida yuboriladi (Wayground'dagi nom o'rniga). Boshidagi "43."
+  // raqami o'quv dasturda aniq tartib o'rni sifatida ishlatiladi.
+  title?: string;
+}
+
+// Qator ichidan ortiqcha narsalarni tozalash: "— yo'q —" belgisi, chetki
+// vergul/tab'lar. Google Sheets'dan ko'chirilganda tab bilan keladi.
+function cleanLineText(s: string): string {
+  return s
+    .replace(/[—–-]\s*yo['’ʻ‘`]?q\s*[—–-]?/gi, " ")
+    .replace(/\t+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,;]+|[\s,;]+$/g, "")
+    .trim();
 }
 
 interface RowResult {
@@ -72,26 +88,33 @@ export default function BulkImport() {
       .catch(() => {});
   }, []);
 
-  // Qatorma-qator tahlil: 24-belgili quiz ID bor qator — Wayground havolasi,
-  // qolgan bo'sh bo'lmagan qatorlar — oddiy mavzu nomi. Takrorlar olib tashlanadi.
+  // Qatorma-qator tahlil: 24-belgili quiz ID bor qator — Wayground havolasi
+  // (qatordagi qolgan matn quiz nomi bo'ladi), qolgan bo'sh bo'lmagan qatorlar —
+  // oddiy mavzu nomi. Takrorlar olib tashlanadi.
   const parsed = useMemo(() => {
     const seenIds = new Set<string>();
     const seenTitles = new Set<string>();
     const out: ParsedRow[] = [];
     for (const line of text.split(/\n/)) {
-      const s = line.trim().replace(/^[,;]+|[,;]+$/g, "").trim();
+      const s = line.trim();
       if (!s) continue;
-      const m = s.match(/[a-f0-9]{24}/i);
-      if (m) {
-        const id = m[0].toLowerCase();
+      const idMatch = s.match(/[a-f0-9]{24}/i);
+      if (idMatch) {
+        const id = idMatch[0].toLowerCase();
         if (seenIds.has(id)) continue;
         seenIds.add(id);
-        out.push({ kind: "link", value: s });
+        // Havola va undan tashqaridagi matnni ajratamiz
+        const urlMatch = s.match(/https?:\/\/\S+/i);
+        const url = urlMatch ? urlMatch[0] : s;
+        const extra = cleanLineText(urlMatch ? s.replace(urlMatch[0], " ") : "");
+        out.push({ kind: "link", value: url, title: extra || undefined });
       } else {
-        const key = s.toLowerCase();
+        const t = cleanLineText(s);
+        if (!t) continue;
+        const key = t.toLowerCase();
         if (seenTitles.has(key)) continue;
         seenTitles.add(key);
-        out.push({ kind: "title", value: s });
+        out.push({ kind: "title", value: t });
       }
     }
     return out;
@@ -152,7 +175,7 @@ export default function BulkImport() {
           const r = row.kind === "link"
             ? await api<{ quizId: string; title: string; summary: { total: number }; existed?: boolean }>(
                 "/import/wayground/save",
-                { method: "POST", body: JSON.stringify({ url: row.value, folderId: targetFolderId, sortTs, cookie: wgCookie.trim() || undefined }) },
+                { method: "POST", body: JSON.stringify({ url: row.value, title: row.title, folderId: targetFolderId, sortTs, cookie: wgCookie.trim() || undefined }) },
               )
             : await api<{ quizId: string; title: string; summary: { total: number }; existed?: boolean }>(
                 "/import/title/save",

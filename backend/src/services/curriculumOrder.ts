@@ -135,6 +135,12 @@ function modulesFor(group: OrderGroup): ModuleDef[] {
 // "(d-35)", "(D 16)", "(p-3)" ko'rinishidagi aniq reja-raqam belgisi
 const EXPLICIT_RE = /\(\s*[a-zа-я]\s*[-–—]?\s*(\d{1,3})\s*\)/i;
 
+// Boshidagi KANONIK raqam: "43. Mavzu" yoki "43) Mavzu" — "dars" SO'ZISIZ.
+// Yangi darsma-dars o'quv rejadan olingan ro'yxatlar shu ko'rinishda keladi va
+// raqam aniq o'rin hisoblanadi. Eski "32-dars. ..." ko'rinishi bunga KIRMAYDI
+// (u eski dasturdagi raqam bo'lishi mumkin — modul bo'yicha tartiblanadi).
+const CANONICAL_LEAD_RE = /^\s*(\d{1,3})[.)]\s+/;
+
 // Boshidagi eski tartib prefiksi: "32-dars.", "5.", "12)" — olib tashlanadi,
 // chunki u eski dasturdagi raqam bo'lishi mumkin (ichki raqam emas).
 const LEAD_PREFIX_RE = /^\s*\d+\s*[-.)]?\s*(dars\s*[.:]?)?\s*/i;
@@ -150,6 +156,7 @@ export interface SortKey {
   pos: number; // asosiy pozitsiya (aniq belgi yoki modul starti)
   sub: number; // modul ichidagi raqam
   matched: boolean; // biror signal topildimi
+  explicit: boolean; // aniq raqam belgisi topildimi ("(d-35)" yoki "43. ")
 }
 
 export function computeSortKey(rawTitle: string, group: OrderGroup): SortKey {
@@ -158,15 +165,21 @@ export function computeSortKey(rawTitle: string, group: OrderGroup): SortKey {
 
   // 1) Aniq belgi — eng kuchli signal
   const explicit = title.match(EXPLICIT_RE);
-  if (explicit) return { pos: Number(explicit[1]), sub: 0, matched: true };
+  if (explicit) return { pos: Number(explicit[1]), sub: 0, matched: true, explicit: true };
 
-  // 2) Modul kalit so'zi
+  // 2) Kanonik bosh raqam ("43. Mavzu") — "dars" so'zisiz
+  const lead = title.match(CANONICAL_LEAD_RE);
+  if (lead && !/^\s*\d{1,3}[.)]?\s*[-–—]?\s*dars/i.test(title)) {
+    return { pos: Number(lead[1]), sub: 0, matched: true, explicit: true };
+  }
+
+  // 3) Modul kalit so'zi
   const modules = modulesFor(group);
   let mod: ModuleDef | null = null;
   for (const m of modules) {
     if (m.keywords.some((k) => lower.includes(k))) { mod = m; break; }
   }
-  if (!mod) return { pos: Number.MAX_SAFE_INTEGER, sub: 0, matched: false };
+  if (!mod) return { pos: Number.MAX_SAFE_INTEGER, sub: 0, matched: false, explicit: false };
 
   // Ichki raqam — eski prefiksni olib tashlab qidiramiz
   const rest = title.replace(LEAD_PREFIX_RE, "");
@@ -175,7 +188,21 @@ export function computeSortKey(rawTitle: string, group: OrderGroup): SortKey {
     const m = rest.match(re);
     if (m) { sub = Number(m[1]); break; }
   }
-  return { pos: mod.start, sub, matched: true };
+  return { pos: mod.start, sub, matched: true, explicit: false };
+}
+
+// Dars sarlavhasi va biriktirilgan quiz sarlavhasidan yaxshiroq kalitni
+// tanlaydi: aniq raqam (explicit) har doim ustun — qaysi sarlavhada bo'lsa ham.
+// (from-folder darsni tozalangan nom bilan yaratadi — kanonik raqam quiz
+// nomida qolgan bo'lishi mumkin.)
+export function bestKey(lessonTitle: string, quizTitle: string | undefined, group: OrderGroup): SortKey {
+  const kl = computeSortKey(lessonTitle, group);
+  if (kl.explicit) return kl;
+  const kq = quizTitle ? computeSortKey(quizTitle, group) : null;
+  if (kq?.explicit) return kq;
+  if (kl.matched) return kl;
+  if (kq?.matched) return kq;
+  return kl;
 }
 
 // Darslar ro'yxatini kanonik tartibда saralaydi (stabil: teng kalitlarda

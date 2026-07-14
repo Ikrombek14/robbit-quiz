@@ -79,28 +79,13 @@ interface GeminiResponse {
   error?: { message?: string; status?: string };
 }
 
-export async function generateQuestionsFromSlidesGemini(
-  images: SlideImage[],
-  texts: string[],
-  existing: string[],
-  count: number,
-): Promise<GeneratedQuestion[]> {
+// Umumiy Gemini so'rovi: model-fallback bilan yuboradi, javob MATNINI qaytaradi.
+// Har ikki funksiya (savol generatsiyasi va mavzu o'qish) shu yadro orqali ishlaydi.
+async function requestGeminiText(parts: unknown[], generationConfig: Record<string, unknown>): Promise<string> {
   if (!config.geminiApiKey) {
     throw new Error("GEMINI_API_KEY sozlanmagan");
   }
-
-  const parts: unknown[] = [
-    ...images.map((img) => ({ inline_data: { mime_type: img.mediaType, data: img.base64 } })),
-    { text: buildPrompt(texts, existing, count) },
-  ];
-  const body = JSON.stringify({
-    contents: [{ parts }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
-      maxOutputTokens: 16000,
-    },
-  });
+  const body = JSON.stringify({ contents: [{ parts }], generationConfig });
 
   // Ishlagan model ma'lum bo'lsa undan boshlaymiz, aks holda ro'yxatni ketma-ket sinaymiz
   const candidates = activeModel
@@ -136,7 +121,50 @@ export async function generateQuestionsFromSlidesGemini(
     throw new Error(data.error?.message || `Gemini xatosi (${res?.status ?? "ulanish"})`);
   }
 
-  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+}
+
+// Slayd titul sahifasi rasmidan DARS MAVZUSINI o'qiydi. Topa olmasa null.
+export async function extractLessonTopicGemini(image: SlideImage): Promise<string | null> {
+  const parts: unknown[] = [
+    { inline_data: { mime_type: image.mediaType, data: image.base64 } },
+    {
+      text: `Bu — dars taqdimotining TITUL (birinchi) sahifasi. Undan DARS MAVZUSINI aniqla.
+
+Qoidalar:
+- Faqat mavzu matnining o'zini qaytar — izohsiz, qo'shtirnoqsiz.
+- "N-dars", "Dars 5", sana, o'qituvchi ismi, "Robbit" kabi logo/brend yozuvlarini QO'SHMA.
+- Mavzu bir necha qatorda bo'lsa bitta qatorga birlashtir.
+- Til slaydda qanday bo'lsa shunday qoldir (odatda o'zbekcha).
+- Agar sahifada aniq mavzu ko'rinmasa faqat NONE deb yoz.`,
+    },
+  ];
+  const text = (await requestGeminiText(parts, { maxOutputTokens: 200 })).trim();
+  if (!text || /^none$/i.test(text)) return null;
+  // Bir qatorga keltirib, chetki qo'shtirnoq/nuqtalarni tozalaymiz
+  const cleaned = text
+    .replace(/\s+/g, " ")
+    .replace(/^["'«"'`\s]+|["'»"'`\s.]+$/g, "")
+    .trim()
+    .slice(0, 200);
+  return cleaned || null;
+}
+
+export async function generateQuestionsFromSlidesGemini(
+  images: SlideImage[],
+  texts: string[],
+  existing: string[],
+  count: number,
+): Promise<GeneratedQuestion[]> {
+  const parts: unknown[] = [
+    ...images.map((img) => ({ inline_data: { mime_type: img.mediaType, data: img.base64 } })),
+    { text: buildPrompt(texts, existing, count) },
+  ];
+  const text = await requestGeminiText(parts, {
+    responseMimeType: "application/json",
+    responseSchema: RESPONSE_SCHEMA,
+    maxOutputTokens: 16000,
+  });
   if (!text.trim()) {
     throw new Error("AI savollarni qaytarmadi. Qayta urinib ko'ring.");
   }

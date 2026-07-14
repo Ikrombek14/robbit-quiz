@@ -506,6 +506,9 @@ importRouter.post("/wayground/save", requireAuth, requireCanCreate, async (req: 
         ...(useFolderId ? { folderId: useFolderId } : {}),
         ...(sourceId ? { sourceId } : {}),
         ...(stamp ? { updatedAt: stamp } : {}),
+        // Foydalanuvchi aniq nom bergan bo'lsa — mavjud quiz nomi ham yangilanadi
+        // (kanonik "43. ..." raqamli nomlar tartiblash uchun muhim)
+        ...(title?.trim() ? { title: finalTitle } : {}),
       },
     });
     res.json({ quizId: existing.id, title: finalTitle, summary: r.summary, existed: true });

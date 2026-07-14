@@ -6,7 +6,28 @@ import type { GeneratedQuestion, SlideImage } from "./claude.js";
 // route'lar provayderni almashtirganda frontend hech narsani sezmaydi.
 // REST orqali chaqiramiz (SDK'siz) — qo'shimcha dependency kerak emas.
 
-const MODEL = "gemini-2.5-flash"; // tekin kvotada mavjud, rasm tahlili kuchli
+// Google model nomlarini vaqti-vaqti bilan nafaqaga chiqaradi (2026-07: gemini-2.5-flash
+// yangi foydalanuvchilarga yopildi). Bitta nomga qotib qolmaslik uchun kandidatlar
+// ro'yxatidan birinchi ishlaganini tanlaymiz va xotirada eslab qolamiz — model eskirsa
+// keyingi so'rov avtomatik yangisiga o'tadi, kod o'zgartirish shart emas.
+const MODEL_CANDIDATES = [
+  "gemini-3.5-flash", // 2026-07 holatida barqaror (GA)
+  "gemini-3-flash",
+  "gemini-flash-latest", // Google'ning "eng so'nggi flash" taxallusi
+  "gemini-2.5-flash", // eski loyihalar uchun hali ishlashi mumkin
+];
+let activeModel: string | null = null; // ishlagani shu yerda saqlanadi
+
+// Xato "model mavjud emas" turidami? (boshqa xatolarda fallback qilmaymiz)
+function isModelUnavailable(status: number, message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    status === 404 ||
+    m.includes("no longer available") ||
+    m.includes("not found") ||
+    m.includes("is not supported")
+  );
+}
 
 // Gemini structured output sxemasi (OpenAPI subset) — savollar massivi
 const RESPONSE_SCHEMA = {
@@ -72,30 +93,47 @@ export async function generateQuestionsFromSlidesGemini(
     ...images.map((img) => ({ inline_data: { mime_type: img.mediaType, data: img.base64 } })),
     { text: buildPrompt(texts, existing, count) },
   ];
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${config.geminiApiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-          maxOutputTokens: 16000,
-        },
-      }),
+  const body = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA,
+      maxOutputTokens: 16000,
     },
-  );
+  });
 
-  const data = (await res.json().catch(() => ({}))) as GeminiResponse;
-  if (!res.ok) {
+  // Ishlagan model ma'lum bo'lsa undan boshlaymiz, aks holda ro'yxatni ketma-ket sinaymiz
+  const candidates = activeModel
+    ? [activeModel, ...MODEL_CANDIDATES.filter((m) => m !== activeModel)]
+    : MODEL_CANDIDATES;
+
+  let res: Response | null = null;
+  let data: GeminiResponse = {};
+  for (const model of candidates) {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body },
+    );
+    data = (await res.json().catch(() => ({}))) as GeminiResponse;
+    if (res.ok) {
+      if (activeModel !== model) console.log(`[gemini] faol model: ${model}`);
+      activeModel = model;
+      break;
+    }
+    // Model eskirgan/topilmadi — keyingi kandidatga o'tamiz; boshqa xatolarda to'xtaymiz
+    if (isModelUnavailable(res.status, data.error?.message ?? "")) {
+      console.warn(`[gemini] model ishlamadi (${model}): ${data.error?.message ?? res.status}`);
+      continue;
+    }
+    break;
+  }
+
+  if (!res || !res.ok) {
     // Tekin kvota tugagan holatni foydalanuvchiga tushunarli qilib qaytaramiz
-    if (res.status === 429) {
+    if (res?.status === 429) {
       throw new Error("AI kunlik/daqiqalik limiti tugadi (Gemini tekin reja). Birozdan keyin qayta urinib ko'ring.");
     }
-    throw new Error(data.error?.message || `Gemini xatosi (${res.status})`);
+    throw new Error(data.error?.message || `Gemini xatosi (${res?.status ?? "ulanish"})`);
   }
 
   const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";

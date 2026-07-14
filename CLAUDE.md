@@ -33,10 +33,14 @@ va **bir xil funksiyani ikki marta yozmaslik** uchun:
 - **`deploy-direct.ps1`** (repo ildizida, `.gitignore` da) — Posh-SSH orqali qo'lda to'g'ridan
   serverga deploy qiluvchi **ixtiyoriy zaxira** usul (PuTTY shart emas). Ichida maxfiy
   ma'lumotlar bor — **commit qilmang**. Asosiy usul baribir GitHub Actions.
-- Server: `root@157.173.114.153` · App: `/root/apps/robbit-quiz` · Domen: `robbitquiz.uz`
+- Server: `root@167.86.86.68` · App: `/root/apps/robbit-quiz` · Domen: `robbitquiz.uz`
   · PM2: `robbit-quiz` (fork, 1 instance — game state in-memory).
-  · **Eslatma:** bu serverda boshqa loyihalar ham bor (zakovat-quiz, xodim-plus, unitedepc) —
-    shu sabab robbit PostgreSQL'i 5432 emas 5435 da.
+  · **2026-07-14: server ko'chirildi** — eski `157.173.114.153` butunlay o'chdi (SSH/HTTP javob
+    bermaydi), yangi IP `167.86.86.68`, GitHub secret `SERVER_HOST` yangilangan. Eski IP'ga
+    deploy urinishlari exit 255 (SSH ulanmaydi) bilan yiqiladi.
+  · **Eslatma:** eski serverda boshqa loyihalar ham bor edi (zakovat-quiz, xodim-plus, unitedepc) —
+    shu sabab robbit PostgreSQL'i 5432 emas 5435 da edi. Deploy portni `SHOW port` bilan
+    avtomatik aniqlaydi, shuning uchun yangi serverda ham o'z-o'zidan to'g'ri ishlaydi.
 
 ### 🛑 MA'LUMOT XAVFSIZLIGI (deploy ma'lumotni O'CHIRMASLIGI kerak)
 - **Prodда HECH QACHON** `prisma migrate dev` yoki `prisma migrate reset` ishlatmang —

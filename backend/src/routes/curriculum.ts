@@ -2,8 +2,9 @@ import { Router, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireApproved, requireCanCreate, type AuthedRequest } from "../auth.js";
-import { sortLessons, bestKey, type OrderGroup } from "../services/curriculumOrder.js";
+import { sortLessons, bestKeyAI, type OrderGroup } from "../services/curriculumOrder.js";
 import { extractTopicForQuiz } from "../services/slideTopics.js";
+import { analyzeLesson } from "../services/lessonAI.js";
 
 export const curriculumRouter = Router();
 curriculumRouter.use(requireAuth);
@@ -45,18 +46,22 @@ async function autoReorderGroup(group: OrderGroup): Promise<number> {
   const lessons = await prisma.lessonPlan.findMany({
     where: { subject: group.subject, ageGroup: group.ageGroup, year: group.year, section: group.section },
     orderBy: { order: "asc" },
-    select: { id: true, title: true, order: true, quizId: true },
+    select: { id: true, title: true, order: true, quizId: true, aiModule: true, aiSeq: true },
   });
   if (lessons.length < 2) return 0;
   // Biriktirilgan quiz sarlavhalari — dars nomi tozalangan bo'lsa kanonik
-  // raqam quiz nomida qolgan bo'lishi mumkin (bestKey ikkalasini ko'radi)
+  // raqam quiz nomida qolgan bo'lishi mumkin (bestKeyAI hammasini ko'radi)
   const quizIds = lessons.map((l) => l.quizId).filter((x): x is string => Boolean(x));
   const quizzes = quizIds.length
     ? await prisma.quiz.findMany({ where: { id: { in: quizIds } }, select: { id: true, title: true } })
     : [];
   const qmap = new Map(quizzes.map((q) => [q.id, q.title]));
   const sorted = lessons
-    .map((l, i) => ({ l, key: bestKey(l.title, l.quizId ? qmap.get(l.quizId) : undefined, group), i }))
+    .map((l, i) => ({
+      l,
+      key: bestKeyAI(l.title, l.quizId ? qmap.get(l.quizId) : undefined, l.aiModule, l.aiSeq, group),
+      i,
+    }))
     .sort((a, b) => a.key.pos - b.key.pos || a.key.sub - b.key.sub || a.l.order - b.l.order || a.i - b.i)
     .map((x) => x.l);
   const updates = sorted
@@ -84,6 +89,105 @@ async function compactGroup(group: OrderGroup): Promise<void> {
       fixes.map((x) => prisma.lessonPlan.update({ where: { id: x.id }, data: { order: x.to } })),
     );
   }
+}
+
+// ---- AI-TARTIBLASH FON JARAYONI ------------------------------------------
+// Wayground importidan keyin (yoki tugma bilan) guruhdagi har darsning
+// slaydlari AI'ga o'rgatiladi: toza mavzu nomi + modul + ichki o'rin.
+// Nom faqat ishonch >= 85 bo'lsa yangilanadi (dars + quiz birga).
+// Oxirida guruh o'quv reja bo'yicha qayta tartiblanadi.
+// PM2 bitta instance (fork) — in-memory holat yetarli.
+interface AiJob {
+  total: number;
+  done: number;
+  renamed: number;
+  failed: number;
+  lowConfidence: string[]; // ishonchi past chiqqan dars nomlari (ko'rib chiqish uchun)
+  running: boolean;
+  startedAt: number;
+  finishedAt: number | null;
+  error?: string;
+}
+const aiJobs = new Map<string, AiJob>();
+const groupKey = (g: OrderGroup) => `${g.subject}|${g.ageGroup}|${g.year}|${g.section ?? ""}`;
+
+// Jarayonni boshlaydi (agar shu guruhda allaqachon ketayotgan bo'lmasa).
+// force=false: faqat hali AI ko'rmagan (aiModule=null) darslar ishlanadi.
+async function startAiOrganize(group: OrderGroup, force: boolean): Promise<AiJob | { alreadyRunning: true }> {
+  const key = groupKey(group);
+  if (aiJobs.get(key)?.running) return { alreadyRunning: true };
+
+  const lessons = await prisma.lessonPlan.findMany({
+    where: {
+      subject: group.subject, ageGroup: group.ageGroup, year: group.year, section: group.section,
+      quizId: { not: null },
+      ...(force ? {} : { aiModule: null }),
+    },
+    select: { id: true, title: true, quizId: true },
+  });
+
+  const job: AiJob = {
+    total: lessons.length, done: 0, renamed: 0, failed: 0,
+    lowConfidence: [], running: lessons.length > 0,
+    startedAt: Date.now(), finishedAt: lessons.length > 0 ? null : Date.now(),
+  };
+  aiJobs.set(key, job);
+  if (lessons.length === 0) return job;
+
+  // Fonda ishlaydi — so'rov kutmaydi
+  void (async () => {
+    try {
+      const quizIds = lessons.map((l) => l.quizId!).filter(Boolean);
+      const quizzes = await prisma.quiz.findMany({
+        where: { id: { in: quizIds } },
+        select: { id: true, title: true },
+      });
+      const qmap = new Map(quizzes.map((q) => [q.id, q.title]));
+
+      const queue = [...lessons];
+      const PARALLEL = 4;
+      const worker = async () => {
+        for (;;) {
+          const l = queue.shift();
+          if (!l) return;
+          try {
+            const a = await analyzeLesson(l.quizId!, group, l.title, qmap.get(l.quizId!));
+            const data: { aiModule?: string; aiSeq?: number | null; title?: string } = {};
+            if (a.modul) {
+              data.aiModule = a.modul;
+              data.aiSeq = a.seq;
+            }
+            if (a.mavzu && a.ishonch >= 85 && a.mavzu !== l.title) {
+              data.title = a.mavzu;
+            } else if (a.mavzu && a.ishonch < 85 && a.mavzu !== l.title && job.lowConfidence.length < 50) {
+              job.lowConfidence.push(l.title);
+            }
+            if (!a.mavzu && !a.modul) job.failed++;
+            if (Object.keys(data).length > 0) {
+              await prisma.lessonPlan.update({ where: { id: l.id }, data });
+              // Quiz nomi ham yangi nomga tenglashtiriladi (kutubxonada ham tartib bo'lsin)
+              if (data.title) {
+                await prisma.quiz.update({ where: { id: l.quizId! }, data: { title: data.title } });
+                job.renamed++;
+              }
+            }
+          } catch {
+            job.failed++;
+          }
+          job.done++;
+        }
+      };
+      await Promise.all(Array.from({ length: PARALLEL }, worker));
+      await autoReorderGroup(group);
+    } catch (e) {
+      job.error = e instanceof Error ? e.message : String(e);
+    } finally {
+      job.running = false;
+      job.finishedAt = Date.now();
+    }
+  })();
+
+  return job;
 }
 
 // Ro'yxat — filter bilan (faqat roster'da tasdiqlangan / admin)
@@ -283,8 +387,11 @@ curriculumRouter.post("/from-folder", requireAdmin, async (req: AuthedRequest, r
     );
     // Butun guruh o'quv reja bo'yicha avtomatik tartibga tushadi
     await autoReorderGroup(group);
+    // AI fonda darslarni to'liq o'rganadi (nom + modul + aniq tartib) —
+    // import qilingan zahoti avtomatik boshlanadi, kutish shart emas
+    void startAiOrganize(group, false);
   }
-  res.json({ created: toCreate.length, skipped });
+  res.json({ created: toCreate.length, skipped, aiStarted: toCreate.length > 0 });
 });
 
 // Ommaviy: MAVZULAR RO'YXATIDAN darslar qo'shish — faqat admin.
@@ -359,6 +466,43 @@ const extractTitlesSchema = z.object({
   year: z.number().int().min(1).max(4),
   section: z.string().nullable().optional(),
 });
+// AI TARTIB + NOMLASH — guruhdagi quiz biriktirilgan darslarni fonda AI bilan
+// to'liq ishlaydi (slaydlardan nom + modul + ichki o'rin, keyin avto-tartib).
+// force=true — allaqachon ishlanganlarni ham qaytadan ko'radi. Faqat admin.
+const aiOrganizeSchema = z.object({
+  subject: z.enum(["ROBOTEXNIKA", "DASTURLASH"]),
+  ageGroup: z.enum(["MIDDLE", "SENIOR"]),
+  year: z.number().int().min(1).max(4),
+  section: z.string().nullable().optional(),
+  force: z.boolean().default(false),
+});
+curriculumRouter.post("/ai-organize", requireAdmin, async (req, res) => {
+  const parsed = aiOrganizeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Ma'lumotlar noto'g'ri" });
+    return;
+  }
+  const { subject, ageGroup, year, force } = parsed.data;
+  const section = subject === "ROBOTEXNIKA" ? (parsed.data.section ?? null) : null;
+  const result = await startAiOrganize({ subject, ageGroup, year, section }, force);
+  if ("alreadyRunning" in result) {
+    res.status(409).json({ error: "Bu guruhda AI jarayoni allaqachon ketmoqda" });
+    return;
+  }
+  res.json({ started: true, total: result.total });
+});
+
+// AI jarayoni holati — frontend progress ko'rsatish uchun so'rab turadi
+curriculumRouter.get("/ai-status", requireAdmin, async (req, res) => {
+  const group: OrderGroup = {
+    subject: String(req.query.subject ?? ""),
+    ageGroup: String(req.query.ageGroup ?? ""),
+    year: Number(req.query.year ?? 1),
+    section: req.query.section ? String(req.query.section) : null,
+  };
+  res.json({ job: aiJobs.get(groupKey(group)) ?? null });
+});
+
 curriculumRouter.post("/extract-titles", requireAdmin, async (req, res) => {
   const parsed = extractTitlesSchema.safeParse(req.body);
   if (!parsed.success) {

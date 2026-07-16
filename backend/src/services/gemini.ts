@@ -80,8 +80,8 @@ interface GeminiResponse {
 }
 
 // Umumiy Gemini so'rovi: model-fallback bilan yuboradi, javob MATNINI qaytaradi.
-// Har ikki funksiya (savol generatsiyasi va mavzu o'qish) shu yadro orqali ishlaydi.
-async function requestGeminiText(parts: unknown[], generationConfig: Record<string, unknown>): Promise<string> {
+// Barcha funksiyalar (savol generatsiyasi, mavzu o'qish, lessonAI zaxirasi) shu yadro orqali ishlaydi.
+export async function requestGeminiText(parts: unknown[], generationConfig: Record<string, unknown>): Promise<string> {
   if (!config.geminiApiKey) {
     throw new Error("GEMINI_API_KEY sozlanmagan");
   }

@@ -385,36 +385,84 @@ export default function Curriculum() {
     } finally { setSaving(false); }
   }
 
-  // Mavzularni slayddan olish — har dars nomi biriktirilgan quizning birinchi
-  // (titul) slaydidan o'qiladi (matn bo'lsa tekin, rasm bo'lsa Gemini vision).
-  // Bir necha o'n soniya davom etishi mumkin — alohida holat ko'rsatiladi.
-  const [extracting, setExtracting] = useState(false);
+  // AI: NOM + TARTIB — guruhdagi har darsning BARCHA slaydlari serverda AI'ga
+  // o'rgatiladi (Claude asosiy, Gemini zaxira): toza mavzu nomi + modul + ichki
+  // o'rin aniqlanadi, keyin guruh o'quv reja bo'yicha avtomatik tartiblanadi.
+  // Jarayon fonda ketadi — holatini 3 soniyada bir so'rab turamiz.
+  interface AiJobInfo {
+    total: number; done: number; renamed: number; failed: number;
+    lowConfidence: string[]; running: boolean; error?: string;
+  }
+  const [aiJob, setAiJob] = useState<AiJobInfo | null>(null);
+  const extracting = !!aiJob?.running;
+
+  async function pollAiStatus(): Promise<AiJobInfo | null> {
+    const params = new URLSearchParams({
+      subject, ageGroup: String(ageGroup ?? ""), year: String(year ?? ""),
+      ...(subject === "ROBOTEXNIKA" && section ? { section } : {}),
+    });
+    const r = await api<{ job: AiJobInfo | null }>(`/curriculum/ai-status?${params}`);
+    setAiJob(r.job);
+    return r.job;
+  }
+
+  // Filtr o'zgarganda: shu guruhda fonda AI ketayotgan bo'lsa (masalan importdan
+  // keyin avto-boshlangan) — progressni ko'rsatib kuzatamiz
+  useEffect(() => {
+    if (!allFiltersSet || !isAdmin) { setAiJob(null); return; }
+    let stop = false;
+    const tick = async () => {
+      try {
+        const job = await pollAiStatus();
+        if (stop) return;
+        if (job?.running) setTimeout(tick, 3000);
+        else if (job && !job.running) await loadLessons();
+      } catch { /* holat so'rovi muvaffaqiyatsiz — jim */ }
+    };
+    tick();
+    return () => { stop = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, ageGroup, year, section, allFiltersSet, isAdmin]);
+
   async function extractTitles() {
     if (!allFiltersSet || extracting) return;
-    if (!confirm("Quiz biriktirilgan darslarning nomlari birinchi slayddan qayta o'qilib ALMASHTIRILADI. O'qib bo'lmaganlari o'z nomida qoladi. Davom etasizmi?")) return;
-    setExtracting(true);
+    if (!confirm(
+      "AI har darsning slaydlarini to'liq o'rganib: nomini tuzatadi (ishonch yuqori bo'lsa), " +
+      "modulini aniqlaydi va o'quv reja bo'yicha tartiblaydi. Jarayon fonda ketadi. Davom etasizmi?",
+    )) return;
     try {
-      const r = await api<{ updated: number; unchanged: number; failed: number; total: number }>(
-        "/curriculum/extract-titles",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            subject, ageGroup, year,
-            section: subject === "ROBOTEXNIKA" ? section : null,
-          }),
-        },
-      );
-      await loadLessons();
-      showToast(
-        r.total === 0
-          ? "Bu bo'limda quiz biriktirilgan dars yo'q."
-          : `📷 ${r.total} ta darsdan: ${r.updated} ta nom yangilandi` +
-            `${r.unchanged ? `, ${r.unchanged} ta allaqachon mos` : ""}` +
-            `${r.failed ? `, ${r.failed} ta o'qilmadi` : ""}.`,
-      );
+      const r = await api<{ started: boolean; total: number }>("/curriculum/ai-organize", {
+        method: "POST",
+        body: JSON.stringify({
+          subject, ageGroup, year,
+          section: subject === "ROBOTEXNIKA" ? section : null,
+          force: true,
+        }),
+      });
+      if (r.total === 0) {
+        showToast("Bu bo'limda quiz biriktirilgan dars yo'q.");
+        return;
+      }
+      showToast(`🤖 AI ${r.total} ta darsni o'rganishni boshladi…`);
+      // Progress kuzatuvi
+      const watch = async () => {
+        try {
+          const job = await pollAiStatus();
+          if (job?.running) { setTimeout(watch, 3000); return; }
+          await loadLessons();
+          if (job) {
+            showToast(
+              `🤖 Tayyor: ${job.total} ta darsdan ${job.renamed} ta nom yangilandi` +
+              `${job.lowConfidence.length ? `, ${job.lowConfidence.length} ta past ishonch (nomi qoldi)` : ""}` +
+              `${job.failed ? `, ${job.failed} ta o'qilmadi` : ""}. Tartib yangilandi.`,
+            );
+          }
+        } catch { /* keyingi poll'da tuzalar */ setTimeout(watch, 5000); }
+      };
+      watch();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Xatolik");
-    } finally { setExtracting(false); }
+    }
   }
 
   // O'quv reja bo'yicha avtomatik tartiblash — mavjud darslarni rasmiy reja
@@ -953,8 +1001,10 @@ export default function Curriculum() {
                   🪄 Avto tartiblash
                 </button>
                 <button className="btn btn-ghost" onClick={extractTitles} disabled={extracting || saving || lessons.length === 0}
-                  title="Har dars nomini biriktirilgan quizning birinchi (titul) slaydidan o'qib yangilaydi (AI vision)">
-                  {extracting ? "📷 Slayddan o'qilmoqda…" : "📷 Mavzularni slayddan olish"}
+                  title="AI har darsning slaydlarini to'liq o'rganadi: nom + modul + o'quv reja tartibi">
+                  {extracting && aiJob
+                    ? `🤖 AI o'rganmoqda… ${aiJob.done}/${aiJob.total}`
+                    : "🤖 AI: nom + tartib (slayddan)"}
                 </button>
               </div>
             )}

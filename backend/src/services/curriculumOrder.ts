@@ -21,6 +21,8 @@ export interface OrderGroup {
 }
 
 interface ModuleDef {
+  // Kanonik modul nomi — AI tasnifi shu nomlardan birini qaytaradi
+  name: string;
   // Kichik harfda qidiriladigan kalit so'zlar (typo variantlari bilan)
   keywords: string[];
   // Kanonik boshlang'ich pozitsiya (darsma-dars reja ma'lum bo'lsa — haqiqiy
@@ -32,94 +34,99 @@ interface ModuleDef {
 
 // ROBOTEXNIKA · MIDDLE (9–11) · DESIGN — ERP darsma-dars ro'yxati (1–38)
 const ROBO_MIDDLE_DESIGN: ModuleDef[] = [
-  { keywords: ["kompyuter", "komputer", "keyboard", "mouse", "qurilma", "qurulma"], start: 1 },
-  { keywords: ["google docs", "google sheets", "google"], start: 2 },
-  { keywords: ["ai ", "teachable", "gemini", "prompt", "notebooklm", "video gener", "video yasash", "app builder", "mini app", "tasvir"], start: 5 },
-  { keywords: ["tinkercad", "tinkercard"], start: 11 },
-  { keywords: ["canva"], start: 17 },
-  { keywords: ["yakuniy nazorat", "foundation"], start: 19 },
-  { keywords: ["figma", "figam"], start: 20 },
-  { keywords: ["figjam"], start: 27 },
-  { keywords: ["spline"], start: 29 },
-  { keywords: ["onshape", "onahape", "onshap"], start: 34 },
+  { name: "Kompyuter savodxonligi", keywords: ["kompyuter", "komputer", "keyboard", "mouse", "qurilma", "qurulma"], start: 1 },
+  { name: "Google vositalari", keywords: ["google docs", "google sheets", "google"], start: 2 },
+  { name: "AI vositalari", keywords: ["ai ", "teachable", "gemini", "prompt", "notebooklm", "video gener", "video yasash", "app builder", "mini app", "tasvir"], start: 5 },
+  { name: "Tinkercad", keywords: ["tinkercad", "tinkercard"], start: 11 },
+  { name: "Canva", keywords: ["canva"], start: 17 },
+  { name: "Yakuniy nazorat", keywords: ["yakuniy nazorat", "foundation"], start: 19 },
+  { name: "Figma", keywords: ["figma", "figam"], start: 20 },
+  { name: "Figjam", keywords: ["figjam"], start: 27 },
+  { name: "Spline", keywords: ["spline"], start: 29 },
+  { name: "Onshape", keywords: ["onshape", "onahape", "onshap"], start: 34 },
 ];
 
 // ROBOTEXNIKA · MIDDLE · PROGRAMMING — oylik reja: Scratch → Python → AppInventor → Web
 const ROBO_MIDDLE_PROG: ModuleDef[] = [
-  { keywords: ["scratch"], start: 100 },
-  { keywords: ["python", "turtle"], start: 200 },
-  { keywords: ["app inventor", "appinventor", "appinvntor"], start: 300 },
-  { keywords: ["html", "css", "web", "sayt"], start: 400 },
+  { name: "Scratch", keywords: ["scratch"], start: 100 },
+  { name: "Python", keywords: ["python", "turtle"], start: 200 },
+  { name: "App Inventor", keywords: ["app inventor", "appinventor", "appinvntor"], start: 300 },
+  { name: "Web (HTML/CSS)", keywords: ["html", "css", "web", "sayt"], start: 400 },
 ];
 
 // ROBOTEXNIKA · MIDDLE · ROBOTICS — WeDo → Spike → Elektronika → Arduino → Musobaqa → IoT
 const ROBO_MIDDLE_ROBOTICS: ModuleDef[] = [
-  { keywords: ["wedo", "we do"], start: 100 },
-  { keywords: ["spike"], start: 200 },
-  { keywords: ["elektronika", "elektrinika", "eelktronika", "electronika"], start: 300 },
-  { keywords: ["arduino", "arduoino", "arduno"], start: 400 },
-  { keywords: ["musobaqa", "robo-futbol", "labirint", "sumo"], start: 500 },
-  { keywords: ["esp32", "iot", "mqtt", "blynk"], start: 600 },
+  { name: "WeDo", keywords: ["wedo", "we do"], start: 100 },
+  { name: "Spike", keywords: ["spike"], start: 200 },
+  { name: "Elektronika", keywords: ["elektronika", "elektrinika", "eelktronika", "electronika"], start: 300 },
+  { name: "Arduino", keywords: ["arduino", "arduoino", "arduno"], start: 400 },
+  { name: "Musobaqa robototexnikasi", keywords: ["musobaqa", "robo-futbol", "labirint", "sumo"], start: 500 },
+  { name: "IoT (ESP32)", keywords: ["esp32", "iot", "mqtt", "blynk"], start: 600 },
 ];
 
-// ROBOTEXNIKA · SENIOR (12–15) — oylik reja
+// ROBOTEXNIKA · SENIOR (12–15) — oylik reja (Sheets "12-15 Robototexnika"):
+// Design: Tinkercad (1-oy) → OnShape (2-4-oy, 3D print bilan)
 const ROBO_SENIOR_DESIGN: ModuleDef[] = [
-  { keywords: ["tinkercad", "tinkercard"], start: 100 },
-  { keywords: ["onshape", "onahape", "onshap"], start: 200 },
+  { name: "Tinkercad", keywords: ["tinkercad", "tinkercard"], start: 100 },
+  { name: "Onshape", keywords: ["onshape", "onahape", "onshap", "3d print", "slicer"], start: 200 },
 ];
+// Programming: Scratch (1-2-oy) → Python (3-6-oy) → App Inventor (7-9-oy)
 const ROBO_SENIOR_PROG: ModuleDef[] = [
-  { keywords: ["scratch"], start: 100 },
-  { keywords: ["python", "turtle"], start: 200 },
-  { keywords: ["app inventor", "appinventor", "appinvntor"], start: 300 },
+  { name: "Scratch", keywords: ["scratch"], start: 100 },
+  { name: "Python", keywords: ["python", "turtle"], start: 200 },
+  { name: "App Inventor", keywords: ["app inventor", "appinventor", "appinvntor"], start: 300 },
 ];
+// Robotics: Spike (1-4-oy) → Elektronika (5-6) → Arduino (6-10, musobaqalar bilan) → IoT/Blynk (10-12)
 const ROBO_SENIOR_ROBOTICS: ModuleDef[] = [
-  { keywords: ["spike"], start: 100 },
-  { keywords: ["elektronika", "elektrinika", "eelktronika", "electronika"], start: 200 },
-  { keywords: ["arduino", "arduoino", "arduno"], start: 300 },
-  { keywords: ["musobaqa", "robo-futbol", "labirint", "sumo"], start: 400 },
-  { keywords: ["esp32", "iot", "mqtt", "blynk"], start: 500 },
+  { name: "Spike", keywords: ["spike"], start: 100 },
+  { name: "Elektronika", keywords: ["elektronika", "elektrinika", "eelktronika", "electronika"], start: 200 },
+  { name: "Arduino", keywords: ["arduino", "arduoino", "arduno"], start: 300 },
+  { name: "Musobaqa robototexnikasi", keywords: ["musobaqa", "robo-futbol", "labirint", "sumo"], start: 400 },
+  { name: "IoT (ESP32/Blynk)", keywords: ["esp32", "iot", "mqtt", "blynk", "ble"], start: 500 },
 ];
 
 // DASTURLASH · MIDDLE (9–11) — 24 oylik reja (1-yil: Scratch→JS, 2-yil: Python→Final)
 const DAST_MIDDLE: ModuleDef[] = [
-  { keywords: ["scratch"], start: 100 },
-  { keywords: ["figma", "figam"], start: 200 },
-  { keywords: ["framer"], start: 300 },
-  { keywords: ["github"], start: 400 },
-  { keywords: ["html"], start: 500 },
-  { keywords: ["css", "flexbox", "layout"], start: 600 },
-  { keywords: ["responsive"], start: 700 },
-  { keywords: ["javascript", "java script", " js "], start: 800 },
-  { keywords: ["python", "turtle"], start: 900 },
-  { keywords: ["telegram", "bot "], start: 1000 },
-  { keywords: ["sqlite", "database", "baza"], start: 1100 },
-  { keywords: ["api", "webhook"], start: 1200 },
-  { keywords: ["aiogram"], start: 1300 },
-  { keywords: ["algoritm", "puzzle"], start: 1400 },
-  { keywords: ["final", "yakuniy loyiha"], start: 1500 },
+  { name: "Scratch", keywords: ["scratch"], start: 100 },
+  { name: "Figma", keywords: ["figma", "figam"], start: 200 },
+  { name: "Framer", keywords: ["framer"], start: 300 },
+  { name: "GitHub", keywords: ["github"], start: 400 },
+  { name: "HTML", keywords: ["html"], start: 500 },
+  { name: "CSS", keywords: ["css", "flexbox", "layout"], start: 600 },
+  { name: "Responsive dizayn", keywords: ["responsive"], start: 700 },
+  { name: "JavaScript", keywords: ["javascript", "java script", " js "], start: 800 },
+  { name: "Python", keywords: ["python", "turtle"], start: 900 },
+  { name: "Telegram bot (no-code)", keywords: ["telegram", "bot "], start: 1000 },
+  { name: "Database (SQLite)", keywords: ["sqlite", "database", "baza"], start: 1100 },
+  { name: "API", keywords: ["api", "webhook"], start: 1200 },
+  { name: "Telegram bot (aiogram)", keywords: ["aiogram"], start: 1300 },
+  { name: "Algoritmlash", keywords: ["algoritm", "puzzle"], start: 1400 },
+  { name: "Final loyiha", keywords: ["final", "yakuniy loyiha"], start: 1500 },
 ];
 
-// DASTURLASH · SENIOR (12–15) — 18 oylik reja
+// DASTURLASH · SENIOR (12–15) — 18 oylik reja (Sheets "12-15 Dasturlash"):
+// Scratch → Figma/Framer → HTML/CSS+GitHub → CSS Advanced → JS → JS DOM →
+// No-code bot + Python Intro → Python (Basic→OOP) → SQLite → API/JSON → aiogram → Algoritm → Final
 const DAST_SENIOR: ModuleDef[] = [
-  { keywords: ["scratch"], start: 100 },
-  { keywords: ["figma", "figam", "framer"], start: 200 },
-  { keywords: ["github"], start: 300 },
-  { keywords: ["html"], start: 400 },
-  { keywords: ["css", "flexbox", "grid"], start: 500 },
-  { keywords: ["javascript", "java script", " js ", "dom"], start: 600 },
-  { keywords: ["telegram", "botfather", "no-code", "nocode"], start: 700 },
-  { keywords: ["python", "turtle"], start: 800 },
-  { keywords: ["sqlite", "database", "baza"], start: 900 },
-  { keywords: ["api", "json"], start: 1000 },
-  { keywords: ["aiogram"], start: 1100 },
-  { keywords: ["algoritm", "big o", "leetcode"], start: 1200 },
-  { keywords: ["final", "yakuniy loyiha"], start: 1300 },
+  { name: "Scratch", keywords: ["scratch"], start: 100 },
+  { name: "Figma/Framer", keywords: ["figma", "figam", "framer"], start: 200 },
+  { name: "GitHub", keywords: ["github"], start: 300 },
+  { name: "HTML", keywords: ["html"], start: 400 },
+  { name: "CSS", keywords: ["css", "flexbox", "grid", "responsive"], start: 500 },
+  { name: "JavaScript", keywords: ["javascript", "java script", " js ", "dom"], start: 600 },
+  { name: "Telegram bot (no-code)", keywords: ["telegram", "botfather", "no-code", "nocode"], start: 700 },
+  { name: "Python", keywords: ["python", "turtle", "oop"], start: 800 },
+  { name: "Database (SQLite)", keywords: ["sqlite", "database", "baza"], start: 900 },
+  { name: "API va JSON", keywords: ["api", "json"], start: 1000 },
+  { name: "Telegram bot (aiogram)", keywords: ["aiogram"], start: 1100 },
+  { name: "Algoritmlash", keywords: ["algoritm", "big o", "leetcode"], start: 1200 },
+  { name: "Final loyiha", keywords: ["final", "yakuniy loyiha"], start: 1300 },
 ];
 
 // Guruh → modul ro'yxati. Yil kesib o'tilmaydi: tartib faqat guruh ichida
 // solishtiriladi, shuning uchun bir yo'nalishning barcha yillari uchun bitta
 // umumiy ketma-ketlik yetarli.
-function modulesFor(group: OrderGroup): ModuleDef[] {
+export function modulesFor(group: OrderGroup): ModuleDef[] {
   if (group.subject === "DASTURLASH") {
     return group.ageGroup === "SENIOR" ? DAST_SENIOR : DAST_MIDDLE;
   }
@@ -200,6 +207,45 @@ export function bestKey(lessonTitle: string, quizTitle: string | undefined, grou
   if (kl.explicit) return kl;
   const kq = quizTitle ? computeSortKey(quizTitle, group) : null;
   if (kq?.explicit) return kq;
+  if (kl.matched) return kl;
+  if (kq?.matched) return kq;
+  return kl;
+}
+
+// AI aniqlagan modul nomini kanonik ro'yxatga solishtirish uchun normalizatsiya
+function normModule(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, "");
+}
+
+// AI tahlilidan (aiModule + aiSeq) tartib kaliti. Modul nomi kanonik ro'yxatda
+// topilmasa null — chaqiruvchi kalit so'z usuliga qaytadi.
+export function aiKey(
+  aiModule: string | null | undefined,
+  aiSeq: number | null | undefined,
+  group: OrderGroup,
+): SortKey | null {
+  if (!aiModule) return null;
+  const target = normModule(aiModule);
+  const mod = modulesFor(group).find((m) => normModule(m.name) === target);
+  if (!mod) return null;
+  return { pos: mod.start, sub: aiSeq ?? 0, matched: true, explicit: false };
+}
+
+// To'liq kalit: sarlavhadagi ANIQ raqam ("(d-35)", "43. ") > AI tahlili >
+// kalit so'z. AI slaydlarning o'zini o'qigan — sarlavha taxminidan ishonchliroq.
+export function bestKeyAI(
+  lessonTitle: string,
+  quizTitle: string | undefined,
+  aiModule: string | null | undefined,
+  aiSeq: number | null | undefined,
+  group: OrderGroup,
+): SortKey {
+  const kl = computeSortKey(lessonTitle, group);
+  if (kl.explicit) return kl;
+  const kq = quizTitle ? computeSortKey(quizTitle, group) : null;
+  if (kq?.explicit) return kq;
+  const ka = aiKey(aiModule, aiSeq, group);
+  if (ka) return ka;
   if (kl.matched) return kl;
   if (kq?.matched) return kq;
   return kl;

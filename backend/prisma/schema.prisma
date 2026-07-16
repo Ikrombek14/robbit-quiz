@@ -167,5 +167,9 @@ model LessonPlan {
   author    String?
   isDemo    Boolean  @default(false)
   quizId    String?  // biriktrilgan quiz (ixtiyoriy)
+  // AI tahlili (lessonAI): slaydlardan aniqlangan modul nomi va modul ichidagi
+  // taxminiy o'rin — avto-tartiblashda kalit so'zlardan kuchliroq signal.
+  aiModule  String?
+  aiSeq     Int?
   createdAt DateTime @default(now())
 }

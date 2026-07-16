@@ -199,7 +199,7 @@ export default function BulkImport() {
     // (from-folder: dedup + o'quv reja bo'yicha avto-tartiblash backendda ishlaydi)
     if (addToCurriculum && targetFolderId) {
       try {
-        const cr = await api<{ created: number; skipped: number }>("/curriculum/from-folder", {
+        const cr = await api<{ created: number; skipped: number; aiStarted?: boolean }>("/curriculum/from-folder", {
           method: "POST",
           body: JSON.stringify({
             subject: curSubject,
@@ -211,7 +211,10 @@ export default function BulkImport() {
           }),
         });
         setCurResult(
-          `📚 O'quv dasturga ${cr.created} ta dars qo'shildi${cr.skipped ? `, ${cr.skipped} ta allaqachon bor edi` : ""} — avtomatik tartiblandi.`,
+          `📚 O'quv dasturga ${cr.created} ta dars qo'shildi${cr.skipped ? `, ${cr.skipped} ta allaqachon bor edi` : ""}.` +
+          (cr.aiStarted
+            ? " 🤖 AI fonda slaydlarni o'rganib nom va tartibni to'g'irlamoqda — bir necha daqiqada O'quv dastur sahifasida tayyor bo'ladi."
+            : " Avtomatik tartiblandi."),
         );
       } catch (e) {
         setCurResult(`⚠️ O'quv dasturga qo'shib bo'lmadi: ${e instanceof Error ? e.message : "xatolik"}`);

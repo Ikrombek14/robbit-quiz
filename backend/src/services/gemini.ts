@@ -11,9 +11,10 @@ import type { GeneratedQuestion, SlideImage } from "./claude.js";
 // ro'yxatidan birinchi ishlaganini tanlaymiz va xotirada eslab qolamiz — model eskirsa
 // keyingi so'rov avtomatik yangisiga o'tadi, kod o'zgartirish shart emas.
 const MODEL_CANDIDATES = [
-  "gemini-3.5-flash", // 2026-07 holatida barqaror (GA)
+  "gemini-3.5-flash", // 2026-07 holatida barqaror (GA), lekin tekin kvotasi juda kichik (~20/kun)
   "gemini-3-flash",
   "gemini-flash-latest", // Google'ning "eng so'nggi flash" taxallusi
+  "gemini-flash-lite-latest", // lite — tekin kvotasi kengroq, vision ham bor (2026-07 sinovdan o'tgan)
   "gemini-2.5-flash", // eski loyihalar uchun hali ishlashi mumkin
 ];
 let activeModel: string | null = null; // ishlagani shu yerda saqlanadi
@@ -108,6 +109,14 @@ export async function requestGeminiText(parts: unknown[], generationConfig: Reco
     // Model eskirgan/topilmadi — keyingi kandidatga o'tamiz; boshqa xatolarda to'xtaymiz
     if (isModelUnavailable(res.status, data.error?.message ?? "")) {
       console.warn(`[gemini] model ishlamadi (${model}): ${data.error?.message ?? res.status}`);
+      continue;
+    }
+    // 429 (kvota) — har modelning kvotasi ALOHIDA, shuning uchun keyingisini sinaymiz
+    // (masalan gemini-3.5-flash kunlik 20 ta bilan tez tugaydi, flash-lite esa ishlayveradi).
+    // activeModel'ni tozalaymiz — kvotasi tugagan modelga qaytib urilmaylik.
+    if (res.status === 429) {
+      console.warn(`[gemini] kvota tugadi (${model}) — keyingi model sinaladi`);
+      if (activeModel === model) activeModel = null;
       continue;
     }
     break;

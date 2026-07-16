@@ -64,11 +64,21 @@ const ROBO_MIDDLE_ROBOTICS: ModuleDef[] = [
   { name: "IoT (ESP32)", keywords: ["esp32", "iot", "mqtt", "blynk"], start: 600 },
 ];
 
-// ROBOTEXNIKA · SENIOR (12–15) — oylik reja (Sheets "12-15 Robototexnika"):
-// Design: Tinkercad (1-oy) → OnShape (2-4-oy, 3D print bilan)
+// ROBOTEXNIKA · SENIOR (12–15) · DESIGN — amaldagi kurs Middle Design bilan
+// bir xil foundation ketma-ketligini o'z ichiga oladi (import qilingan darslar
+// (d-N) belgilari bilan keladi), oxirida Onshape chuqurlashadi:
+// Kompyuter → Google → AI → Tinkercad → Canva → Yakuniy → Figma → Figjam → Spline → Onshape
 const ROBO_SENIOR_DESIGN: ModuleDef[] = [
-  { name: "Tinkercad", keywords: ["tinkercad", "tinkercard"], start: 100 },
-  { name: "Onshape", keywords: ["onshape", "onahape", "onshap", "3d print", "slicer"], start: 200 },
+  { name: "Kompyuter savodxonligi", keywords: ["kompyuter", "komputer", "keyboard", "mouse", "qurilma", "qurulma"], start: 1 },
+  { name: "Google vositalari", keywords: ["google docs", "google sheets", "google"], start: 2 },
+  { name: "AI vositalari", keywords: ["ai ", "teachable", "gemini", "prompt", "notebooklm", "video gener", "video yasash", "videolar", "app builder", "mini app", "tasvir"], start: 5 },
+  { name: "Tinkercad", keywords: ["tinkercad", "tinkercard"], start: 11 },
+  { name: "Canva", keywords: ["canva"], start: 17 },
+  { name: "Yakuniy nazorat", keywords: ["yakuniy nazorat", "foundation"], start: 19 },
+  { name: "Figma", keywords: ["figma", "figam"], start: 20 },
+  { name: "Figjam", keywords: ["figjam"], start: 27 },
+  { name: "Spline", keywords: ["spline"], start: 29 },
+  { name: "Onshape", keywords: ["onshape", "onahape", "onshap", "3d print", "slicer", "3d cad", "sketch"], start: 34 },
 ];
 // Programming: Scratch (1-2-oy) → Python (3-6-oy) → App Inventor (7-9-oy)
 const ROBO_SENIOR_PROG: ModuleDef[] = [

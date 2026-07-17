@@ -66,6 +66,7 @@ export default function Join() {
   // Lobby o'yin-kulgi: avatar, typing reytingi; kutish ekranida qiziqarli fakt
   const [avatar, setAvatar] = useState("");
   const [typingRows, setTypingRows] = useState<TypingRow[]>([]);
+  const [typingTotalBonus, setTypingTotalBonus] = useState(0); // serverda jamlangan typing bonusi
   const [fact, setFact] = useState("");
 
   // interaktiv javob holatlari
@@ -376,7 +377,13 @@ export default function Join() {
         <TypingRace
           board={typingRows}
           myName={nickname}
-          onFinish={(wpm, acc) => getSocket().emit("player:typing", { pin, wpm, acc })}
+          totalBonus={typingTotalBonus}
+          onFinish={(wpm, acc) =>
+            getSocket().emit("player:typing", { pin, wpm, acc }, (r?: { totalBonus?: number }) => {
+              // Server javobi — jamlangan bonus (har poyga qo'shib boradi, jami 300 gacha)
+              if (typeof r?.totalBonus === "number") setTypingTotalBonus(r.totalBonus);
+            })
+          }
         />
       </div>
     );

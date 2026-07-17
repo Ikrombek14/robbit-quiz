@@ -5,23 +5,58 @@ import { useEffect, useRef, useState } from "react";
 // yashirin input (maydonga bosilsa klaviatura ochiladi). 30 soniyalik poyga,
 // natija (WPM + aniqlik) serverga yuboriladi, host ekranida jonli TOP-5.
 
-// Apostrofsiz sodda o'zbek so'zlari — telefonda terish oson va adolatli bo'lsin
-const WORDS = [
-  "robot", "kod", "dastur", "sensor", "motor", "tugma", "ekran", "internet",
-  "sayt", "dron", "fazo", "yulduz", "sayyora", "quyosh", "kitob", "maktab",
-  "daraxt", "olma", "anor", "bola", "katta", "kichik", "tez", "sekin",
-  "yashil", "suv", "non", "gul", "mushuk", "qush", "baliq", "daryo",
-  "shamol", "bulut", "osmon", "yer", "temir", "oyna", "eshik", "stol",
-  "qalam", "rasm", "musiqa", "raqam", "savol", "javob", "dars", "ustoz",
-  "vaqt", "kun", "tun", "yoz", "qish", "bahor", "kuz", "rang",
+// Uch tilda sodda so'zlar (apostrofsiz) — telefonda terish oson va adolatli bo'lsin.
+// O'quvchi o'zi tilni tanlaydi, tanlov localStorage'da eslab qolinadi.
+type Lang = "uz" | "en" | "ru";
+
+const WORD_SETS: Record<Lang, string[]> = {
+  uz: [
+    "robot", "kod", "dastur", "sensor", "motor", "tugma", "ekran", "internet",
+    "sayt", "dron", "fazo", "yulduz", "sayyora", "quyosh", "kitob", "maktab",
+    "daraxt", "olma", "anor", "bola", "katta", "kichik", "tez", "sekin",
+    "yashil", "suv", "non", "gul", "mushuk", "qush", "baliq", "daryo",
+    "shamol", "bulut", "osmon", "yer", "temir", "oyna", "eshik", "stol",
+    "qalam", "rasm", "musiqa", "raqam", "savol", "javob", "dars", "ustoz",
+    "vaqt", "kun", "tun", "yoz", "qish", "bahor", "kuz", "rang",
+  ],
+  en: [
+    "robot", "code", "program", "sensor", "motor", "button", "screen", "internet",
+    "site", "drone", "space", "star", "planet", "sun", "book", "school",
+    "tree", "apple", "child", "big", "small", "fast", "slow", "green",
+    "water", "bread", "flower", "cat", "bird", "fish", "river", "wind",
+    "cloud", "sky", "earth", "iron", "glass", "door", "table", "pencil",
+    "picture", "music", "number", "question", "answer", "lesson", "teacher", "time",
+    "day", "night", "summer", "winter", "spring", "autumn", "color", "game",
+  ],
+  ru: [
+    "робот", "код", "программа", "сенсор", "мотор", "кнопка", "экран", "интернет",
+    "сайт", "дрон", "космос", "звезда", "планета", "солнце", "книга", "школа",
+    "дерево", "яблоко", "ребенок", "большой", "маленький", "быстро", "медленно", "зеленый",
+    "вода", "хлеб", "цветок", "кошка", "птица", "рыба", "река", "ветер",
+    "облако", "небо", "земля", "железо", "стекло", "дверь", "стол", "карандаш",
+    "рисунок", "музыка", "число", "вопрос", "ответ", "урок", "учитель", "время",
+    "день", "ночь", "лето", "зима", "весна", "осень", "цвет", "игра",
+  ],
+};
+
+const LANG_LABELS: { key: Lang; label: string }[] = [
+  { key: "uz", label: "O'zbekcha" },
+  { key: "en", label: "English" },
+  { key: "ru", label: "Русский" },
 ];
 
 const RACE_SECS = 30;
 const WORD_COUNT = 80; // 30 soniyaga bemalol yetadi
 
-function pickWords(): string[] {
+function savedLang(): Lang {
+  const v = localStorage.getItem("tr_lang");
+  return v === "en" || v === "ru" ? v : "uz";
+}
+
+function pickWords(lang: Lang): string[] {
+  const set = WORD_SETS[lang];
   const out: string[] = [];
-  for (let i = 0; i < WORD_COUNT; i++) out.push(WORDS[Math.floor(Math.random() * WORDS.length)]);
+  for (let i = 0; i < WORD_COUNT; i++) out.push(set[Math.floor(Math.random() * set.length)]);
   return out;
 }
 
@@ -35,13 +70,16 @@ export interface TypingRow {
 export default function TypingRace({
   board,
   myName,
+  totalBonus = 0,
   onFinish,
 }: {
   board: TypingRow[];
   myName: string;
+  totalBonus?: number; // serverda jamlangan bonus (o'yin boshida ballga qo'shiladi)
   onFinish: (wpm: number, acc: number) => void;
 }) {
-  const [words, setWords] = useState<string[]>(() => pickWords());
+  const [lang, setLang] = useState<Lang>(savedLang);
+  const [words, setWords] = useState<string[]>(() => pickWords(savedLang()));
   const [typedWords, setTypedWords] = useState<string[]>([]); // topshirilgan so'zlar (tarix rang uchun)
   const [input, setInput] = useState("");
   const [startAt, setStartAt] = useState(0); // 0 = boshlanmagan
@@ -91,14 +129,22 @@ export default function TypingRace({
     if (wpm > 0) onFinish(wpm, acc);
   }
 
-  function restart() {
-    setWords(pickWords());
+  function restart(l: Lang = lang) {
+    setWords(pickWords(l));
     setTypedWords([]);
     setInput("");
     setStartAt(0);
     setResult(null);
     typedRef.current = { typed: 0, correct: 0 };
     setTimeout(() => inputRef.current?.focus(), 50);
+  }
+
+  // Til almashtirish — tanlov eslab qolinadi, poyga yangi so'zlar bilan qayta boshlanadi
+  function switchLang(l: Lang) {
+    if (l === lang) return;
+    localStorage.setItem("tr_lang", l);
+    setLang(l);
+    restart(l);
   }
 
   function onChange(v: string) {
@@ -168,12 +214,31 @@ export default function TypingRace({
     <div className="tr-wrap">
       {/* Asosiy maydon — poyga */}
       <div style={{ textAlign: "left", minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
           <strong style={{ fontSize: 16 }}>⌨️ Tezkor yozish</strong>
-          {startAt > 0 && !result && (
+          {startAt > 0 && !result ? (
             <div style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
               <span style={{ fontWeight: 800, fontSize: 26, color: "var(--primary)" }}>{liveWpm} <span style={{ fontSize: 13, fontWeight: 600 }}>WPM</span></span>
               <span style={{ fontWeight: 800, fontSize: 32, color: secsLeft <= 5 ? "var(--tr-bad)" : "var(--ink)" }}>{secsLeft}</span>
+            </div>
+          ) : (
+            // Til tanlash — poyga boshlanmagan/ tugagan paytda ko'rinadi
+            <div style={{ display: "flex", gap: 6 }}>
+              {LANG_LABELS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => switchLang(key)}
+                  style={{
+                    padding: "4px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 700,
+                    cursor: "pointer", font: "inherit",
+                    border: lang === key ? "2px solid var(--primary)" : "1px solid var(--tr-dim)",
+                    background: lang === key ? "var(--primary-soft, rgba(76,141,255,0.12))" : "transparent",
+                    color: lang === key ? "var(--primary)" : "inherit",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -182,13 +247,19 @@ export default function TypingRace({
           <div className="tr-area" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", userSelect: "auto" }}>
             <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1, color: "var(--primary)" }}>{result.wpm}</div>
             <div className="muted" style={{ fontSize: 16, marginTop: 6 }}>WPM · Aniqlik: {result.acc}%</div>
-            {/* Typing natijasi o'yin boshida umumiy ballga kichik bonus beradi (serverda min(wpm,100)) */}
-            {result.wpm > 0 && (
+            {/* Har tugatilgan poyga serverda JAMLANADIGAN bonus qo'shadi (jami 300 gacha) —
+                qayta o'ynagan sari ball ortadi, o'yin boshida umumiy ballga qo'shiladi */}
+            {totalBonus > 0 && (
               <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#16a34a" }}>
-                🎁 O'yin boshida +{Math.min(result.wpm, 100)} ball qo'shiladi
+                🎁 Jamlangan bonus: {totalBonus} ball {totalBonus >= 300 ? "(maksimum!)" : ""}— o'yin boshida qo'shiladi
               </div>
             )}
-            <button className="btn" style={{ marginTop: 14 }} onClick={restart}>🔄 Qayta o'ynash</button>
+            {totalBonus < 300 && (
+              <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                Yana o'ynasangiz bonus qo'shilib boradi (jami 300 gacha)
+              </div>
+            )}
+            <button className="btn" style={{ marginTop: 14 }} onClick={() => restart()}>🔄 Qayta o'ynash</button>
           </div>
         ) : (
           // Matn maydoni — bosilsa yashirin input fokuslanadi (klaviatura ochiladi)

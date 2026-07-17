@@ -21,6 +21,7 @@ interface GamePlayer {
   avatar: string; // lobby'da tanlangan emoji-avatar ("" = tanlanmagan)
   typingWpm: number; // lobby typing musobaqasi — eng yaxshi natija (0 = qatnashmagan)
   typingAcc: number; // typing aniqligi, %
+  typingBonus: number; // JAMLANGAN bonus: har tugatilgan poyga qo'shadi (jami TYPING_BONUS_MAX gacha)
   score: number;
   lastGain: number;
   answeredCurrent: boolean;
@@ -134,6 +135,10 @@ function connectedPlayers(game: GameState) {
 function lobbyPlayers(game: GameState) {
   return connectedPlayers(game).map((p) => ({ id: p.playerId, nickname: p.nickname, avatar: p.avatar }));
 }
+
+// Typing bonuslari jami shu chegaradan oshmaydi — qayta-qayta o'ynash rag'batlantiriladi,
+// lekin cheksiz ball yig'ib o'yin adolatini buzib bo'lmaydi (bitta savol 500-1000 ball)
+const TYPING_BONUS_MAX = 300;
 
 // Lobby typing musobaqasi reytingi — natijasi borlar, WPM bo'yicha (TOP-10)
 function typingBoard(game: GameState) {
@@ -730,6 +735,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       avatar: "",
       typingWpm: 0,
       typingAcc: 0,
+      typingBonus: 0,
       score: 0,
       lastGain: 0,
       answeredCurrent: false,
@@ -822,24 +828,34 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
   });
 
-  // Lobby typing musobaqasi: o'quvchi poygani tugatdi — eng yaxshi natijasi saqlanadi,
-  // yangilangan reyting hammaga (host + o'quvchilar) yuboriladi
-  socket.on("player:typing", (data: { pin: string; wpm: number; acc: number }) => {
-    const game = games.get(data?.pin);
-    const player = game?.players.get(String(socket.data.playerId ?? ""));
-    if (!game || !player || game.status !== "lobby") return;
-    const wpm = Math.round(Number(data?.wpm));
-    const acc = Math.round(Number(data?.acc));
-    if (!Number.isFinite(wpm) || wpm <= 0 || wpm > 400) return; // real bo'lmagan qiymatlar
-    if (!Number.isFinite(acc) || acc < 0 || acc > 100) return;
-    if (wpm > player.typingWpm) {
-      player.typingWpm = wpm;
-      player.typingAcc = acc;
-    }
-    const rows = typingBoard(game);
-    io.to(game.pin).emit("typing:board", { rows });
-    io.to(game.hostSocketId).emit("typing:board", { rows });
-  });
+  // Lobby typing musobaqasi: o'quvchi poygani tugatdi — eng yaxshi natijasi reytingda,
+  // har tugatilgan poyga esa JAMLANADIGAN bonusga qo'shiladi (retry rag'batlantiriladi).
+  // Yangilangan reyting hammaga (host + o'quvchilar) yuboriladi.
+  socket.on(
+    "player:typing",
+    (data: { pin: string; wpm: number; acc: number }, cb?: (r: { totalBonus: number; gained: number }) => void) => {
+      const game = games.get(data?.pin);
+      const player = game?.players.get(String(socket.data.playerId ?? ""));
+      if (!game || !player || game.status !== "lobby") return;
+      const wpm = Math.round(Number(data?.wpm));
+      const acc = Math.round(Number(data?.acc));
+      if (!Number.isFinite(wpm) || wpm <= 0 || wpm > 400) return; // real bo'lmagan qiymatlar
+      if (!Number.isFinite(acc) || acc < 0 || acc > 100) return;
+      if (wpm > player.typingWpm) {
+        player.typingWpm = wpm;
+        player.typingAcc = acc;
+      }
+      // Bonus jamlanadi: bitta poyga ko'pi bilan 100, jami TYPING_BONUS_MAX gacha
+      // (?? 0 — eski snapshot'dan tiklangan o'yinchilarda maydon bo'lmasligi mumkin)
+      const current = player.typingBonus ?? 0;
+      const gained = Math.min(Math.min(wpm, 100), Math.max(0, TYPING_BONUS_MAX - current));
+      player.typingBonus = current + gained;
+      cb?.({ totalBonus: player.typingBonus, gained });
+      const rows = typingBoard(game);
+      io.to(game.pin).emit("typing:board", { rows });
+      io.to(game.hostSocketId).emit("typing:board", { rows });
+    },
+  );
 
   socket.on("host:start", (data: { pin: string; mode?: "LIVE" | "TEST" }) => {
     const game = games.get(data?.pin);
@@ -870,12 +886,14 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       return;
     }
 
-    // LIVE: lobby typing musobaqasi natijasi umumiy ballga KICHIK bonus beradi —
-    // WPM qadar ball (ko'pi bilan 100; bitta savol 500-1000 ball, ya'ni ta'siri kichik).
+    // LIVE: lobby typing musobaqasida JAMLANGAN bonus umumiy ballga qo'shiladi —
+    // har tugatilgan poyga min(wpm,100) qo'shgan, jami TYPING_BONUS_MAX gacha.
     // TEST rejimiga qo'shilmaydi (u foiz bilan baholanadi).
     game.players.forEach((p) => {
-      if (p.typingWpm > 0 && p.score === 0) {
-        const bonus = Math.min(p.typingWpm, 100);
+      // Eski snapshot'dan tiklangan o'yinchida typingBonus bo'lmasligi mumkin — eng
+      // yaxshi WPM bo'yicha eski usulda hisoblaymiz
+      const bonus = Math.round(p.typingBonus ?? 0) || (p.typingWpm > 0 ? Math.min(p.typingWpm, 100) : 0);
+      if (bonus > 0 && p.score === 0) {
         p.score += bonus;
         io.to(p.socketId).emit("typing:bonus", { bonus, score: p.score });
       }

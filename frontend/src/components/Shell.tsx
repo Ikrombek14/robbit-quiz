@@ -20,17 +20,19 @@ const isAdmin = (t: { isAdmin?: boolean } | null) => !!t?.isAdmin;
 // "slayd qilish" ruxsati bo'lganlar (admin yoki canCreate) ko'radi
 const canCreateNav = (t: { isAdmin?: boolean; canCreate?: boolean } | null) => !!(t?.isAdmin || t?.canCreate);
 
+// Tartib: kundalik ishlatiladigan bo'limlar tepada (O'quv dastur — ustozning
+// asosiy sahifasi), admin/xizmat bo'limlari pastda.
 const NAV: NavItem[] = [
   { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false },
-  { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false },
+  { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false, show: canApproved },
   { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library", mobileHide: false },
+  { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false },
   { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true },
+  { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canApproved },
   { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true },
   { key: "users", label: "Foydalanuvchilar", icon: "manage_accounts", path: "/users", mobileHide: true, show: isAdmin },
-  { key: "backup", label: "Zaxira", icon: "archive", path: "/backup", mobileHide: true, show: isAdmin },
   { key: "bulk", label: "Ommaviy import", icon: "cloud_download", path: "/bulk-import", mobileHide: true, show: canCreateNav },
-  { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false, show: canApproved },
-  { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canApproved },
+  { key: "backup", label: "Zaxira", icon: "archive", path: "/backup", mobileHide: true, show: isAdmin },
   { key: "settings", label: "Sozlamalar", icon: "settings", path: "/settings", mobileHide: false },
 ];
 

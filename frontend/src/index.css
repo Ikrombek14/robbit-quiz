@@ -344,7 +344,19 @@ button.quiz-card:active { transform: translateY(0); }
   font-size: 15px; cursor: pointer; font-family: "Inter", sans-serif;
 }
 .side-create:hover { filter: brightness(1.12); }
-.side-nav { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; flex: 1; }
+/* min-height:0 — flex bola bo'lgani uchun shartsiz kerak: usiz nav qisqarmaydi
+   va overflow o'rniga profil pastga siqib chiqariladi. */
+.side-nav {
+  display: flex; flex-direction: column; gap: 4px; margin-top: 10px;
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.side-nav::-webkit-scrollbar { width: 6px; }
+.side-nav::-webkit-scrollbar-track { background: transparent; }
+.side-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+.side-nav::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+/* Skroll bo'lganda tugmalar scrollbar tagiga kirib ketmasin */
+.side-nav > .side-link { flex: 0 0 auto; }
 .side-link {
   display: flex; align-items: center; gap: 12px; border: none; background: transparent;
   padding: 11px 14px; border-radius: 10px; font-weight: 600; font-size: 15px; color: var(--muted);
@@ -1366,8 +1378,8 @@ img, svg, video { max-width: 100%; height: auto; }
 
 /* Sidebar mobil rejimda — barcha bo'limlarga yetish uchun gorizontal skroll */
 @media (max-width: 700px) {
-  .side-nav { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .side-nav::-webkit-scrollbar { display: none; }
+  .side-nav { overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .side-nav::-webkit-scrollbar { display: none; width: auto; }
   .side-link { flex: 0 0 auto; }
   /* mobilда yashirilgan muhim bo'limlar (Sessiyalar/O'qituvchilar/Foydalanuvchilar) ham ko'rinsin */
   .side-link-hide-mobile { display: flex !important; }

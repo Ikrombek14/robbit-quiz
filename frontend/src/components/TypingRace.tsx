@@ -217,9 +217,22 @@ export default function TypingRace({
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
           <strong style={{ fontSize: 16 }}>⌨️ Tezkor yozish</strong>
           {startAt > 0 && !result ? (
-            <div style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
+            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
               <span style={{ fontWeight: 800, fontSize: 26, color: "var(--primary)" }}>{liveWpm} <span style={{ fontSize: 13, fontWeight: 600 }}>WPM</span></span>
               <span style={{ fontWeight: 800, fontSize: 32, color: secsLeft <= 5 ? "var(--tr-bad)" : "var(--ink)" }}>{secsLeft}</span>
+              {/* Poyga o'rtasida qayta boshlash — xato ketsa 30s kutish shart emas
+                  (tugallanmagan poyga bonus bermaydi, shuning uchun adolatli) */}
+              <button
+                onClick={() => restart()}
+                title="Qayta boshlash"
+                style={{
+                  padding: "6px 12px", borderRadius: 10, fontSize: 13.5, fontWeight: 700,
+                  cursor: "pointer", font: "inherit", color: "inherit",
+                  border: "1px solid var(--tr-dim)", background: "transparent",
+                }}
+              >
+                🔄 Qaytadan
+              </button>
             </div>
           ) : (
             // Til tanlash — poyga boshlanmagan/ tugagan paytda ko'rinadi

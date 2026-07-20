@@ -385,108 +385,6 @@ export default function Curriculum() {
     } finally { setSaving(false); }
   }
 
-  // AI: NOM + TARTIB — guruhdagi har darsning BARCHA slaydlari serverda AI'ga
-  // o'rgatiladi (Claude asosiy, Gemini zaxira): toza mavzu nomi + modul + ichki
-  // o'rin aniqlanadi, keyin guruh o'quv reja bo'yicha avtomatik tartiblanadi.
-  // Jarayon fonda ketadi — holatini 3 soniyada bir so'rab turamiz.
-  interface AiJobInfo {
-    total: number; done: number; renamed: number; failed: number;
-    lowConfidence: string[]; running: boolean; error?: string;
-  }
-  const [aiJob, setAiJob] = useState<AiJobInfo | null>(null);
-  const extracting = !!aiJob?.running;
-
-  async function pollAiStatus(): Promise<AiJobInfo | null> {
-    const params = new URLSearchParams({
-      subject, ageGroup: String(ageGroup ?? ""), year: String(year ?? ""),
-      ...(subject === "ROBOTEXNIKA" && section ? { section } : {}),
-    });
-    const r = await api<{ job: AiJobInfo | null }>(`/curriculum/ai-status?${params}`);
-    setAiJob(r.job);
-    return r.job;
-  }
-
-  // Filtr o'zgarganda: shu guruhda fonda AI ketayotgan bo'lsa (masalan importdan
-  // keyin avto-boshlangan) — progressni ko'rsatib kuzatamiz
-  useEffect(() => {
-    if (!allFiltersSet || !isAdmin) { setAiJob(null); return; }
-    let stop = false;
-    const tick = async () => {
-      try {
-        const job = await pollAiStatus();
-        if (stop) return;
-        if (job?.running) setTimeout(tick, 3000);
-        else if (job && !job.running) await loadLessons();
-      } catch { /* holat so'rovi muvaffaqiyatsiz — jim */ }
-    };
-    tick();
-    return () => { stop = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject, ageGroup, year, section, allFiltersSet, isAdmin]);
-
-  async function extractTitles() {
-    if (!allFiltersSet || extracting) return;
-    if (!confirm(
-      "AI har darsning slaydlarini to'liq o'rganib: nomini tuzatadi (ishonch yuqori bo'lsa), " +
-      "modulini aniqlaydi va o'quv reja bo'yicha tartiblaydi. Jarayon fonda ketadi. Davom etasizmi?",
-    )) return;
-    try {
-      const r = await api<{ started: boolean; total: number }>("/curriculum/ai-organize", {
-        method: "POST",
-        body: JSON.stringify({
-          subject, ageGroup, year,
-          section: subject === "ROBOTEXNIKA" ? section : null,
-          force: true,
-        }),
-      });
-      if (r.total === 0) {
-        showToast("Bu bo'limda quiz biriktirilgan dars yo'q.");
-        return;
-      }
-      showToast(`🤖 AI ${r.total} ta darsni o'rganishni boshladi…`);
-      // Progress kuzatuvi
-      const watch = async () => {
-        try {
-          const job = await pollAiStatus();
-          if (job?.running) { setTimeout(watch, 3000); return; }
-          await loadLessons();
-          if (job) {
-            showToast(
-              `🤖 Tayyor: ${job.total} ta darsdan ${job.renamed} ta nom yangilandi` +
-              `${job.lowConfidence.length ? `, ${job.lowConfidence.length} ta past ishonch (nomi qoldi)` : ""}` +
-              `${job.failed ? `, ${job.failed} ta o'qilmadi` : ""}. Tartib yangilandi.`,
-            );
-          }
-        } catch { /* keyingi poll'da tuzalar */ setTimeout(watch, 5000); }
-      };
-      watch();
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Xatolik");
-    }
-  }
-
-  // O'quv reja bo'yicha avtomatik tartiblash — mavjud darslarni rasmiy reja
-  // ketma-ketligiga soladi (faqat admin ko'radigan tugma orqali)
-  async function autoSort() {
-    if (!allFiltersSet) return;
-    setSaving(true);
-    try {
-      const r = await api<{ moved: number }>("/curriculum/auto-sort", {
-        method: "POST",
-        body: JSON.stringify({
-          subject, ageGroup, year,
-          section: subject === "ROBOTEXNIKA" ? section : null,
-        }),
-      });
-      await loadLessons();
-      showToast(r.moved > 0
-        ? `🪄 ${r.moved} ta dars o'quv reja tartibiga tushirildi.`
-        : "✅ Darslar allaqachon o'quv reja tartibida.");
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Xatolik");
-    } finally { setSaving(false); }
-  }
-
   async function saveEdit(l: LessonPlan) {
     if (!editState.title.trim()) return;
     setEditSaving(true);
@@ -996,16 +894,6 @@ export default function Curriculum() {
                 <button className="btn btn-ghost" onClick={openAdd}>+ Dars qo'shish</button>
                 <button className="btn btn-ghost" onClick={openFolderAdd}>📁 Papkadan qo'shish</button>
                 <button className="btn btn-ghost" onClick={openBulkAdd}>📋 Ro'yxatdan qo'shish</button>
-                <button className="btn btn-ghost" onClick={autoSort} disabled={saving || lessons.length < 2}
-                  title="Darslarni rasmiy o'quv reja ketma-ketligi bo'yicha avtomatik tartiblaydi">
-                  🪄 Avto tartiblash
-                </button>
-                <button className="btn btn-ghost" onClick={extractTitles} disabled={extracting || saving || lessons.length === 0}
-                  title="AI har darsning slaydlarini to'liq o'rganadi: nom + modul + o'quv reja tartibi">
-                  {extracting && aiJob
-                    ? `🤖 AI o'rganmoqda… ${aiJob.done}/${aiJob.total}`
-                    : "🤖 AI: nom + tartib (slayddan)"}
-                </button>
               </div>
             )}
             </>

@@ -196,10 +196,10 @@ export default function BulkImport() {
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, parsed.length) }, worker));
 
     // Import tugadi — xohlansa butun papka o'quv dasturga dars sifatida qo'shiladi
-    // (from-folder: dedup + o'quv reja bo'yicha avto-tartiblash backendda ishlaydi)
+    // (from-folder: dedup — papka tartibida qo'shiladi, tartibni admin qo'lda beradi)
     if (addToCurriculum && targetFolderId) {
       try {
-        const cr = await api<{ created: number; skipped: number; aiStarted?: boolean }>("/curriculum/from-folder", {
+        const cr = await api<{ created: number; skipped: number }>("/curriculum/from-folder", {
           method: "POST",
           body: JSON.stringify({
             subject: curSubject,
@@ -212,9 +212,7 @@ export default function BulkImport() {
         });
         setCurResult(
           `📚 O'quv dasturga ${cr.created} ta dars qo'shildi${cr.skipped ? `, ${cr.skipped} ta allaqachon bor edi` : ""}.` +
-          (cr.aiStarted
-            ? " 🤖 AI fonda slaydlarni o'rganib nom va tartibni to'g'irlamoqda — bir necha daqiqada O'quv dastur sahifasida tayyor bo'ladi."
-            : " Avtomatik tartiblandi."),
+          " Tartibni O'quv dastur sahifasida qo'lda moslashingiz mumkin.",
         );
       } catch (e) {
         setCurResult(`⚠️ O'quv dasturga qo'shib bo'lmadi: ${e instanceof Error ? e.message : "xatolik"}`);

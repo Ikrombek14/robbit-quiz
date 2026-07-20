@@ -81,7 +81,7 @@ interface GeminiResponse {
 }
 
 // Umumiy Gemini so'rovi: model-fallback bilan yuboradi, javob MATNINI qaytaradi.
-// Barcha funksiyalar (savol generatsiyasi, mavzu o'qish, lessonAI zaxirasi) shu yadro orqali ishlaydi.
+// PDF savol generatsiyasi (pdf.ts) shu yadro orqali ishlaydi.
 export async function requestGeminiText(parts: unknown[], generationConfig: Record<string, unknown>): Promise<string> {
   if (!config.geminiApiKey) {
     throw new Error("GEMINI_API_KEY sozlanmagan");

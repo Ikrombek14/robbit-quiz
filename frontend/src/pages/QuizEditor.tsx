@@ -162,6 +162,13 @@ export default function QuizEditor() {
     setImporting(true);
     setError("");
     try {
+      // Sarlavha hali qo'lda o'zgartirilmagan bo'lsa (bo'sh yoki "Yangi loyiha") —
+      // avval PDF fayl nomiga o'rnatamiz (tez, hech qanday xatoga bog'liq emas).
+      // Birinchi sahifa yuklangach, AI mavzuni o'qib topsa, aniqroq nom bilan almashtiradi.
+      const filenameTitle = file.name.replace(/\.pdf$/i, "").trim();
+      const wasDefault = !title.trim() || title.trim() === "Yangi loyiha";
+      if (wasDefault && filenameTitle) setTitle(filenameTitle);
+
       setProgress("PDF o'qilmoqda…");
       const blobs = await pdfToPngBlobs(file, (d, t) => setProgress(`Sahifa ${d} / ${t} tayyorlanmoqda…`));
       const created: Slide[] = [];
@@ -176,6 +183,18 @@ export default function QuizEditor() {
           timeLimit: 20,
           points: 0,
         });
+        // Birinchi sahifadan dars mavzusini o'qishga urinamiz (fon'da, bloklamaydi).
+        // Foydalanuvchi shu orada nomni o'zi o'zgartirgan bo'lsa — tegmaymiz.
+        if (i === 0 && wasDefault) {
+          api<{ topic: string | null }>("/pdf/extract-topic", {
+            method: "POST",
+            body: JSON.stringify({ image: url }),
+          })
+            .then((r) => {
+              if (r.topic) setTitle((t) => (t === filenameTitle || !t.trim() ? r.topic! : t));
+            })
+            .catch(() => {}); // AI ishlamasa — filename nomi qoladi
+        }
       }
       setSlides((arr) => {
         const next = [...arr, ...created];

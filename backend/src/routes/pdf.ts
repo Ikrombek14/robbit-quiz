@@ -10,7 +10,7 @@ import {
   type GeneratedQuestion,
   type SlideImage,
 } from "../services/claude.js";
-import { generateQuestionsFromSlidesGemini } from "../services/gemini.js";
+import { generateQuestionsFromSlidesGemini, extractLessonTopicGemini } from "../services/gemini.js";
 import { fetchExternalImage } from "../services/externalImages.js";
 import { config } from "../config.js";
 import { UPLOADS_DIR } from "./upload.js";
@@ -199,4 +199,40 @@ pdfRouter.get("/generate-from-slides/:jobId", requireAuth, requireCanCreate, (re
     return;
   }
   res.json({ status: "done", questions: job.questions ?? [], usedImages: job.usedImages, skippedImages: job.skippedImages });
+});
+
+// ---- PDF import: birinchi sahifa rasmidan dars mavzusini o'qish ----
+// Muharrirda PDF yuklanganda quiz nomini avtomatik shu mavzuga o'rnatish uchun.
+// Yagona kichik rasm — sinxron (job/polling shart emas, extractLessonTopicGemini
+// curriculum.ts'da ham xuddi shu tarzda to'g'ridan kutiladi).
+const extractTopicSchema = z.object({ image: z.string().min(1).max(2000) }); // /uploads/<fayl>
+pdfRouter.post("/extract-topic", requireAuth, requireCanCreate, async (req: AuthedRequest, res) => {
+  const parsed = extractTopicSchema.safeParse(req.body);
+  if (!parsed.success || !parsed.data.image.startsWith("/uploads/")) {
+    res.status(400).json({ error: "So'rov formati noto'g'ri" });
+    return;
+  }
+  if (!config.geminiApiKey) {
+    res.json({ topic: null }); // AI sozlanmagan — jim o'tkazib yuboramiz, filename fallback ishlayveradi
+    return;
+  }
+  const base = path.basename(parsed.data.image); // path traversal himoyasi
+  const mediaType = MEDIA_BY_EXT[path.extname(base).toLowerCase()];
+  if (!mediaType) {
+    res.json({ topic: null });
+    return;
+  }
+  try {
+    const filePath = path.join(UPLOADS_DIR, base);
+    const stat = fs.statSync(filePath);
+    if (stat.size > MAX_IMAGE_BYTES) {
+      res.json({ topic: null });
+      return;
+    }
+    const base64 = fs.readFileSync(filePath).toString("base64");
+    const topic = await extractLessonTopicGemini({ mediaType, base64 });
+    res.json({ topic });
+  } catch {
+    res.json({ topic: null }); // AI/fayl xatosi — muharrirni bloklamaymiz, filename fallback qoladi
+  }
 });

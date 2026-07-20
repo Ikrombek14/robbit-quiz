@@ -1475,6 +1475,61 @@ img, svg, video { max-width: 100%; height: auto; }
 }
 .cur-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
+/* ---------- Yo'l xaritasi (Roadmap) ---------- */
+.rm-duration {
+  display: inline-flex; align-items: center; gap: 7px; margin-left: auto;
+  background: var(--primary-soft); color: var(--primary); border-radius: 999px;
+  padding: 8px 16px; font-weight: 700; font-size: 14px; white-space: nowrap;
+}
+.rm-duration .material-symbols-outlined { font-size: 18px; }
+
+.rm-intro {
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--surface-low); border: 1px solid var(--border); border-radius: 14px;
+  padding: 18px 20px; margin-bottom: 22px;
+}
+.rm-intro p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--muted); }
+
+.rm-modules { display: flex; flex-direction: column; gap: 16px; }
+.rm-module {
+  border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px;
+  display: grid; grid-template-columns: 260px 1fr; gap: 22px; align-items: center;
+  box-shadow: inset 4px 0 0 var(--rm-line);
+}
+.rm-mod-head { display: flex; gap: 12px; align-items: flex-start; }
+.rm-mod-icon {
+  flex: none; width: 42px; height: 42px; border-radius: 12px; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+.rm-mod-icon .material-symbols-outlined { font-size: 24px; }
+.rm-mod-name { font-size: 18px; margin: 0 0 4px; line-height: 1.2; }
+.rm-mod-desc { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+
+.rm-stages { display: flex; align-items: stretch; gap: 6px; }
+.rm-stage-wrap { display: flex; align-items: center; gap: 6px; flex: 1; }
+.rm-stage {
+  flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; height: 100%;
+}
+.rm-stage-step {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--rm-line);
+}
+.rm-stage-title { font-weight: 700; font-size: 14px; line-height: 1.25; color: var(--ink); }
+.rm-stage-months {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px;
+  font-weight: 600; color: var(--muted); margin-top: auto;
+}
+.rm-stage-months .material-symbols-outlined { font-size: 15px; }
+.rm-arrow { flex: none; color: var(--rm-line); font-size: 22px; opacity: 0.65; }
+
+@media (max-width: 860px) {
+  .rm-module { grid-template-columns: 1fr; gap: 16px; }
+  .rm-stages { flex-direction: column; }
+  .rm-stage-wrap { flex-direction: column; align-items: stretch; }
+  .rm-arrow { transform: rotate(90deg); align-self: center; margin: -2px 0; }
+}
+
 .cur-progress {
   display: flex; align-items: center; gap: 12px; padding: 10px 16px;
   background: var(--surface-low); border: 1px solid var(--border); border-radius: 12px;

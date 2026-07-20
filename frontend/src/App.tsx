@@ -15,6 +15,7 @@ import HostShare from "./pages/HostShare";
 import Reports from "./pages/Reports";
 import ReportDetail from "./pages/ReportDetail";
 import Curriculum from "./pages/Curriculum";
+import Roadmap from "./pages/Roadmap";
 import Guide from "./pages/Guide";
 import Teachers from "./pages/Teachers";
 import Users from "./pages/Users";
@@ -95,6 +96,7 @@ export default function App() {
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />
       <Route path="/curriculum" element={<Protected approved><Curriculum /></Protected>} />
+      <Route path="/roadmap" element={<Protected approved><Roadmap /></Protected>} />
       <Route path="/guide" element={<Protected approved><Guide /></Protected>} />
       <Route path="/teachers" element={<Protected><Teachers /></Protected>} />
       <Route path="/users" element={<Protected admin><Users /></Protected>} />

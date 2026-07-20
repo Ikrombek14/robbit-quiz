@@ -2,6 +2,15 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { api, getToken, setToken } from "./api";
 import type { Teacher } from "./types";
 
+// Foydalanuvchi kirganda qaysi sahifa uning "bosh sahifasi":
+// ustoz/admin → dashboard, ofis admin → yo'l xaritasi, pending ustoz → yo'riqnoma.
+export function homePath(t: { isAdmin?: boolean; approved?: boolean; officeAdmin?: boolean; teacherRequestPending?: boolean }): string {
+  if (t.isAdmin || t.approved) return "/dashboard";
+  if (t.officeAdmin) return "/roadmap";
+  if (t.teacherRequestPending) return "/guide";
+  return "/profile";
+}
+
 interface AuthContextValue {
   teacher: Teacher | null;
   loading: boolean;

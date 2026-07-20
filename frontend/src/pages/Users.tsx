@@ -61,8 +61,8 @@ interface RosterItem {
 export default function Users() {
   const { teacher: me } = useAuth();
   const isSuper = me?.isSuperAdmin === true; // super admin: admin huquqi, parol, ustoz huquqi
-  // Oddiy admin faqat "slayd ruxsati"ni boshqaradi; super admin uchun barcha ustunlar.
-  const cols = isSuper ? "28px 1fr 150px 190px 150px" : "28px 1fr 1fr";
+  // Oddiy admin "slayd ruxsati" + "ofis admin"ni boshqaradi; super admin uchun barcha ustunlar.
+  const cols = isSuper ? "28px 1fr 150px 150px 170px 150px" : "28px 1fr 1fr 1fr";
   const [rows, setRows] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -202,7 +202,7 @@ export default function Users() {
     }
   }
 
-  async function patch(u: AppUser, body: { accessOverride?: boolean | null; isAdmin?: boolean; canCreate?: boolean }) {
+  async function patch(u: AppUser, body: { accessOverride?: boolean | null; isAdmin?: boolean; canCreate?: boolean; officeAdmin?: boolean }) {
     setBusy(u.id);
     setMsg("");
     try {
@@ -306,6 +306,7 @@ export default function Users() {
             <span>#</span>
             <span>Foydalanuvchi</span>
             <span title="Slayd (loyiha) yaratish va tahrirlash ruxsati">Slayd ruxsati</span>
+            <span title="Ofis/qabul admini — faqat Yo'l xaritasi va Yo'riqnomani ko'radi (ustoz emas)">Ofis admin</span>
             {isSuper && <span title="O'quv dastur va Yo'riqnoma bo'limlariga kirish huquqi">Ustoz huquqi</span>}
             {isSuper && <span style={{ textAlign: "right" }} title="Parolni tiklash va admin huquqini boshqarish">Amallar</span>}
           </div>
@@ -357,6 +358,18 @@ export default function Users() {
                     title={u.canCreate ? "Bosilsa: slayd ruxsati olib tashlanadi" : "Bosilsa: slayd ruxsati beriladi"}
                   >
                     {working ? "…" : u.canCreate ? "✓ Slaydchi" : "+ Ruxsat berish"}
+                  </button>
+                </span>
+
+                {/* Ofis admin roli — har qanday admin boshqaradi (roadmap + yo'riqnoma) */}
+                <span>
+                  <button
+                    className={`grant-btn ${u.officeAdmin ? "on" : ""}`}
+                    disabled={working}
+                    onClick={() => patch(u, { officeAdmin: !u.officeAdmin })}
+                    title={u.officeAdmin ? "Bosilsa: ofis admin huquqi olib tashlanadi" : "Bosilsa: ofis admin (Yo'l xaritasi + Yo'riqnoma) beriladi"}
+                  >
+                    {working ? "…" : u.officeAdmin ? "✓ Ofis admin" : "+ Ofis admin"}
                   </button>
                 </span>
 

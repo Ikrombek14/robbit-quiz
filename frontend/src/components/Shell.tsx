@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../auth";
+import { useAuth, homePath } from "../auth";
 import { getTheme, toggleTheme, type Theme } from "../theme";
 import HomeworkReminder from "./HomeworkReminder";
+
+type NavRole = { isAdmin?: boolean; approved?: boolean; canCreate?: boolean; officeAdmin?: boolean; teacherRequestPending?: boolean };
 
 interface NavItem {
   key: string;
@@ -10,31 +12,35 @@ interface NavItem {
   icon: string;
   path: string;
   mobileHide?: boolean;
-  show?: (t: { isAdmin?: boolean; approved?: boolean; canCreate?: boolean } | null) => boolean;
+  show?: (t: NavRole | null) => boolean;
 }
 
-// approved (yoki admin) bo'lsagina O'quv dastur / Yo'riqnoma ko'rinadi
-const canApproved = (t: { isAdmin?: boolean; approved?: boolean } | null) => !!(t?.isAdmin || t?.approved);
+// approved (yoki admin) — ustoz sahifalari (O'quv dastur, Statistika, Sessiyalar...)
+const canApproved = (t: NavRole | null) => !!(t?.isAdmin || t?.approved);
 // faqat admin ko'radi
-const isAdmin = (t: { isAdmin?: boolean } | null) => !!t?.isAdmin;
+const isAdmin = (t: NavRole | null) => !!t?.isAdmin;
 // "slayd qilish" ruxsati bo'lganlar (admin yoki canCreate) ko'radi
-const canCreateNav = (t: { isAdmin?: boolean; canCreate?: boolean } | null) => !!(t?.isAdmin || t?.canCreate);
+const canCreateNav = (t: NavRole | null) => !!(t?.isAdmin || t?.canCreate);
+// Yo'l xaritasi — ustoz yoki ofis admin (pending ustoz ko'rmaydi)
+const canStaff = (t: NavRole | null) => !!(t?.isAdmin || t?.approved || t?.officeAdmin);
+// Yo'riqnoma / Sozlamalar — barcha markaz xodimlari (pending va ofis admin ham)
+const canPanel = (t: NavRole | null) => !!(t?.isAdmin || t?.approved || t?.officeAdmin || t?.teacherRequestPending);
 
 // Tartib: kundalik ishlatiladigan bo'limlar tepada (O'quv dastur — ustozning
 // asosiy sahifasi), admin/xizmat bo'limlari pastda.
 const NAV: NavItem[] = [
-  { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false },
+  { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false, show: canApproved },
   { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false, show: canApproved },
-  { key: "roadmap", label: "Yo'l xaritasi", icon: "route", path: "/roadmap", mobileHide: false, show: canApproved },
+  { key: "roadmap", label: "Yo'l xaritasi", icon: "route", path: "/roadmap", mobileHide: false, show: canStaff },
   { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library", mobileHide: false, show: canCreateNav },
-  { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false },
-  { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true },
-  { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canApproved },
-  { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true },
+  { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false, show: canApproved },
+  { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true, show: canApproved },
+  { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canPanel },
+  { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true, show: canApproved },
   { key: "users", label: "Foydalanuvchilar", icon: "manage_accounts", path: "/users", mobileHide: true, show: isAdmin },
   { key: "bulk", label: "Ommaviy import", icon: "cloud_download", path: "/bulk-import", mobileHide: true, show: canCreateNav },
   { key: "backup", label: "Zaxira", icon: "archive", path: "/backup", mobileHide: true, show: isAdmin },
-  { key: "settings", label: "Sozlamalar", icon: "settings", path: "/settings", mobileHide: false },
+  { key: "settings", label: "Sozlamalar", icon: "settings", path: "/settings", mobileHide: false, show: canPanel },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -57,7 +63,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         <button
           className="brand-logo"
           style={{ padding: "8px 12px" }}
-          onClick={() => navigate("/dashboard")}
+          onClick={() => navigate(homePath(teacher ?? {}))}
           aria-label="Bosh sahifa"
         >
           <img src="/logo.svg" alt="Robbit" style={{ height: 26, display: "block" }} />

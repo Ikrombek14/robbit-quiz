@@ -56,6 +56,22 @@ export async function requireApproved(req: AuthedRequest, res: Response, next: N
   next();
 }
 
+// Panelga kira oladiganlar — Yo'riqnoma kabi umumiy bo'limlar uchun.
+// Admin, tasdiqlangan ustoz, ofis admin, YOKI ustozlik so'rovi yuborgan (kutilayotgan).
+// Tasodifiy ro'yxatdan o'tgan (so'rovsiz, roster'da yo'q) — bunga kirmaydi.
+export async function requirePanel(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
+  const teacher = await prisma.teacher.findUnique({
+    where: { id: req.teacherId },
+    select: { isAdmin: true, approved: true, officeAdmin: true, teacherRequestAt: true },
+  });
+  const ok = teacher?.isAdmin || teacher?.approved || teacher?.officeAdmin || !!teacher?.teacherRequestAt;
+  if (!ok) {
+    res.status(403).json({ error: "Bu bo'lim faqat markaz xodimlari uchun. Admin bilan bog'laning." });
+    return;
+  }
+  next();
+}
+
 // "Slayd qilish" ruxsati — quiz yaratish/tahrirlash, slayd generatsiya, darsga biriktirish.
 // Admin (super yoki oddiy) yoki canCreate berilgan ustoz. (Host/o'yin bunga bog'liq EMAS — hamma uchun ochiq.)
 export async function requireCanCreate(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {

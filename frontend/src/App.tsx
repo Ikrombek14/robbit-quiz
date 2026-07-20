@@ -1,6 +1,6 @@
 import { Routes, Route, Link, Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
-import { useAuth } from "./auth";
+import { useAuth, homePath } from "./auth";
 import Home from "./pages/Home";
 import Join from "./pages/Join";
 import AdminLogin from "./pages/AdminLogin";
@@ -27,15 +27,35 @@ import StudentProfile from "./pages/StudentProfile";
 import Backup from "./pages/Backup";
 import Shell from "./components/Shell";
 
-function Protected({ children, approved, admin, create, student }: { children: ReactNode; approved?: boolean; admin?: boolean; create?: boolean; student?: boolean }) {
+// Kirish darvozalari:
+//  student — o'quvchi sahifasi (hamma uchun ochiq, kirsa bo'ldi)
+//  panel   — barcha markaz xodimlari (ustoz, admin, ofis admin, so'rov yuborgan): Yo'riqnoma, Sozlamalar
+//  staff   — ustoz yoki ofis admin (pending EMAS): Yo'l xaritasi
+//  create  — "slayd qilish" ruxsati; admin — faqat admin
+//  (default) — ustoz sahifalari: faqat ustoz/admin; ofis admin/pending o'z bosh sahifasiga yo'naltiriladi
+function Protected({ children, admin, create, student, staff, panel }: {
+  children: ReactNode; admin?: boolean; create?: boolean; student?: boolean; staff?: boolean; panel?: boolean;
+}) {
   const { teacher, loading } = useAuth();
   if (loading) return <div className="container">Yuklanmoqda…</div>;
   if (!teacher) return <Navigate to="/admin" replace />;
-  // O'quvchi (roster'da yo'q, tasdiqlanmagan) — ustoz paneli o'rniga shaxsiy sahifaga.
-  // student=true bo'lgan sahifalar (masalan /profile) bundan mustasno.
-  if (!student && !(teacher.isAdmin || teacher.approved)) {
-    return <Navigate to="/profile" replace />;
+  if (student) return <>{children}</>;
+
+  const isTeacher = !!(teacher.isAdmin || teacher.approved);
+  const hasPanel = isTeacher || !!teacher.officeAdmin || !!teacher.teacherRequestPending;
+
+  // Markaz xodimi emas (tasodifiy account) — o'quvchi shaxsiy sahifasiga
+  if (!hasPanel) return <Navigate to="/profile" replace />;
+
+  // Yo'riqnoma, Sozlamalar — barcha panel foydalanuvchilariga
+  if (panel) return <>{children}</>;
+
+  // Yo'l xaritasi — ustoz yoki ofis admin (pending emas → o'z bosh sahifasiga)
+  if (staff) {
+    if (isTeacher || teacher.officeAdmin) return <>{children}</>;
+    return <Navigate to={homePath(teacher)} replace />;
   }
+
   // "slayd qilish" ruxsati talab qilinsa va user'da bo'lmasa — ruxsat yo'q
   if (create && !(teacher.isAdmin || teacher.canCreate)) {
     return (
@@ -60,18 +80,9 @@ function Protected({ children, approved, admin, create, student }: { children: R
       </Shell>
     );
   }
-  // approved talab qilinsa va user roster'da yo'q bo'lsa — ruxsat yo'q
-  if (approved && !(teacher.isAdmin || teacher.approved)) {
-    return (
-      <Shell>
-        <div className="card center" style={{ marginTop: 40 }}>
-          <div style={{ fontSize: 44 }}>🔒</div>
-          <h2 style={{ marginTop: 8 }}>Ruxsat yo'q</h2>
-          <p className="muted">Bu bo'lim faqat ro'yxatdagi (tasdiqlangan) ustozlar uchun. Admin bilan bog'laning.</p>
-        </div>
-      </Shell>
-    );
-  }
+  // Qolgan ustoz sahifalari — faqat ustoz/admin. Ofis admin / pending o'z bosh sahifasiga.
+  if (!isTeacher) return <Navigate to={homePath(teacher)} replace />;
+
   return <>{children}</>;
 }
 
@@ -95,15 +106,15 @@ export default function App() {
       <Route path="/host/:quizId" element={<Protected><Host /></Protected>} />
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />
-      <Route path="/curriculum" element={<Protected approved><Curriculum /></Protected>} />
-      <Route path="/roadmap" element={<Protected approved><Roadmap /></Protected>} />
-      <Route path="/guide" element={<Protected approved><Guide /></Protected>} />
+      <Route path="/curriculum" element={<Protected><Curriculum /></Protected>} />
+      <Route path="/roadmap" element={<Protected staff><Roadmap /></Protected>} />
+      <Route path="/guide" element={<Protected panel><Guide /></Protected>} />
       <Route path="/teachers" element={<Protected><Teachers /></Protected>} />
       <Route path="/users" element={<Protected admin><Users /></Protected>} />
       <Route path="/backup" element={<Protected admin><Backup /></Protected>} />
       <Route path="/stats" element={<Protected><Stats /></Protected>} />
       <Route path="/stats/tahlil" element={<Protected><StatsAnalysis /></Protected>} />
-      <Route path="/settings" element={<Protected><Settings /></Protected>} />
+      <Route path="/settings" element={<Protected panel><Settings /></Protected>} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

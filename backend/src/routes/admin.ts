@@ -18,6 +18,7 @@ function publicUser(t: {
   isAdmin: boolean;
   approved: boolean;
   canCreate: boolean;
+  officeAdmin?: boolean;
   accessOverride: boolean | null;
   teacherRequestAt?: Date | null;
   teacherRequestName?: string | null;
@@ -32,6 +33,7 @@ function publicUser(t: {
     isAdmin: t.isAdmin,
     approved: t.approved,
     canCreate: t.canCreate, // "slayd qilish" ruxsati
+    officeAdmin: t.officeAdmin ?? false, // ofis/qabul admini
     accessOverride: t.accessOverride,
     teacherRequestAt: t.teacherRequestAt ?? null, // ustozlik so'rovi (kutilayotgan)
     teacherRequestName: t.teacherRequestName ?? null,
@@ -69,7 +71,7 @@ adminRouter.get("/users", async (req, res) => {
     orderBy: { createdAt: "desc" },
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
-      approved: true, canCreate: true, accessOverride: true, createdAt: true,
+      approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
       teacherRequestAt: true, teacherRequestName: true,
       _count: { select: { quizzes: true } },
     },
@@ -100,7 +102,7 @@ adminRouter.post("/users/:id/teacher-request", async (req: AuthedRequest, res) =
       : { teacherRequestAt: null, teacherRequestName: null },
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
-      approved: true, canCreate: true, accessOverride: true, createdAt: true,
+      approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
       teacherRequestAt: true, teacherRequestName: true,
       _count: { select: { quizzes: true } },
     },
@@ -149,7 +151,7 @@ adminRouter.post("/users/:id/bind-roster", async (req: AuthedRequest, res) => {
     },
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
-      approved: true, canCreate: true, accessOverride: true, createdAt: true,
+      approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
       teacherRequestAt: true, teacherRequestName: true,
       _count: { select: { quizzes: true } },
     },
@@ -163,10 +165,12 @@ const patchSchema = z
     accessOverride: z.union([z.boolean(), z.null()]).optional(),
     isAdmin: z.boolean().optional(),
     canCreate: z.boolean().optional(), // "slayd qilish" ruxsati
+    officeAdmin: z.boolean().optional(), // ofis/qabul admini
   })
-  .refine((d) => d.accessOverride !== undefined || d.isAdmin !== undefined || d.canCreate !== undefined, {
-    message: "Hech qanday o'zgarish yuborilmadi",
-  });
+  .refine(
+    (d) => d.accessOverride !== undefined || d.isAdmin !== undefined || d.canCreate !== undefined || d.officeAdmin !== undefined,
+    { message: "Hech qanday o'zgarish yuborilmadi" },
+  );
 
 // ---- Ustoz/admin huquqini o'zgartirish ----
 adminRouter.patch("/users/:id", async (req: AuthedRequest, res) => {
@@ -182,11 +186,16 @@ adminRouter.patch("/users/:id", async (req: AuthedRequest, res) => {
     return;
   }
 
-  const data: { accessOverride?: boolean | null; approved?: boolean; isAdmin?: boolean; canCreate?: boolean } = {};
+  const data: { accessOverride?: boolean | null; approved?: boolean; isAdmin?: boolean; canCreate?: boolean; officeAdmin?: boolean } = {};
 
   // "Slayd qilish" ruxsati — har qanday admin (super yoki oddiy) bera/olib tashlay oladi
   if (parsed.data.canCreate !== undefined) {
     data.canCreate = parsed.data.canCreate;
+  }
+
+  // Ofis admin roli — har qanday admin bera/olib tashlay oladi
+  if (parsed.data.officeAdmin !== undefined) {
+    data.officeAdmin = parsed.data.officeAdmin;
   }
 
   // Quyidagilar (ustoz huquqi + admin huquqi) FAQAT super admin uchun
@@ -222,7 +231,7 @@ adminRouter.patch("/users/:id", async (req: AuthedRequest, res) => {
     data,
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
-      approved: true, canCreate: true, accessOverride: true, createdAt: true,
+      approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
       _count: { select: { quizzes: true } },
     },
   });

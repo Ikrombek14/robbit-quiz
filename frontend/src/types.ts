@@ -166,6 +166,7 @@ export interface Teacher {
   isSuperAdmin?: boolean; // ADMIN_EMAILS env'dagi = super admin (hamma narsa)
   approved?: boolean; // roster (ustozlar ro'yxati)ga ism-familiyasi mos kelsa
   canCreate?: boolean; // "slayd qilish" ruxsati (quiz yaratish/tahrirlash/biriktirish)
+  officeAdmin?: boolean; // ofis/qabul admini — roadmap + yo'riqnoma (ustoz emas)
   hasPassword?: boolean; // parol o'rnatilganmi (Sozlamalar: joriy parol kerakmi)
   teacherRequestPending?: boolean; // ustozlik so'rovi yuborilgan, admin javobi kutilmoqda
 }
@@ -190,6 +191,7 @@ export interface AppUser {
   isAdmin: boolean;
   approved: boolean;
   canCreate: boolean; // "slayd qilish" ruxsati
+  officeAdmin: boolean; // ofis/qabul admini (roadmap + yo'riqnoma, ustoz emas)
   accessOverride: boolean | null; // null = avtomatik, true = berilgan, false = olib tashlangan
   teacherRequestAt: string | null; // ustozlik so'rovi yuborilgan vaqt (kutilayotgan bo'lsa)
   teacherRequestName: string | null; // so'rovda ko'rsatilgan ism-familiya

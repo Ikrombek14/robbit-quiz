@@ -1,5 +1,6 @@
 import { config } from "../config.js";
-import type { GeneratedQuestion, SlideImage } from "./claude.js";
+import { OPTION_RULES, type GeneratedQuestion, type SlideImage } from "./claude.js";
+import { shuffleAnswerOptions } from "./questionShuffle.js";
 
 // Google Gemini orqali savol generatsiyasi — TEKIN reja (aistudio.google.com) bilan ishlaydi.
 // claude.ts bilan bir xil natija shakli (GeneratedQuestion) qaytaradi, shuning uchun
@@ -71,6 +72,7 @@ Talablar:
 - TRUE_FALSE uchun aniq 2 ta variant: "To'g'ri" va "Noto'g'ri".
 - OPEN savollar uchun openAnswers'da qabul qilinadigan qisqa javoblarni bering.
 - Oson savollardan qiyinlariga qarab tartiblang.
+${OPTION_RULES}
 
 Natijani faqat JSON massiv sifatida qaytaring.`;
 }
@@ -185,7 +187,7 @@ export async function generateQuestionsFromSlidesGemini(
   }
   if (!Array.isArray(parsed)) return [];
   // Shaklni tozalab qaytaramiz (Gemini ba'zan ortiqcha maydon qo'shishi mumkin)
-  return (parsed as GeneratedQuestion[])
+  const cleaned = (parsed as GeneratedQuestion[])
     .filter((q) => q && typeof q.text === "string" && q.text.trim())
     .map((q) => ({
       type: ["SINGLE", "MULTIPLE", "TRUE_FALSE", "OPEN"].includes(q.type) ? q.type : "SINGLE",
@@ -197,4 +199,6 @@ export async function generateQuestionsFromSlidesGemini(
         : undefined,
       openAnswers: Array.isArray(q.openAnswers) ? q.openAnswers.map(String) : undefined,
     }));
+  // To'g'ri javob doim A bo'lib qolmasligi uchun variantlar aralashtiriladi
+  return shuffleAnswerOptions(cleaned);
 }

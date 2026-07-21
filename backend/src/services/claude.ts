@@ -1,5 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
+import { shuffleAnswerOptions } from "./questionShuffle.js";
+
+// Variantlar sifati uchun umumiy qoidalar — barcha promptlarda bir xil bo'lsin.
+// To'g'ri javobning O'RNI kod tomonidan aralashtiriladi (questionShuffle), lekin
+// UZUNLIK/BATAFSILLIK tellini faqat model o'zi to'g'ri yozsa yo'qoladi.
+export const OPTION_RULES = `- MUHIM: barcha variantlar TAXMINAN BIR XIL UZUNLIKDA bo'lsin (so'z soni yaqin).
+  To'g'ri javob eng uzun, eng batafsil yoki eng "to'liq" variant bo'lib qolmasin —
+  o'quvchi mazmunni bilmasdan, faqat uzunligiga qarab topa olmasligi kerak.
+- Chalg'ituvchi (noto'g'ri) variantlar ham ishonarli va jiddiy bo'lsin: mavzuga oid,
+  real xato tushunchalar. "Hech qanday", "Bilmayman" kabi bo'sh variantlar bermang.
+- Variantlar bir-birini takrorlamasin va faqat bittasi (MULTIPLE'da bir nechtasi) to'g'ri bo'lsin.
+- TRUE_FALSE savollarning TAXMINAN YARMIDA to'g'ri javob "Noto'g'ri" bo'lsin —
+  hammasi "To'g'ri" bo'lib ketmasin.`;
 
 export interface GeneratedQuestion {
   type: "SINGLE" | "MULTIPLE" | "TRUE_FALSE" | "OPEN";
@@ -77,6 +90,7 @@ Talablar:
 - SINGLE va MULTIPLE uchun 4 ta variant bering; aniq belgilang qaysi(lar) to'g'ri (isCorrect=true).
 - TRUE_FALSE uchun aniq 2 ta variant: "To'g'ri" va "Noto'g'ri".
 - Savollar aniq, tushunarli va xatosiz bo'lsin.
+${OPTION_RULES}
 
 Natijani 'save_questions' tool orqali qaytaring.`;
 
@@ -105,7 +119,8 @@ Natijani 'save_questions' tool orqali qaytaring.`;
   }
 
   const input = toolUse.input as { questions?: GeneratedQuestion[] };
-  return input.questions ?? [];
+  // To'g'ri javob doim A bo'lib qolmasligi uchun variantlar aralashtiriladi
+  return shuffleAnswerOptions(input.questions ?? []);
 }
 
 // Slayd rasmi (uploads'dan o'qilgan) — Claude'ga image block sifatida yuboriladi
@@ -142,6 +157,7 @@ Talablar:
 - SINGLE va MULTIPLE uchun 4 ta variant bering; aniq belgilang qaysi(lar) to'g'ri (isCorrect=true).
 - TRUE_FALSE uchun aniq 2 ta variant: "To'g'ri" va "Noto'g'ri".
 - Oson savollardan qiyinlariga qarab tartiblang.
+${OPTION_RULES}
 
 Natijani 'save_questions' tool orqali qaytaring.`;
 
@@ -166,5 +182,6 @@ Natijani 'save_questions' tool orqali qaytaring.`;
     throw new Error("AI savollarni qaytarmadi. Qayta urinib ko'ring.");
   }
   const input = toolUse.input as { questions?: GeneratedQuestion[] };
-  return input.questions ?? [];
+  // To'g'ri javob doim A bo'lib qolmasligi uchun variantlar aralashtiriladi
+  return shuffleAnswerOptions(input.questions ?? []);
 }

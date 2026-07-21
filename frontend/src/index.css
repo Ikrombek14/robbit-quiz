@@ -853,6 +853,10 @@ button.quiz-card:active { transform: translateY(0); }
 .attendee.done .at-dot { background: var(--olive); }
 
 /* ---------- Pastki boshqaruv paneli ---------- */
+/* .live-wrap grid'ining 3-qatoriga (auto) shu wrapper joylashadi — karusel
+   ochilganda bu qator o'sadi, o'rtadagi (minmax(0,1fr)) slayd maydoni o'zi
+   kichrayadi, .live-bottom hech qachon ekrandan tashqariga chiqmaydi. */
+.live-bottom-wrap { flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; }
 .live-bottom {
   flex-shrink: 0;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -860,6 +864,28 @@ button.quiz-card:active { transform: translateY(0); }
 }
 .lb-left, .lb-right { display: flex; align-items: center; gap: 10px; }
 .lb-center { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--muted); font-size: 14px; }
+
+/* Keyingi slaydlar karuseli (ko'rish-uchun, bosilsa navigatsiya qilmaydi) */
+.host-peek-strip {
+  flex-shrink: 0; display: flex; gap: 10px; overflow-x: auto;
+  padding: 10px 24px; border-top: 1px solid var(--border); background: var(--surface-2, var(--surface));
+}
+.peek-thumb {
+  flex: 0 0 auto; width: 110px; display: flex; flex-direction: column; gap: 4px;
+  border: 2px solid transparent; border-radius: 10px; padding: 3px; cursor: default;
+}
+.peek-thumb.active { border-color: var(--primary); }
+.peek-thumb-num { font-size: 11px; font-weight: 700; color: var(--muted); padding-left: 2px; }
+.peek-thumb-body { border-radius: 8px; overflow: hidden; background: #fff; aspect-ratio: 16 / 9; }
+.peek-toggle-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--muted); cursor: pointer;
+}
+.peek-toggle-btn .material-symbols-outlined { font-size: 17px; }
+.peek-toggle-btn:hover:not(:disabled) { background: var(--border); }
+.peek-toggle-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.peek-toggle-btn.on { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .tool-btn {
   display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface-2);
   color: var(--ink); border-radius: 10px; padding: 10px 14px; font-weight: 700; font-size: 14px; cursor: pointer;

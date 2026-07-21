@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { getSocket } from "../socket";
-import { getToken } from "../api";
-import type { LeaderRow, SlideData } from "../types";
+import { api, getToken } from "../api";
+import type { LeaderRow, QType, Slide, SlideData } from "../types";
+import { slideTitle, TYPE_LABELS } from "../slides";
 import SlideScene from "../components/SlideScene";
 import { unlockAudio, startMusic, stopMusic, playTick, playTimeUp } from "../sound";
 
@@ -123,6 +124,13 @@ export default function Host() {
   const [answeredNames, setAnsweredNames] = useState<string[]>([]);
   const [results, setResults] = useState<Results | null>(null);
   const [error, setError] = useState("");
+
+  // Keyingi slaydlarni oldindan ko'rish (joriy slaydni tark etmasdan). Butun quiz
+  // egasi (host) uchun oddiy REST orqali — o'yin ustidan hech narsa o'zgarmaydi,
+  // o'quvchilarga hech narsa broadcast qilinmaydi (faqat hostning o'z brauzeriga).
+  const [allSlides, setAllSlides] = useState<Slide[] | null>(null);
+  const [showPeek, setShowPeek] = useState(false);
+  const peekActiveRef = useRef<HTMLDivElement>(null);
 
   // taymer
   const [endsAt, setEndsAt] = useState(0);
@@ -325,6 +333,21 @@ export default function Host() {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, []);
+
+  // Peek-karusel uchun butun quiz slaydlarini bir marta yuklaymiz (quiz o'zgarmaydi —
+  // o'yin davomida qayta yuklash shart emas)
+  useEffect(() => {
+    if (!quizId) return;
+    api<{ quiz: { slides: Slide[] } }>(`/quizzes/${quizId}`)
+      .then((r) => setAllSlides(r.quiz.slides))
+      .catch(() => {});
+  }, [quizId]);
+
+  // Karusel ochilganda yoki slayd o'zgarganda — joriy slayd ko'rinadigan joyga suriladi
+  useEffect(() => {
+    if (!showPeek) return;
+    peekActiveRef.current?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [showPeek, slide?.index]);
 
   // 40-daqiqalik eslatma taymerini tozalash
   useEffect(() => () => { if (reminder3Timer.current) clearTimeout(reminder3Timer.current); }, []);
@@ -871,7 +894,39 @@ export default function Host() {
           )}
         </div>
 
-        <div className="live-bottom">
+        {/* Wrapper — .live-wrap grid'ining 3-qatori (auto) shu bittasiga beriladi,
+            shuning uchun karusel ochilganda o'rta (1fr) qator o'zi kichrayadi va
+            .live-bottom hech qachon ekrandan chetga surilmaydi. */}
+        <div className="live-bottom-wrap">
+          {/* Keyingi slaydlar karuseli — asosiy slayd tagida, boshqaruv panelidan yuqorida.
+              Faqat KO'RISH: bosish bilan o'yin slaydi o'zgarmaydi, o'quvchilarga ham
+              hech narsa yuborilmaydi (allSlides faqat hostning brauzeriga REST orqali keldi). */}
+          {showPeek && allSlides && (
+            <div className="host-peek-strip">
+              {allSlides.map((s, i) => (
+                <div
+                  key={s.id ?? i}
+                  ref={i === slide.index ? peekActiveRef : undefined}
+                  className={`peek-thumb ${i === slide.index ? "active" : ""}`}
+                  title={s.kind === "CONTENT" ? `Slayd ${i + 1}` : slideTitle(s)}
+                >
+                  <span className="peek-thumb-num">{i + 1}</span>
+                  <div className="peek-thumb-body">
+                    {s.kind === "CONTENT" ? (
+                      <SlideScene data={s.data} width={110} rounded={8} />
+                    ) : (
+                      <div className="thumb-q">
+                        <span className="badge-mini">{TYPE_LABELS[(s.type ?? "SINGLE") as QType]}</span>
+                        <div className="thumb-q-text">{slideTitle(s)}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="live-bottom">
           <div className="lb-left">
             {!settings.serious && (
               <button className="tool-btn" onClick={() => setShowWheel(true)} disabled={players.length === 0}>
@@ -910,6 +965,14 @@ export default function Host() {
           <div className="lb-center">
             <span className="material-symbols-outlined">slideshow</span>
             Slayd {slide.index + 1} / {slide.total}
+            <button
+              className={`peek-toggle-btn ${showPeek ? "on" : ""}`}
+              onClick={() => setShowPeek((v) => !v)}
+              disabled={!allSlides}
+              title="Keyingi slaydlarni ko'rish (joriy slayddan chiqmasdan)"
+            >
+              <span className="material-symbols-outlined">view_carousel</span>
+            </button>
           </div>
 
           <div className="lb-right">
@@ -925,6 +988,7 @@ export default function Host() {
             <button className="tool-btn primary" onClick={() => socket.emit("host:next", { pin })}>
               {last ? "Yakunlash" : "Keyingi"} <span className="material-symbols-outlined">chevron_right</span>
             </button>
+          </div>
           </div>
         </div>
 

@@ -979,6 +979,18 @@ export default function Host() {
             <button className="tool-btn" disabled={slide.index === 0} onClick={() => socket.emit("host:prev", { pin })}>
               <span className="material-symbols-outlined">chevron_left</span>
             </button>
+            {/* Savolni qayta ochish — javob ulgurmaganlar javob bera olsin.
+                Allaqachon javob berganlar qulflangan holicha qoladi. */}
+            {!isContent && (
+              <button
+                className="tool-btn"
+                onClick={() => socket.emit("host:reopen", { pin })}
+                title="Savolni qayta ochish — faqat javob bermaganlar javob bera oladi"
+              >
+                <span className="material-symbols-outlined">refresh</span>
+                Qayta ochish
+              </button>
+            )}
             {!isContent && phase === "active" && (
               <button className="tool-btn primary" onClick={() => socket.emit("host:reveal", { pin })}>
                 <span className="material-symbols-outlined">visibility</span>

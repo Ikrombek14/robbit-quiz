@@ -30,6 +30,9 @@ interface GamePlayer {
   correctCount: number;
   totalAnswered: number;
   answeredIndices: number[]; // ball ikki marta qo'shilmasligi uchun
+  // Qaysi savollarga TO'G'RI javob bergani. Host savolga qaytsa/qayta ochsa,
+  // allaqachon javob berganlarning holati (to'g'ri/xato) tiklanadi.
+  correctIndices: number[];
   flags: number; // anti-cheat ogohlantirishlar soni
   testIndex: number; // TEST rejimi: o'quvchi turgan savol raqami
   finished: boolean; // TEST rejimi: testni tugatdimi
@@ -123,6 +126,12 @@ function shuffle<T>(arr: T[]): T[] {
 function norm(s: string): string {
   return String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
+// Ism kaliti — bir xil o'quvchi qayta kirganda tanib olish uchun
+// (katta/kichik harf va ortiqcha bo'shliqlar farq qilmaydi)
+function nickKey(s: string): string {
+  return String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 function leaderboard(game: GameState) {
   return [...game.players.values()]
     .sort((a, b) => b.score - a.score)
@@ -409,9 +418,12 @@ function showCurrent(game: GameState) {
   game.votes = {};
   // Yangi slaydda amaliyot taymeri ham bekor bo'ladi (savol/slayd taymeriga aralashmasin)
   game.practiceEndsAt = 0;
+  // MUHIM: holat nolga tushirilmaydi — shu savolga ALLAQACHON javob berganlar
+  // javob bergan bo'lib qoladi. Shu sabab host savolga qaytsa yoki qayta ochsa,
+  // ular qayta bosa olmaydi; faqat javob bermaganlar javob bera oladi.
   game.players.forEach((p) => {
-    p.answeredCurrent = false;
-    p.currentCorrect = false;
+    p.answeredCurrent = p.answeredIndices.includes(game.currentIndex);
+    p.currentCorrect = p.correctIndices.includes(game.currentIndex);
   });
   const s = game.slides[game.currentIndex];
   if (s.kind === "QUESTION") {
@@ -434,6 +446,13 @@ function showCurrent(game: GameState) {
     game.timerEndsAt = 0;
   }
   IO().to(game.pin).emit("slide:show", publicSlide(game));
+  // Bu savolga allaqachon javob berganlarga shaxsan "qulflangan" signali —
+  // slide:show hammaga bir xil ketadi, shuning uchun qulf alohida yuboriladi.
+  game.players.forEach((p) => {
+    if (p.connected && p.answeredCurrent && p.socketId) {
+      IO().to(p.socketId).emit("answer:locked");
+    }
+  });
 }
 
 function revealCurrent(game: GameState) {
@@ -526,7 +545,14 @@ function restoreGame(sg: any): void {
   if (!sg || typeof sg.pin !== "string" || sg.status === "ended") return;
   const players = new Map<string, GamePlayer>();
   for (const p of sg.players ?? []) {
-    players.set(p.playerId, { ...p, socketId: "", connected: false });
+    // correctIndices — keyin qo'shilgan maydon; eski snapshot'larda bo'lmasligi mumkin
+    players.set(p.playerId, {
+      ...p,
+      answeredIndices: Array.isArray(p.answeredIndices) ? p.answeredIndices : [],
+      correctIndices: Array.isArray(p.correctIndices) ? p.correctIndices : [],
+      socketId: "",
+      connected: false,
+    });
   }
   const stats = new Map<number, QStat>();
   for (const s of sg.stats ?? []) stats.set(s.index, s);
@@ -727,9 +753,13 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     // 40 belgi: account bilan kirganlar to'liq ism-familiyasi bilan qatnashadi
     // (20 da uzun ismlar kesilib, /profile natijalariga bog'lanmay qolardi)
     const nickname = (data.nickname ?? "").trim().slice(0, 40) || "O'quvchi";
-    const playerId = genId();
-    const player: GamePlayer = {
-      playerId,
+
+    // DUBLIKATGA QARSHI: shu nom bilan yozuv allaqachon bo'lsa, yangi o'quvchi
+    // ochmaymiz — o'sha o'quvchi qaytib kirdi deb hisoblaymiz. Aks holda qayta
+    // kirgan o'quvchi "toza" yozuv olib, javob berganini unutib qayta bosardi.
+    const existing = [...game.players.values()].find((p) => nickKey(p.nickname) === nickKey(nickname));
+    const player: GamePlayer = existing ?? {
+      playerId: genId(),
       socketId: socket.id,
       nickname,
       avatar: "",
@@ -744,6 +774,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       correctCount: 0,
       totalAnswered: 0,
       answeredIndices: [],
+      correctIndices: [],
       flags: 0,
       testIndex: 0,
       finished: false,
@@ -751,12 +782,25 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       qStartedAt: 0,
       testDetails: [],
     };
-    game.players.set(playerId, player);
+    if (existing) {
+      // Qaytgan o'quvchi: ball va javob tarixi saqlanadi, ulanish yangilanadi
+      existing.socketId = socket.id;
+      existing.connected = true;
+      existing.answeredCurrent = existing.answeredIndices.includes(game.currentIndex);
+      existing.currentCorrect = existing.correctIndices.includes(game.currentIndex);
+    } else {
+      game.players.set(player.playerId, player);
+    }
+    const playerId = player.playerId;
     socket.join(data.pin);
     socket.data.role = "player";
     socket.data.pin = data.pin;
     socket.data.playerId = playerId;
-    cb?.({ ok: true, playerId, settings: clientSettings(game), status: game.status, mode: game.mode });
+    cb?.({
+      ok: true, playerId, settings: clientSettings(game), status: game.status, mode: game.mode,
+      // Joriy savolga allaqachon javob bergan bo'lsa — client savolni ochmaydi
+      answered: game.status === "active" && game.mode === "LIVE" && player.answeredCurrent,
+    });
     io.to(game.hostSocketId).emit("lobby:update", { players: lobbyPlayers(game) });
     // Lobby'da typing musobaqasi ketayotgan bo'lsa — joriy reytingni ham beramiz
     if (game.status === "lobby") {
@@ -772,6 +816,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         emitTestProgress(game);
       } else {
         socket.emit("slide:show", publicSlide(game));
+        // Qaytgan o'quvchi bu savolga javob bergan bo'lsa — darhol qulflaymiz
+        if (player.answeredCurrent) socket.emit("answer:locked");
       }
     }
   });
@@ -786,6 +832,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     }
     player.socketId = socket.id;
     player.connected = true;
+    // Joriy savol holatini javob tarixidan tiklaymiz (host orqaga qaytgan bo'lishi mumkin)
+    player.answeredCurrent = player.answeredIndices.includes(game.currentIndex);
+    player.currentCorrect = player.correctIndices.includes(game.currentIndex);
     socket.join(game.pin);
     socket.data.role = "player";
     socket.data.pin = game.pin;
@@ -811,7 +860,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt, now: Date.now() });
     if (game.status === "active") {
       if (game.mode === "TEST") socket.emit("test:begin", { total: game.questionIndices.length });
-      else socket.emit("slide:show", publicSlide(game));
+      else {
+        socket.emit("slide:show", publicSlide(game));
+        if (player.answeredCurrent) socket.emit("answer:locked");
+      }
     } else if (game.status === "ended") {
       socket.emit("game:ended", { leaderboard: finalLeaderboard(game) });
     }
@@ -988,6 +1040,16 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     socket.to(game.pin).emit("present:fullscreen");
   });
 
+  // Joriy savolni QAYTA OCHISH — javob ulgurmaganlar javob bera olsin.
+  // Allaqachon javob berganlar showCurrent ichida qulflangan holicha qoladi
+  // (answeredIndices'dan tiklanadi), ya'ni ular qayta bosa olmaydi.
+  socket.on("host:reopen", (data: { pin: string }) => {
+    const game = games.get(data?.pin);
+    if (!game || game.hostSocketId !== socket.id) return;
+    if (game.currentIndex < 0 || game.currentIndex >= game.slides.length) return;
+    showCurrent(game);
+  });
+
   socket.on("host:prev", (data: { pin: string }) => {
     const game = games.get(data?.pin);
     if (!game || game.hostSocketId !== socket.id) return;
@@ -1083,7 +1145,12 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     const game = games.get(data?.pin);
     if (!game || game.status !== "active") return;
     const player = game.players.get(socket.data.playerId);
-    if (!player || player.answeredCurrent) return;
+    if (!player) return;
+    // Allaqachon javob bergan — qayta bosish qabul qilinmaydi (client'ni ham qulflaymiz)
+    if (player.answeredCurrent) {
+      socket.emit("answer:locked");
+      return;
+    }
     const s = game.slides[game.currentIndex];
     if (s.kind !== "QUESTION") return;
 
@@ -1092,14 +1159,16 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     const duration = (game.timerEndsAt || game.questionStartedAt + s.timeLimit * 1000) - game.questionStartedAt;
     const { correct, points } = scoreAnswer(s, data.answer, elapsed, duration);
 
-    // Bu savolga avval javob bergan bo'lsa — ball qayta qo'shilmaydi
+    // Bu savolga avval javob bergan bo'lsa — javob ham, ball ham qabul qilinmaydi
+    // (masalan qayta kirgan yoki host savolni qayta ochgan holat)
     if (player.answeredIndices.includes(idx)) {
       player.answeredCurrent = true;
-      player.currentCorrect = correct;
-      socket.emit("answer:received", { correct, points: 0, score: player.score });
+      player.currentCorrect = player.correctIndices.includes(idx);
+      socket.emit("answer:locked");
       return;
     }
     player.answeredIndices.push(idx);
+    if (correct) player.correctIndices.push(idx);
     player.answeredCurrent = true;
     player.currentCorrect = correct;
     player.lastGain = points;
@@ -1171,6 +1240,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     if (socket.data.role === "player") {
       const player = game.players.get(socket.data.playerId);
       if (!player) return;
+      // O'quvchi shu nom bilan QAYTA kirgan bo'lsa, yozuvni yangi socket egallagan.
+      // Bunda eski socketning uzilishi yozuvga tegmasligi kerak — aks holda qaytgan
+      // o'quvchi "uzilgan" bo'lib qolardi (lobbyda esa yozuvi butunlay o'chib,
+      // javob tarixi yo'qolardi).
+      if (player.socketId !== socket.id) return;
       if (game.status === "lobby") {
         game.players.delete(socket.data.playerId);
       } else {

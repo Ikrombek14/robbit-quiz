@@ -101,6 +101,12 @@ export default function Join() {
       setResult(r);
       setScore(r.score);
     };
+    // Server: bu savolga allaqachon javob bergansiz — qayta bosish mumkin emas.
+    // (host savolga qaytdi/qayta ochdi yoki o'quvchi qayta kirdi)
+    const onLocked = () => {
+      answeredCurrentRef.current = false;
+      setPhase("answered");
+    };
     const onTimer = (d: { endsAt: number; now?: number }) => setEndsAt(toLocalEnds(d.endsAt, d.now));
     const onResults = (d: Results) => {
       setResults(d);
@@ -134,6 +140,7 @@ export default function Join() {
     socket.on("test:begin", onTestBegin);
     socket.on("slide:show", onSlide);
     socket.on("answer:received", onReceived);
+    socket.on("answer:locked", onLocked);
     socket.on("timer:update", onTimer);
     socket.on("slide:results", onResults);
     socket.on("game:ended", onEnded);
@@ -146,6 +153,7 @@ export default function Join() {
       socket.off("typing:board", onTypingBoard);
       socket.off("slide:show", onSlide);
       socket.off("answer:received", onReceived);
+      socket.off("answer:locked", onLocked);
       socket.off("timer:update", onTimer);
       socket.off("slide:results", onResults);
       socket.off("game:ended", onEnded);
@@ -262,13 +270,16 @@ export default function Join() {
     getSocket().emit(
       "player:join",
       { pin, nickname },
-      (r: { ok?: boolean; playerId?: string; error?: string; settings?: typeof stuSettings }) => {
+      (r: { ok?: boolean; playerId?: string; error?: string; settings?: typeof stuSettings; answered?: boolean }) => {
         if (r.error) {
           setError(r.error);
           return;
         }
         if (r.settings) setStuSettings(r.settings);
         localStorage.setItem("player", JSON.stringify({ pin, playerId: r.playerId, nickname }));
+        // Shu nom bilan avval kirgan va joriy savolga javob bergan bo'lsa —
+        // keladigan slide:show savolni qayta ochmaydi (qayta bosa olmaydi)
+        answeredCurrentRef.current = r.answered === true;
         setPhase("lobby");
       },
     );

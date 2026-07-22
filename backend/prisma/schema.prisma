@@ -177,3 +177,16 @@ model LessonPlan {
   aiSeq     Int?
   createdAt DateTime @default(now())
 }
+
+// Workshoplar — o'quv dasturdan TASHQARI, bir martalik mashg'ulotlar.
+// Ataylab yosh toifasi/yo'nalish/yilga bo'linmaydi: hammasi bitta umumiy
+// ro'yxatda, workshop nomi bilan turadi (`order` — ro'yxatdagi o'rni).
+model Workshop {
+  id          String   @id @default(cuid())
+  order       Int      @default(0)
+  title       String
+  description String?  // qisqa izoh (ixtiyoriy)
+  author      String?
+  quizId      String?  // biriktrilgan slayd (ixtiyoriy)
+  createdAt   DateTime @default(now())
+}

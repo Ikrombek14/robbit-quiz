@@ -27,7 +27,7 @@ function parseJson(s: string): unknown {
 
 // ---- Eksport: hamma ma'lumot bitta JSON ----
 backupRouter.get("/export", async (_req, res) => {
-  const [teachers, folders, quizzes, lessonPlans, guideSections, roster, gameRecords] = await Promise.all([
+  const [teachers, folders, quizzes, lessonPlans, workshops, guideSections, roster, gameRecords] = await Promise.all([
     prisma.teacher.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.folder.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.quiz.findMany({
@@ -35,6 +35,7 @@ backupRouter.get("/export", async (_req, res) => {
       include: { slides: { orderBy: { order: "asc" } } },
     }),
     prisma.lessonPlan.findMany({ orderBy: [{ subject: "asc" }, { ageGroup: "asc" }, { year: "asc" }, { order: "asc" }] }),
+    prisma.workshop.findMany({ orderBy: { order: "asc" } }),
     prisma.guideSection.findMany({ orderBy: { order: "asc" } }),
     prisma.rosterTeacher.findMany({ orderBy: { order: "asc" } }),
     prisma.gameRecord.findMany({ orderBy: { playedAt: "asc" }, include: { players: true } }),
@@ -51,6 +52,7 @@ backupRouter.get("/export", async (_req, res) => {
       quizzes: quizzes.length,
       slides: quizzes.reduce((s, q) => s + q.slides.length, 0),
       lessonPlans: lessonPlans.length,
+      workshops: workshops.length,
       guideSections: guideSections.length,
       roster: roster.length,
       gameRecords: gameRecords.length,
@@ -64,6 +66,7 @@ backupRouter.get("/export", async (_req, res) => {
       slides: q.slides.map((s) => ({ ...s, data: parseJson(s.data) })),
     })),
     lessonPlans,
+    workshops,
     guideSections,
     roster,
     gameRecords,
@@ -227,6 +230,25 @@ backupRouter.post("/restore", upload.single("file"), async (req: AuthedRequest, 
         },
       });
       bump(restored, "lessonPlans");
+    }
+
+    // 5b) Workshoplar — id bo'yicha
+    const workshops = section("workshops") as any[];
+    const existingWs = new Set((await prisma.workshop.findMany({ select: { id: true } })).map((w) => w.id));
+    for (const w of workshops) {
+      if (!w?.id || existingWs.has(w.id)) {
+        bump(skipped, "workshops");
+        continue;
+      }
+      await prisma.workshop.create({
+        data: {
+          id: w.id, order: w.order ?? 0, title: w.title ?? "?",
+          description: w.description ?? null, author: w.author ?? null,
+          quizId: w.quizId && existingQuizIds.has(w.quizId) ? w.quizId : null,
+          createdAt: w.createdAt ? new Date(w.createdAt) : undefined,
+        },
+      });
+      bump(restored, "workshops");
     }
 
     // 6) GuideSections — id bo'yicha

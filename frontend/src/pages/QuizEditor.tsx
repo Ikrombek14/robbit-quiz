@@ -79,8 +79,6 @@ export default function QuizEditor() {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState("");
   const [waygroundOpen, setWaygroundOpen] = useState(false);
-  const [canvaOpen, setCanvaOpen] = useState(false);
-  const [canvaUrl, setCanvaUrl] = useState("");
   const [waygroundUrl, setWaygroundUrl] = useState("");
   // AI savollar taklifi
   const [aiOpen, setAiOpen] = useState(false);
@@ -480,7 +478,6 @@ export default function QuizEditor() {
                       <button className="add-item" onClick={() => fileRef.current?.click()}>📄 PDF import</button>
                       <button className="add-item" onClick={() => excelRef.current?.click()}>📊 Excel import</button>
                       <button className="add-item" onClick={() => { setAddOpen(false); setWaygroundOpen(true); }}>🎮 Quiz import</button>
-                      <button className="add-item" onClick={() => { setAddOpen(false); setCanvaOpen(true); }}>🎨 Canva import</button>
                     </>
                   )}
                 </div>
@@ -681,72 +678,8 @@ export default function QuizEditor() {
           </div>
         </div>
       )}
-
-      {/* Canva import — Canva serverdan to'g'ridan-to'g'ri o'qishga ruxsat bermaydi
-          (rasmiy API OAuth talab qiladi), shuning uchun eng qisqa ishonchli yo'l:
-          Canva'da PDF qilib yuklab olish → shu yerda tanlash. Har sahifa slaydga aylanadi. */}
-      {canvaOpen && (
-        <div className="modal-overlay" onClick={() => setCanvaOpen(false)}>
-          <div className="card card-narrow" onClick={(e) => e.stopPropagation()}>
-            <div className="between">
-              <h3 style={{ margin: 0 }}>🎨 Canva import</h3>
-              <button className="gs-close" onClick={() => setCanvaOpen(false)} title="Yopish">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <p className="muted" style={{ marginTop: 8 }}>
-              Canva dizaynining har bir sahifasi alohida slaydga aylanadi.
-            </p>
-
-            <label className="f-label" style={{ marginTop: 10 }}>Canva havolasi (ixtiyoriy)</label>
-            <input
-              autoFocus
-              placeholder="https://www.canva.com/design/DAF.../view"
-              value={canvaUrl}
-              onChange={(e) => setCanvaUrl(e.target.value)}
-              style={{ width: "100%" }}
-            />
-            <button
-              className="btn btn-ghost"
-              style={{ marginTop: 8 }}
-              disabled={!canvaDesignId(canvaUrl)}
-              onClick={() => {
-                const id = canvaDesignId(canvaUrl);
-                if (id) window.open(`https://www.canva.com/design/${id}/edit`, "_blank", "noopener");
-              }}
-              title={canvaDesignId(canvaUrl) ? "Dizaynni Canva'da ochish" : "To'g'ri Canva havolasini joylang"}
-            >
-              <span className="material-symbols-outlined">open_in_new</span> Canva'da ochish
-            </button>
-
-            <ol className="muted" style={{ fontSize: 13, marginTop: 12, paddingLeft: 20, lineHeight: 1.7 }}>
-              <li>Canva'da dizaynni oching (yuqoridagi tugma bilan ham bo'ladi)</li>
-              <li>O'ng yuqorida <b>Ulashish → Yuklab olish</b></li>
-              <li>Fayl turi: <b>PDF Standard</b> → <b>Yuklab olish</b></li>
-              <li>Quyidagi tugma bilan o'sha PDF faylni tanlang</li>
-            </ol>
-
-            <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
-              <button className="btn btn-ghost" onClick={() => setCanvaOpen(false)}>Bekor</button>
-              <button
-                className="btn"
-                disabled={importing}
-                onClick={() => { setCanvaOpen(false); fileRef.current?.click(); }}
-              >
-                <span className="material-symbols-outlined">upload_file</span> PDF faylni tanlash
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
-}
-
-// Canva havolasidan dizayn ID sini ajratadi (.../design/<ID>/edit|view|watch)
-function canvaDesignId(raw: string): string | null {
-  const m = String(raw ?? "").match(/canva\.com\/design\/([A-Za-z0-9_-]{6,})/);
-  return m ? m[1] : null;
 }
 
 /* ============ O'ng panel: Shablonlar ============ */

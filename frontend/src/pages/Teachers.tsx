@@ -72,6 +72,7 @@ export default function Teachers() {
   const [branch, setBranch] = useState("");
   const [plat, setPlat] = useState<"" | PlatStatus>(""); // platforma holati filtri (admin)
   const [msg, setMsg] = useState("");
+  const [showNotJoined, setShowNotJoined] = useState(false); // "kirmagan" bo'limi ochiqmi (admin)
 
   // qo'shish/tahrirlash modal
   const [editOpen, setEditOpen] = useState(false);
@@ -109,6 +110,51 @@ export default function Teachers() {
     for (const r of rows) c[platStatus(r)]++;
     return c;
   }, [rows]);
+
+  // Platformaga hali kirmagan ustozlar — qidiruv + filial filtriga bo'ysunadi (plat filtriga emas),
+  // shunda admin filial bo'yicha toraytira oladi. Follow-up (bog'lanish) uchun alohida bo'lim.
+  const notJoined = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (platStatus(r) !== "yoq") return false;
+      if (branch && r.branch !== branch) return false;
+      if (needle && !`${r.name} ${r.username ?? ""}`.toLowerCase().includes(needle)) return false;
+      return true;
+    });
+  }, [rows, q, branch]);
+
+  // Kirmaganlarning telefon raqamlarini nusxalash (ommaviy xabar yuborish uchun)
+  async function copyNotJoinedPhones() {
+    const phones = notJoined.map((r) => r.phone).filter(Boolean) as string[];
+    if (phones.length === 0) { setMsg("Bu ro'yxatda telefon raqami yo'q"); setTimeout(() => setMsg(""), 4000); return; }
+    try {
+      await navigator.clipboard.writeText(phones.join("\n"));
+      setMsg(`✅ ${phones.length} ta telefon raqami nusxalandi`);
+    } catch {
+      setMsg("Nusxalab bo'lmadi");
+    }
+    setTimeout(() => setMsg(""), 4000);
+  }
+
+  // Kirmaganlarni CSV qilib yuklab olish (mijoz tomonida — faqat shu ro'yxat)
+  function exportNotJoined() {
+    const esc = (v: unknown) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ["Ism-familiya", "Filial", "Toifa", "Tel", "Username"];
+    const lines = [header.join(",")];
+    for (const r of notJoined) {
+      lines.push([r.name, r.branch, r.category, r.phone, r.username].map(esc).join(","));
+    }
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "kirmagan-ustozlar.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   // ---- Import ----
   async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -202,6 +248,71 @@ export default function Teachers() {
       </div>
 
       {msg && <div className="import-progress" style={{ marginTop: 12 }}>{msg}</div>}
+
+      {/* Platformaga hali kirmagan ustozlar — faqat admin (usage faqat unga keladi).
+          Bog'lanish (follow-up) uchun aloqa ma'lumotlari bilan alohida yig'ilgan bo'lim. */}
+      {showCategory && notJoined.length > 0 && (
+        <div className="nj-panel" style={{ marginTop: 16 }}>
+          <button className="nj-header" onClick={() => setShowNotJoined((v) => !v)} aria-expanded={showNotJoined}>
+            <span className="material-symbols-outlined" style={{ color: "#d97706" }}>person_off</span>
+            <span style={{ fontWeight: 800, fontSize: 15 }}>Platformaga hali kirmagan ustozlar</span>
+            <span className="nj-count">{notJoined.length}</span>
+            {branch && <span className="muted text-sm">· {branch}</span>}
+            <span style={{ flex: 1 }} />
+            <span className="material-symbols-outlined nj-chevron" style={{ transform: showNotJoined ? "rotate(180deg)" : "none" }}>expand_more</span>
+          </button>
+
+          {showNotJoined && (
+            <div className="nj-body">
+              <div className="nj-actions">
+                <p className="muted text-sm" style={{ margin: 0, flex: 1, minWidth: 200 }}>
+                  Bu ustozlar hali akkaunt ochmagan. Ularga bog'lanib platformaga taklif qiling.
+                </p>
+                <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 13 }} onClick={copyNotJoinedPhones}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>content_copy</span>
+                  Telefonlarni nusxalash
+                </button>
+                <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 13 }} onClick={exportNotJoined}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>download</span>
+                  CSV
+                </button>
+              </div>
+              <div className="nj-grid">
+                {notJoined.map((r) => (
+                  <div className="nj-card" key={r.id}>
+                    <div className="nj-card-top">
+                      <span className="side-avatar" style={{ width: 34, height: 34, fontSize: 14, flexShrink: 0 }}>
+                        {(r.name[0] ?? "?").toUpperCase()}
+                      </span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
+                        {r.username && <div className="muted text-sm" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.username}</div>}
+                      </div>
+                      {isAdmin && (
+                        <button className="icon-btn" title="Tahrirlash" onClick={() => openEdit(r)} style={{ width: 32, height: 32, flexShrink: 0 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="nj-tags">
+                      {r.branch && <span className="cat-badge alt">{r.branch}</span>}
+                      {catLabel(r.category) && <span className={catClass(r.category)}>{catLabel(r.category)}</span>}
+                    </div>
+                    {r.phone ? (
+                      <a className="nj-phone" href={`tel:${String(r.phone).replace(/\s+/g, "")}`}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>call</span>
+                        {r.phone}
+                      </a>
+                    ) : (
+                      <span className="muted text-sm">☎ Telefon yo'q</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filtrlar */}
       <div className="filter-bar">

@@ -215,7 +215,7 @@ export default function ActivityDetail() {
                   {current && (
                     current.kind === "CONTENT"
                       ? <SlideScene data={current.data} rounded={12} />
-                      : <div className="wg-q-box"><SlideView slide={current} showAnswers={showAnswers} /></div>
+                      : <div className="wg-q-box"><SlideView key={current.id ?? index} slide={current} showAnswers={showAnswers} interactive /></div>
                   )}
                 </div>
 
@@ -224,6 +224,12 @@ export default function ActivityDetail() {
                     <input type="checkbox" checked={showAnswers} onChange={(e) => setShowAnswers(e.target.checked)} disabled={current?.kind !== "QUESTION"} />
                     <span>Javobni ko'rsatish</span>
                   </label>
+                  {current?.kind === "QUESTION" && (
+                    <span className="muted text-sm" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>touch_app</span>
+                      Variantni bosib tekshiring
+                    </span>
+                  )}
                   <label className="wg-toggle">
                     <input type="checkbox" checked={autoplay} onChange={(e) => setAutoplay(e.target.checked)} />
                     <span>Avto-namoyish</span>

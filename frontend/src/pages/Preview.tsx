@@ -34,7 +34,7 @@ export default function Preview({
       </div>
 
       <div className="preview-stage">
-        <div className="preview-slide">{slide && <SlideView slide={slide} showAnswers={showAnswers} />}</div>
+        <div className="preview-slide">{slide && <SlideView key={index} slide={slide} showAnswers={showAnswers} interactive />}</div>
       </div>
 
       <div className="preview-controls">
@@ -54,7 +54,10 @@ export default function Preview({
   );
 }
 
-export function SlideView({ slide, showAnswers }: { slide: Slide; showAnswers: boolean }) {
+// interactive=true bo'lsa: variantlar BOSILADI — ustoz bosgach to'g'ri javob
+// ochiladi (workshop/preview'da o'z-o'zini tekshirish uchun). Slayd almashganda
+// tanlov nolga qaytishi uchun chaqiruvchi tomonda `key={slide.id}` beriladi.
+export function SlideView({ slide, showAnswers, interactive }: { slide: Slide; showAnswers: boolean; interactive?: boolean }) {
   const d = slide.data;
 
   if (slide.kind === "CONTENT") {
@@ -71,31 +74,75 @@ export function SlideView({ slide, showAnswers }: { slide: Slide; showAnswers: b
           <img src={d.imageUrl} alt="" style={{ maxHeight: 200, borderRadius: 12 }} />
         </div>
       )}
-      <QuestionView type={type} slide={slide} showAnswers={showAnswers} />
+      <QuestionView type={type} slide={slide} showAnswers={showAnswers} interactive={interactive} />
     </div>
   );
 }
 
-function QuestionView({ type, slide, showAnswers }: { type: QType; slide: Slide; showAnswers: boolean }) {
-  const d = slide.data;
+// Bosiladigan variantlar (SINGLE/MULTIPLE/TRUE_FALSE/DROPDOWN). Bosilgach to'g'ri
+// javob(lar) yashil, xato tanlangani qizil bo'ladi. POLL'da to'g'ri javob yo'q.
+function ChoiceOptions({
+  type, options, showAnswers, interactive,
+}: {
+  type: QType;
+  options: NonNullable<Slide["data"]["options"]>;
+  showAnswers: boolean;
+  interactive?: boolean;
+}) {
+  const isPoll = type === "POLL";
+  const isMultiple = type === "MULTIPLE";
+  const [picked, setPicked] = useState<number[]>([]);
+  const canClick = !!interactive && !isPoll;
+  const hasPicked = picked.length > 0;
+  // To'g'ri javobni ko'rsatamiz: checkbox yoqilgan YOKI biror variant bosilgan bo'lsa
+  const reveal = !isPoll && (showAnswers || hasPicked);
 
-  if (["SINGLE", "MULTIPLE", "TRUE_FALSE", "DROPDOWN", "POLL"].includes(type)) {
-    const options = d.options ?? [];
-    const showCorrect = showAnswers && type !== "POLL";
-    return (
-      <div className="answers-grid">
-        {options.map((o, i) => (
-          <div
-            key={i}
-            className={`answer-card ${o.imageUrl ? "has-img" : ""} ${showCorrect ? (o.isCorrect ? "correct" : "wrong") : ""}`}
-          >
+  function pick(i: number) {
+    if (!canClick) return;
+    if (isMultiple) {
+      setPicked((p) => (p.includes(i) ? p.filter((x) => x !== i) : [...p, i]));
+    } else {
+      setPicked((p) => (p.includes(i) ? [] : [i])); // qayta bosilsa — bekor
+    }
+  }
+
+  return (
+    <div className="answers-grid">
+      {options.map((o, i) => {
+        const isPicked = picked.includes(i);
+        let state = "";
+        if (reveal) {
+          if (o.isCorrect) state = "correct";
+          else if (isPicked) state = "wrong-pick"; // bosilgan, lekin xato
+          else state = "wrong"; // xira
+        } else if (isPicked) {
+          state = "selected";
+        }
+        const cls = `answer-card ${o.imageUrl ? "has-img" : ""} ${state}`;
+        const body = (
+          <>
             <span className={`opt-letter c-${i % 4}`}>{String.fromCharCode(65 + i)}</span>
             {o.imageUrl && <img className="opt-img" src={o.imageUrl} alt="" />}
             {(o.text || !o.imageUrl) && <span>{o.text || `Variant ${i + 1}`}</span>}
-          </div>
-        ))}
-      </div>
-    );
+            {reveal && o.isCorrect && <span className="opt-mark ok">✓</span>}
+            {reveal && isPicked && !o.isCorrect && <span className="opt-mark no">✕</span>}
+          </>
+        );
+        return canClick ? (
+          <button key={i} type="button" className={cls} onClick={() => pick(i)}>{body}</button>
+        ) : (
+          <div key={i} className={cls}>{body}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+function QuestionView({ type, slide, showAnswers, interactive }: { type: QType; slide: Slide; showAnswers: boolean; interactive?: boolean }) {
+  const d = slide.data;
+
+  if (["SINGLE", "MULTIPLE", "TRUE_FALSE", "DROPDOWN", "POLL"].includes(type)) {
+    return <ChoiceOptions type={type} options={d.options ?? []} showAnswers={showAnswers} interactive={interactive} />;
   }
 
   if (type === "OPEN") {

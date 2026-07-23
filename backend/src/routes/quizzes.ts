@@ -108,8 +108,13 @@ quizRouter.get("/:id", async (req: AuthedRequest, res) => {
     include: { slides: { orderBy: { order: "asc" } } },
   });
   if (!quiz && !admin) {
-    const inCurriculum = await prisma.lessonPlan.findFirst({ where: { quizId: id }, select: { id: true } });
-    if (inCurriculum) {
+    // O'quv dasturga YOKI workshopga biriktirilgan quizni har qanday ustoz
+    // ko'ra oladi (tahrir emas — mine=false). Workshoplar umumiy bo'lgani uchun.
+    const [inCurriculum, inWorkshop] = await Promise.all([
+      prisma.lessonPlan.findFirst({ where: { quizId: id }, select: { id: true } }),
+      prisma.workshop.findFirst({ where: { quizId: id }, select: { id: true } }),
+    ]);
+    if (inCurriculum || inWorkshop) {
       quiz = await prisma.quiz.findUnique({
         where: { id },
         include: { slides: { orderBy: { order: "asc" } } },

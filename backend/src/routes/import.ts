@@ -399,7 +399,7 @@ async function fetchWayground(url: string, cookie?: string): Promise<WgFetch> {
   }
   let json: any;
   try {
-    const r = await fetch(apiUrl, { headers });
+    const r = await fetch(apiUrl, { headers, signal: AbortSignal.timeout(20_000) });
     if (r.status === 403 || r.status === 401) {
       return {
         ok: false,

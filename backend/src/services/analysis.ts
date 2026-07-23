@@ -84,7 +84,8 @@ const monthCache = new Map<string, { rows: string[][] | null; ts: number }>();
 let defaultSheetCache: { text: string; ts: number } | null = null;
 
 async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url);
+  // 10s timeout — Sheet osilib qolsa so'rov cheksiz kutmasin
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`Sheet o'qib bo'lmadi (${res.status})`);
   return res.text();
 }

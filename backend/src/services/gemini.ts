@@ -100,7 +100,7 @@ export async function requestGeminiText(parts: unknown[], generationConfig: Reco
   for (const model of candidates) {
     res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body },
+      { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: AbortSignal.timeout(120_000) },
     );
     data = (await res.json().catch(() => ({}))) as GeminiResponse;
     if (res.ok) {

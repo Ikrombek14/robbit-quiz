@@ -197,11 +197,13 @@ export default function Join() {
     return () => clearTimeout(t);
   }, [warn]);
 
-  // taymer tiki
+  // Taymer tiki — FAQAT countdown faol bo'lganda (savol yoki amaliyot taymeri).
+  // Kutish/tugagan holatlarda o'quvchi telefonida tekin 4-render/sekund bo'lmasin.
   useEffect(() => {
+    if (endsAt <= 0 && practiceEndsAt <= 0) return;
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
-  }, []);
+  }, [endsAt, practiceEndsAt]);
 
   // Saqlangan sessiya bo'yicha o'yinga qaytish (refresh yoki socket reconnect).
   // silent=true — reconnect: xato bo'lsa sessiyani o'chirmaymiz (vaqtinchalik uzilish bo'lishi mumkin).

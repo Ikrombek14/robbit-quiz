@@ -132,7 +132,11 @@ export function ElementVisual({ el, interactive = false }: { el: SlideElement; i
 
   if (el.type === "draw") {
     const d = el as DrawElement;
-    const pts = d.points.map((p) => p.join(",")).join(" ");
+    // Buzuq/yarim saqlangan slaydda points bo'lmasligi mumkin — guard bilan
+    // butun slayd renderi yiqilmasin (ilgari `d.points.map` xato berardi).
+    const pts = (Array.isArray(d.points) ? d.points : [])
+      .map((p) => (Array.isArray(p) ? p.join(",") : ""))
+      .join(" ");
     return (
       <svg width="100%" height="100%" viewBox={`0 0 ${d.w} ${d.h}`} preserveAspectRatio="none" style={{ overflow: "visible" }}>
         <polyline points={pts} fill="none" stroke={d.color} strokeWidth={d.width} strokeLinecap="round" strokeLinejoin="round" />

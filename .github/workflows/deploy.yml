@@ -160,6 +160,23 @@ jobs:
             # startOrReload — ecosystem.config.cjs ni QAYTA o'qiydi (yangi barqarorlik
             # sozlamalari qo'llanadi); ishlayotgan bo'lsa graceful reload, yo'q bo'lsa start.
             pm2 startOrReload $APP/ecosystem.config.cjs --update-env
+
+            # --- LOG ROTATSIYA (server diskini loglar to'ldirib yubormasligi uchun) ---
+            # pm2-logrotate: har log fayli 10M dan oshsa yangilanadi, 7 tasi saqlanadi,
+            # eskilari siqiladi. Idempotent — o'rnatilgan bo'lsa qayta o'rnatmaydi.
+            pm2 install pm2-logrotate 2>/dev/null || true
+            pm2 set pm2-logrotate:max_size 10M 2>/dev/null || true
+            pm2 set pm2-logrotate:retain 7 2>/dev/null || true
+            pm2 set pm2-logrotate:compress true 2>/dev/null || true
+            pm2 set pm2-logrotate:rotateInterval '0 0 * * *' 2>/dev/null || true
+            # Bir martalik: joriy loglar juda katta bo'lsa (>50MB) — tozalab joy bo'shatamiz
+            # (loglar ma'lumot emas; slaydlar/baza bunga aloqasiz). Har deployда emas, faqat kerak bo'lsa.
+            for LF in \$HOME/.pm2/logs/robbit-quiz-out.log \$HOME/.pm2/logs/robbit-quiz-error.log; do
+              if [ -f \"\$LF\" ] && [ \"\$(stat -c%s \"\$LF\" 2>/dev/null || echo 0)\" -gt 52428800 ]; then
+                : > \"\$LF\"; echo \"🧹 Katta log tozalandi: \$LF\"
+              fi
+            done
+
             pm2 save
             echo '✅ Deploy tugadi'
             pm2 logs robbit-quiz --lines 15 --nostream

@@ -328,11 +328,14 @@ export default function Host() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quizId]);
 
-  // taymer tiki
+  // Taymer tiki — FAQAT countdown faol bo'lganda (savol yoki amaliyot taymeri).
+  // Lobby/tugagan/taymersiz holatlarda tekin 4-render/sekund bo'lmasin (zaif
+  // qurilmalarda silliqlik uchun). now faqat countdown ko'rsatishga ishlatiladi.
   useEffect(() => {
+    if (endsAt <= 0 && practiceEndsAt <= 0) return;
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
-  }, []);
+  }, [endsAt, practiceEndsAt]);
 
   // Peek-karusel uchun butun quiz slaydlarini bir marta yuklaymiz (quiz o'zgarmaydi —
   // o'yin davomida qayta yuklash shart emas)

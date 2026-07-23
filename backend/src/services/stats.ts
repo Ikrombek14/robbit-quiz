@@ -93,9 +93,11 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
 
   let res: Response;
   try {
-    res = await fetch(CSV_URL);
+    // 10s timeout — Google Sheets javob bermay osilib qolsa, so'rov cheksiz
+    // kutmasin (AbortSignal.timeout). Timeout ham catch'ga tushadi → eski kesh beriladi.
+    res = await fetch(CSV_URL, { signal: AbortSignal.timeout(10_000) });
   } catch (e) {
-    if (cache) return cache.data; // tarmoq xatosi — eski kesh yangisidan yaxshi
+    if (cache) return cache.data; // tarmoq/timeout xatosi — eski kesh yangisidan yaxshi
     throw e;
   }
   if (!res.ok) {

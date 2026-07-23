@@ -591,18 +591,44 @@ function restoreGame(sg: any): void {
   armHostGraceTimer(game, "");
 }
 
-function saveGameSnapshotInternal(): void {
+// Oldingi avtosaqlashda faol o'yin bor edimi — idle paytda bo'sh faylni qayta-qayta
+// yozib disk'ni behuda charchatmaslik uchun (o'yin bo'lmasa yozmaymiz).
+let lastSnapshotHadGames = false;
+// Bir vaqtda faqat bitta async yozuv — ustma-ust tushib qolmasin.
+let snapshotWriting = false;
+
+// DAVRIY avtosaqlash (interval) — ASINXRON va ATOMIK (temp→rename). Event loop'ni
+// BLOKLAMAYDI (avval sinxron writeFileSync har 20s butun serverni to'xtatardi).
+// Faol o'yin yo'q va oldin ham bo'lmagan bo'lsa — umuman yozmaymiz (idle disk churn yo'q).
+async function saveGameSnapshotAsync(): Promise<void> {
+  if (snapshotWriting) return; // oldingi yozuv tugamagan — bu safar o'tkazamiz
+  const hasGames = [...games.values()].some((g) => g.status !== "ended");
+  if (!hasGames && !lastSnapshotHadGames) return;
+  snapshotWriting = true;
   try {
     const list = [...games.values()].filter((g) => g.status !== "ended").map(serializeGame);
-    fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify({ savedAt: Date.now(), games: list }), "utf8");
+    lastSnapshotHadGames = list.length > 0;
+    const payload = JSON.stringify({ savedAt: Date.now(), games: list });
+    const tmp = SNAPSHOT_PATH + ".tmp";
+    await fs.promises.writeFile(tmp, payload, "utf8"); // avval vaqtincha faylga
+    await fs.promises.rename(tmp, SNAPSHOT_PATH);       // so'ng atomik almashtirish (yarim fayl qolmasin)
   } catch (e) {
     console.error("O'yin holatini saqlashda xato:", e);
+  } finally {
+    snapshotWriting = false;
   }
 }
 
 // index.ts shutdown() dan SIGTERM/SIGINT kelganda chaqiriladi (jarayon o'lishidan oldin).
+// Bu yerda SINXRON yozamiz — jarayon o'lishidan oldin kafolatlangan flush kerak.
 export function saveGameSnapshot(): void {
-  saveGameSnapshotInternal();
+  try {
+    const list = [...games.values()].filter((g) => g.status !== "ended").map(serializeGame);
+    lastSnapshotHadGames = list.length > 0;
+    fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify({ savedAt: Date.now(), games: list }), "utf8");
+  } catch (e) {
+    console.error("O'yin holatini saqlashda xato (shutdown):", e);
+  }
 }
 
 function loadGameSnapshot(): void {
@@ -630,7 +656,7 @@ function loadGameSnapshot(): void {
 export function initGamePersistence(io: Server): void {
   ioRef = io;
   loadGameSnapshot();
-  setInterval(saveGameSnapshotInternal, 20_000).unref();
+  setInterval(() => { void saveGameSnapshotAsync(); }, 20_000).unref();
 }
 
 export function registerGameHandlers(io: Server, socket: Socket) {

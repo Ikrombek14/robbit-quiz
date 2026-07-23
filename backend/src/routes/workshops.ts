@@ -1,7 +1,7 @@
 import { Router, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requireApproved, requireCanCreate, type AuthedRequest } from "../auth.js";
+import { requireAuth, requirePanel, requireCanCreate, type AuthedRequest } from "../auth.js";
 
 // Workshoplar — o'quv dasturdan alohida, UMUMIY ro'yxat. Yosh toifasi/yo'nalish
 // bo'yicha filtr yo'q: barcha workshoplar bitta ro'yxatda, nomi bilan turadi.
@@ -41,8 +41,10 @@ async function compactAll(): Promise<void> {
   }
 }
 
-// Ro'yxat — biriktirilgan slayd ma'lumoti bilan
-workshopsRouter.get("/", requireApproved, async (_req, res) => {
+// Ro'yxat — biriktirilgan slayd ma'lumoti bilan.
+// Barcha markaz xodimlari (admin, tasdiqlangan ustoz, ofis admin, kutilayotgan
+// ustoz) ko'radi — workshoplar umumiy, tasdiqni kutmaydi.
+workshopsRouter.get("/", requirePanel, async (_req, res) => {
   const workshops = await prisma.workshop.findMany({ orderBy: { order: "asc" } });
 
   const quizIds = workshops.map((w) => w.quizId).filter((id): id is string => Boolean(id));

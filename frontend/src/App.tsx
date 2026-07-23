@@ -101,14 +101,14 @@ export default function App() {
       <Route path="/profile" element={<Protected student><StudentProfile /></Protected>} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
       <Route path="/library" element={<Protected><Library /></Protected>} />
-      <Route path="/activity/:id" element={<Protected><ActivityDetail /></Protected>} />
+      <Route path="/activity/:id" element={<Protected panel><ActivityDetail /></Protected>} />
       <Route path="/quiz/:id" element={<Protected create><QuizEditor /></Protected>} />
       <Route path="/bulk-import" element={<Protected create><BulkImport /></Protected>} />
-      <Route path="/host/:quizId" element={<Protected><Host /></Protected>} />
+      <Route path="/host/:quizId" element={<Protected panel><Host /></Protected>} />
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />
       <Route path="/curriculum" element={<Protected><Curriculum /></Protected>} />
-      <Route path="/workshops" element={<Protected><Workshops /></Protected>} />
+      <Route path="/workshops" element={<Protected panel><Workshops /></Protected>} />
       <Route path="/roadmap" element={<Protected staff><Roadmap /></Protected>} />
       <Route path="/guide" element={<Protected panel><Guide /></Protected>} />
       <Route path="/teachers" element={<Protected><Teachers /></Protected>} />

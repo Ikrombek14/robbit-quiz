@@ -22,6 +22,7 @@ function publicUser(t: {
   accessOverride: boolean | null;
   teacherRequestAt?: Date | null;
   teacherRequestName?: string | null;
+  statsName?: string | null;
   createdAt: Date;
   _count?: { quizzes: number };
 }) {
@@ -37,6 +38,7 @@ function publicUser(t: {
     accessOverride: t.accessOverride,
     teacherRequestAt: t.teacherRequestAt ?? null, // ustozlik so'rovi (kutilayotgan)
     teacherRequestName: t.teacherRequestName ?? null,
+    statsName: t.statsName ?? null, // admin qo'lda biriktirgan statistika nomi (Sheet'dagi)
     envAdmin: isAdminEmail(t.email), // env ADMIN_EMAILS'dagi = super admin — huquqini olib bo'lmaydi
     quizCount: t._count?.quizzes ?? 0,
     createdAt: t.createdAt,
@@ -72,7 +74,7 @@ adminRouter.get("/users", async (req, res) => {
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
-      teacherRequestAt: true, teacherRequestName: true,
+      teacherRequestAt: true, teacherRequestName: true, statsName: true,
       _count: { select: { quizzes: true } },
     },
   });
@@ -103,7 +105,7 @@ adminRouter.post("/users/:id/teacher-request", async (req: AuthedRequest, res) =
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
-      teacherRequestAt: true, teacherRequestName: true,
+      teacherRequestAt: true, teacherRequestName: true, statsName: true,
       _count: { select: { quizzes: true } },
     },
   });
@@ -152,7 +154,39 @@ adminRouter.post("/users/:id/bind-roster", async (req: AuthedRequest, res) => {
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
-      teacherRequestAt: true, teacherRequestName: true,
+      teacherRequestAt: true, teacherRequestName: true, statsName: true,
+      _count: { select: { quizzes: true } },
+    },
+  });
+  res.json({ user: publicUser(updated) });
+});
+
+// ---- Statistika nomini qo'lda biriktirish (har qanday admin) ----
+// Ba'zi ustozlar statistika jadvalida (Google Sheet) boshqacha yozilgan yoki
+// umuman boshqa ism bilan turadi — avtomatik moslik ishlamaydi. Bu yerda admin
+// AYNAN Sheet'dagi nomni biriktiradi; account ismiga TEGILMAYDI (bind-roster'dan farqi shu).
+// statsName=null yuborilsa — biriktirish bekor qilinadi (avtomatik moslikka qaytadi).
+const statsNameSchema = z.object({ statsName: z.union([z.string(), z.null()]) });
+adminRouter.post("/users/:id/stats-name", async (req: AuthedRequest, res) => {
+  const parsed = statsNameSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Noto'g'ri so'rov" });
+    return;
+  }
+  const id = String(req.params.id);
+  const target = await prisma.teacher.findUnique({ where: { id }, select: { id: true } });
+  if (!target) {
+    res.status(404).json({ error: "Foydalanuvchi topilmadi" });
+    return;
+  }
+  const value = typeof parsed.data.statsName === "string" ? parsed.data.statsName.trim() : "";
+  const updated = await prisma.teacher.update({
+    where: { id },
+    data: { statsName: value || null },
+    select: {
+      id: true, email: true, name: true, picture: true, isAdmin: true,
+      approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
+      teacherRequestAt: true, teacherRequestName: true, statsName: true,
       _count: { select: { quizzes: true } },
     },
   });

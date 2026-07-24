@@ -73,6 +73,10 @@ export default function Users() {
   const [bindUser, setBindUser] = useState<AppUser | null>(null);
   const [roster, setRoster] = useState<RosterItem[] | null>(null); // null = hali yuklanmagan
   const [bindQ, setBindQ] = useState("");
+  // Statistika (Google Sheet) nomini qo'lda biriktirish oynasi
+  const [statsUser, setStatsUser] = useState<AppUser | null>(null);
+  const [statNames, setStatNames] = useState<string[] | null>(null); // null = hali yuklanmagan
+  const [statQ, setStatQ] = useState("");
 
   async function load() {
     setLoading(true);
@@ -193,6 +197,42 @@ export default function Users() {
       setRows((rs) => rs.map((x) => (x.id === u.id ? resp.user : x)));
       setBindUser(null);
       setMsg(`🔗 "${resp.user.name}" ro'yxatga biriktirildi`);
+      setTimeout(() => setMsg(""), 5000);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Biriktirishda xatolik");
+      setTimeout(() => setMsg(""), 6000);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Statistika nomini biriktirish oynasini ochish — Sheet nomlari birinchi ochilishda yuklanadi
+  async function openStats(u: AppUser) {
+    setStatsUser(u);
+    setStatQ("");
+    if (statNames === null) {
+      try {
+        const r = await api<{ stats: { name: string }[] }>("/stats/all");
+        setStatNames(r.stats.map((s) => s.name).filter(Boolean).sort((a, b) => a.localeCompare(b)));
+      } catch {
+        setStatNames([]);
+      }
+    }
+  }
+
+  // Statistika nomini saqlash/bekor qilish. Account ismiga TEGILMAYDI —
+  // faqat statistika/tahlil shu nom bo'yicha olinadi.
+  async function setStatsName(u: AppUser, statsName: string | null) {
+    setBusy(u.id);
+    setMsg("");
+    try {
+      const resp = await api<{ user: AppUser }>(`/admin/users/${u.id}/stats-name`, {
+        method: "POST",
+        body: JSON.stringify({ statsName }),
+      });
+      setRows((rs) => rs.map((x) => (x.id === u.id ? resp.user : x)));
+      setStatsUser(null);
+      setMsg(statsName ? `📊 "${u.name}" → statistika "${statsName}" ga biriktirildi` : `📊 "${u.name}" statistika biriktiruvi bekor qilindi`);
       setTimeout(() => setMsg(""), 5000);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Biriktirishda xatolik");
@@ -343,6 +383,24 @@ export default function Users() {
                         title="Ro'yxatdagi ustozga biriktirish — ism imlosi farq qilsa ham statistika bog'lanadi"
                       >
                         🔗 Ro'yxatga biriktirish
+                      </button>
+                    )}
+                    {/* Statistika jadvalidagi nom bilan qo'lda bog'lash — Sheet'da
+                        boshqacha yozilgan ustozlar statistikasi ko'rinishi uchun */}
+                    {(u.approved || u.isAdmin) && (
+                      <button
+                        style={{
+                          background: "none", border: "none", padding: 0, marginTop: 2, display: "block",
+                          color: u.statsName ? "var(--success)" : "var(--primary)", cursor: "pointer",
+                          fontSize: 13, textDecoration: "underline",
+                        }}
+                        disabled={working}
+                        onClick={() => openStats(u)}
+                        title={u.statsName
+                          ? `Statistika "${u.statsName}" nomiga biriktirilgan — o'zgartirish uchun bosing`
+                          : "Statistika ko'rinmayotgan bo'lsa — jadvaldagi nomga qo'lda biriktiring"}
+                      >
+                        📊 {u.statsName ? `Statistika: ${u.statsName}` : "Statistikaga biriktirish"}
                       </button>
                     )}
                   </span>
@@ -537,6 +595,95 @@ export default function Users() {
                       </span>
                       <span className="muted text-sm" style={{ whiteSpace: "nowrap" }}>
                         {taken ? "band" : sim >= 0.99 ? "aynan mos" : sim >= 0.75 ? `~${Math.round(sim * 100)}% o'xshash` : ""}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Statistika (Google Sheet) nomini qo'lda biriktirish.
+          Farqi: account ismiga TEGMAYDI — faqat statistika/tahlil shu nom bo'yicha olinadi. */}
+      {statsUser && (() => {
+        const needle = statQ.trim().toLowerCase();
+        const list = (statNames ?? [])
+          .map((n) => ({ n, sim: nameSim(statsUser.name, n) }))
+          .filter(({ n }) => !needle || n.toLowerCase().includes(needle))
+          .sort((a, b) => b.sim - a.sim)
+          .slice(0, 30);
+        return (
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.5)",
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+            }}
+            onClick={() => setStatsUser(null)}
+          >
+            <div
+              className="card"
+              style={{ maxWidth: 520, width: "100%", maxHeight: "80vh", overflow: "auto", margin: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="between" style={{ alignItems: "flex-start" }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>📊 Statistikaga biriktirish</h3>
+                  <p className="muted text-sm" style={{ margin: "4px 0 0" }}>
+                    <b>{statsUser.name}</b> ({statsUser.email})
+                  </p>
+                </div>
+                <button className="icon-btn" onClick={() => setStatsUser(null)} title="Yopish">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <p className="muted text-sm" style={{ margin: "8px 0" }}>
+                Statistika jadvalidagi <b>aniq nomni</b> tanlang. Account ismi o'zgarmaydi —
+                faqat statistika va tahlil shu nom bo'yicha olinadi.
+              </p>
+
+              {statsUser.statsName && (
+                <div className="between" style={{ gap: 8, padding: "8px 10px", borderRadius: 10, background: "var(--success-soft, rgba(40,160,90,0.10))", marginBottom: 8 }}>
+                  <span className="text-sm">Hozir: <b>{statsUser.statsName}</b></span>
+                  <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: 13 }}
+                    disabled={busy === statsUser.id}
+                    onClick={() => setStatsName(statsUser, null)}>
+                    Bekor qilish
+                  </button>
+                </div>
+              )}
+
+              <input
+                value={statQ}
+                onChange={(e) => setStatQ(e.target.value)}
+                placeholder="Jadvaldagi nomni qidirish…"
+                style={{ width: "100%", marginBottom: 8 }}
+              />
+
+              {statNames === null ? (
+                <p className="muted text-sm">Yuklanmoqda…</p>
+              ) : statNames.length === 0 ? (
+                <p className="muted text-sm">Statistika jadvali yuklanmadi. Keyinroq urinib ko'ring.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {list.map(({ n, sim }) => (
+                    <button
+                      key={n}
+                      disabled={busy === statsUser.id}
+                      onClick={() => setStatsName(statsUser, n)}
+                      className="between"
+                      style={{
+                        textAlign: "left", padding: "8px 10px", borderRadius: 10,
+                        border: "1px solid var(--surface-2, rgba(0,0,0,0.08))",
+                        background: sim >= 0.75 ? "var(--primary-soft, rgba(70,130,240,0.10))" : "transparent",
+                        cursor: "pointer", font: "inherit", color: "inherit",
+                      }}
+                      title={`Statistikaga biriktirish: ${n}`}
+                    >
+                      <span>{n}</span>
+                      <span className="muted text-sm" style={{ whiteSpace: "nowrap" }}>
+                        {sim >= 0.99 ? "aynan mos" : sim >= 0.75 ? `~${Math.round(sim * 100)}% o'xshash` : ""}
                       </span>
                     </button>
                   ))}

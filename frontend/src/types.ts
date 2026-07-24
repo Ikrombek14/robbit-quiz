@@ -195,6 +195,7 @@ export interface AppUser {
   accessOverride: boolean | null; // null = avtomatik, true = berilgan, false = olib tashlangan
   teacherRequestAt: string | null; // ustozlik so'rovi yuborilgan vaqt (kutilayotgan bo'lsa)
   teacherRequestName: string | null; // so'rovda ko'rsatilgan ism-familiya
+  statsName: string | null; // admin qo'lda biriktirgan statistika (Sheet) nomi
   envAdmin: boolean; // ADMIN_EMAILS'dagi (super admin) — huquqini panelda olib bo'lmaydi
   quizCount: number;
   createdAt: string;

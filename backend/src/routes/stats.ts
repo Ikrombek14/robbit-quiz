@@ -10,13 +10,17 @@ statsRouter.use(requireAuth);
 
 // Joriy ustozning o'z statistikasi (ism bo'yicha topiladi) — bosh sahifadagi kataklar uchun
 statsRouter.get("/me", async (req: AuthedRequest, res) => {
-  const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { name: true } });
+  const teacher = await prisma.teacher.findUnique({
+    where: { id: req.teacherId },
+    select: { name: true, statsName: true },
+  });
   if (!teacher) {
     res.json({ stat: null });
     return;
   }
   try {
-    const stat = await getStatByName(teacher.name);
+    // Admin qo'lda biriktirgan bo'lsa — AYNAN o'sha nom (avtomatik moslikdan ustun)
+    const stat = await getStatByName(teacher.statsName?.trim() || teacher.name);
     res.json({ stat });
   } catch {
     res.json({ stat: null }); // statistika manbasi vaqtincha ishlamasa — sahifa baribir ochiladi
@@ -36,7 +40,10 @@ statsRouter.get("/all", async (_req, res) => {
 // Joriy ustozning faoliyat tahlili. ?months=3|6|12 — grafiklar davri
 // (toifa talablari baribir oxirgi 3 oy bo'yicha hisoblanadi)
 statsRouter.get("/analysis/me", async (req: AuthedRequest, res) => {
-  const teacher = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { name: true } });
+  const teacher = await prisma.teacher.findUnique({
+    where: { id: req.teacherId },
+    select: { name: true, statsName: true },
+  });
   if (!teacher) {
     res.json({ analysis: null });
     return;
@@ -44,7 +51,8 @@ statsRouter.get("/analysis/me", async (req: AuthedRequest, res) => {
   const m = Number(req.query.months);
   const monthLimit = m === 6 ? 6 : m === 12 ? 12 : 3;
   try {
-    const analysis = await getAnalysisByName(teacher.name, monthLimit);
+    // Qo'lda biriktirilgan nom bo'lsa — shu ishlatiladi
+    const analysis = await getAnalysisByName(teacher.statsName?.trim() || teacher.name, monthLimit);
     res.json({ analysis });
   } catch {
     res.json({ analysis: null }); // manba vaqtincha ishlamasa — sahifa baribir ochiladi

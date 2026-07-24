@@ -1,4 +1,4 @@
-import { nameKey } from "../lib/nameKey.js";
+import { nameKey, looseNameKey } from "../lib/nameKey.js";
 import { getTargetMonths, fetchMonthRows, detectCols } from "./analysis.js";
 
 // Ustozlar statistikasi — Google Sheet'dan (CSV export) jonli olinadi va keshlanadi.
@@ -180,15 +180,65 @@ export function nameMatch(a: string, b: string): boolean {
   return matched === short.length; // qisqa ro'yxatdagi barcha tokenlar mos kelishi kerak
 }
 
-export async function getStatByName(name: string): Promise<TeacherStat | null> {
+// Ikki so'z orasidagi tahrir masofasi (Levenshtein) — "Baxromov"~"Baxramov" kabi
+// bitta harf farqini aniqlash uchun.
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i, ...Array<number>(n).fill(0)];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// Token-ma-token moslik, uzun so'zlarda 1 harf xatosiga yo'l qo'yiladi.
+// Token soni bir xil bo'lishi shart — "Ikrom" ni "Ikrom Ali" ga qo'shib yubormaslik uchun.
+function fuzzyTokenMatch(a: string, b: string): boolean {
+  const ta = looseNameKey(a).split(" ").filter(Boolean);
+  const tb = looseNameKey(b).split(" ").filter(Boolean);
+  if (ta.length === 0 || ta.length !== tb.length) return false;
+  const used = new Set<number>();
+  let ok = 0;
+  for (const t of ta) {
+    for (let i = 0; i < tb.length; i++) {
+      if (used.has(i)) continue;
+      const u = tb[i];
+      const tol = Math.min(t.length, u.length) >= 5 ? 1 : 0; // qisqa so'zlarda aniq moslik
+      if (t === u || levenshtein(t, u) <= tol) { used.add(i); ok++; break; }
+    }
+  }
+  return ok === ta.length;
+}
+
+// Ism bo'yicha yozuvni topish — statistika ham, tahlil ham shu zanjirdan foydalanadi.
+// Tartib: 1) aniq kalit  2) yumshoq kalit (apostrof/x-h)  3) prefiks (Ikrom~Ikromjon)
+// 4) bitta harf xatosi. 2–4 bosqichlarda moslik UNIKAL bo'lishi shart — aks holda
+// null qaytadi: noto'g'ri ustozning statistikasini ko'rsatgandan ko'ra hech narsa
+// ko'rsatmagan yaxshi (admin qo'lda biriktiradi).
+export function resolveByName<T extends { name: string; nameKey: string }>(list: T[], name: string): T | null {
   const key = nameKey(name);
   if (!key) return null;
-  const all = await getAllStats();
-  // 1) aniq moslik
-  const exact = all.find((s) => s.nameKey === key);
+  const exact = list.find((s) => s.nameKey === key);
   if (exact) return exact;
-  // 2) fuzzy moslik (ism tartibi / qisqa-to'liq shakl farqlari)
-  return all.find((s) => nameMatch(s.name, name)) ?? null;
+  const lk = looseNameKey(name);
+  const loose = list.filter((s) => looseNameKey(s.name) === lk);
+  if (loose.length === 1) return loose[0];
+  const pref = list.filter((s) => nameMatch(s.name, name));
+  if (pref.length === 1) return pref[0];
+  const fz = list.filter((s) => fuzzyTokenMatch(s.name, name));
+  if (fz.length === 1) return fz[0];
+  return null;
+}
+
+export async function getStatByName(name: string): Promise<TeacherStat | null> {
+  if (!nameKey(name)) return null;
+  return resolveByName(await getAllStats(), name);
 }
 
 // ---- Rejalashtirilgan yangilash: har kuni 21:00 da Sheet'dan qayta oladi ----

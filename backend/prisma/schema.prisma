@@ -32,6 +32,11 @@ model Teacher {
   // vaqti shu yerda turadi. Admin tasdiqlasa/rad etsa null'ga qaytadi.
   teacherRequestAt   DateTime?
   teacherRequestName String? // so'rovda ko'rsatilgan ism-familiya (jadvaldagi deb da'vo qilingani)
+  // Statistika jadvalidagi (Google Sheet) ANIQ ism — admin qo'lda biriktiradi.
+  // Account ismi Sheet imlosidan farq qilsa (yoki Sheet'da boshqacha yozilgan bo'lsa)
+  // avtomatik moslik ishlamaydi; shu maydon to'ldirilsa statistika/tahlil aynan
+  // shu nom bo'yicha olinadi va account ismiga TEGILMAYDI.
+  statsName String?
   createdAt DateTime @default(now())
   quizzes   Quiz[]
   folders   Folder[]

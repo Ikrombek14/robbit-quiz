@@ -1,6 +1,6 @@
 import { prisma } from "../prisma.js";
 import { nameKey } from "../lib/nameKey.js";
-import { num, parseCSV, nameMatch } from "./stats.js";
+import { num, parseCSV, nameMatch, resolveByName } from "./stats.js";
 
 // Toifa tahlili — Telegram botdagi (Robbit Statistics) mantiq sayt uchun qayta ishlangan.
 // Oylik statistika varaqlari statistika Sheet'idan nomi bo'yicha (gviz CSV) olinadi,
@@ -275,8 +275,8 @@ export async function getAllAnalyses(monthLimit = 3): Promise<{ months: string[]
 }
 
 export async function getAnalysisByName(name: string, monthLimit = 3): Promise<TeacherAnalysis | null> {
-  const key = nameKey(name);
-  if (!key) return null;
+  if (!nameKey(name)) return null;
   const { analyses } = await getAllAnalyses(monthLimit);
-  return analyses.find((a) => a.nameKey === key) ?? analyses.find((a) => nameMatch(a.name, name)) ?? null;
+  // Statistika bilan AYNAN bir xil qidiruv zanjiri (aniq → yumshoq → prefiks → 1-harf)
+  return resolveByName(analyses, name);
 }

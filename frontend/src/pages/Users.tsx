@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
@@ -59,6 +60,7 @@ interface RosterItem {
 }
 
 export default function Users() {
+  const navigate = useNavigate();
   const { teacher: me } = useAuth();
   const isSuper = me?.isSuperAdmin === true; // super admin: admin huquqi, parol, ustoz huquqi
   // Oddiy admin "slayd ruxsati" + "ofis admin"ni boshqaradi; super admin uchun barcha ustunlar.
@@ -371,38 +373,51 @@ export default function Users() {
                       )}
                     </span>
                     <span className="muted text-sm" style={{ display: "block" }}>{u.email}</span>
-                    {/* Roster bilan ism mos kelmagan foydalanuvchini qo'lda biriktirish */}
-                    {!u.approved && !u.isAdmin && (
+                    <span style={{ display: "flex", gap: 10, marginTop: 2, flexWrap: "wrap" }}>
+                      {/* Roster bilan ism mos kelmagan foydalanuvchini qo'lda biriktirish */}
+                      {!u.approved && !u.isAdmin && (
+                        <button
+                          style={{
+                            background: "none", border: "none", padding: 0,
+                            color: "var(--primary)", cursor: "pointer", fontSize: 13, textDecoration: "underline",
+                          }}
+                          disabled={working}
+                          onClick={() => openBind(u)}
+                          title="Ro'yxatdagi ustozga biriktirish — ism imlosi farq qilsa ham statistika bog'lanadi"
+                        >
+                          🔗 Ro'yxatga biriktirish
+                        </button>
+                      )}
+                      {/* Istalgan ustozning Sheets'dan olinadigan faoliyat tahliliga otish */}
                       <button
                         style={{
-                          background: "none", border: "none", padding: 0, marginTop: 2,
+                          background: "none", border: "none", padding: 0,
                           color: "var(--primary)", cursor: "pointer", fontSize: 13, textDecoration: "underline",
                         }}
-                        disabled={working}
-                        onClick={() => openBind(u)}
-                        title="Ro'yxatdagi ustozga biriktirish — ism imlosi farq qilsa ham statistika bog'lanadi"
+                        onClick={() => navigate(`/stats/tahlil?q=${encodeURIComponent(u.name)}`)}
+                        title="Bu ustozning Sheets'dagi faoliyat tahlilini ko'rish"
                       >
-                        🔗 Ro'yxatga biriktirish
+                        📈 Faoliyat tahlili
                       </button>
-                    )}
-                    {/* Statistika jadvalidagi nom bilan qo'lda bog'lash — Sheet'da
-                        boshqacha yozilgan ustozlar statistikasi ko'rinishi uchun */}
-                    {(u.approved || u.isAdmin) && (
-                      <button
-                        style={{
-                          background: "none", border: "none", padding: 0, marginTop: 2, display: "block",
-                          color: u.statsName ? "var(--success)" : "var(--primary)", cursor: "pointer",
-                          fontSize: 13, textDecoration: "underline",
-                        }}
-                        disabled={working}
-                        onClick={() => openStats(u)}
-                        title={u.statsName
-                          ? `Statistika "${u.statsName}" nomiga biriktirilgan — o'zgartirish uchun bosing`
-                          : "Statistika ko'rinmayotgan bo'lsa — jadvaldagi nomga qo'lda biriktiring"}
-                      >
-                        📊 {u.statsName ? `Statistika: ${u.statsName}` : "Statistikaga biriktirish"}
-                      </button>
-                    )}
+                      {/* Statistika jadvalidagi nom bilan qo'lda bog'lash — Sheet'da
+                          boshqacha yozilgan ustozlar statistikasi ko'rinishi uchun */}
+                      {(u.approved || u.isAdmin) && (
+                        <button
+                          style={{
+                            background: "none", border: "none", padding: 0,
+                            color: u.statsName ? "var(--success)" : "var(--primary)", cursor: "pointer",
+                            fontSize: 13, textDecoration: "underline",
+                          }}
+                          disabled={working}
+                          onClick={() => openStats(u)}
+                          title={u.statsName
+                            ? `Statistika "${u.statsName}" nomiga biriktirilgan — o'zgartirish uchun bosing`
+                            : "Statistika ko'rinmayotgan bo'lsa — jadvaldagi nomga qo'lda biriktiring"}
+                        >
+                          📊 {u.statsName ? `Statistika: ${u.statsName}` : "Statistikaga biriktirish"}
+                        </button>
+                      )}
+                    </span>
                   </span>
                 </span>
 

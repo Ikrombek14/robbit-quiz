@@ -176,12 +176,18 @@ export async function getAllAnalyses(monthLimit = 3): Promise<{ months: string[]
     prisma.rosterTeacher.findMany({ select: { name: true, nameKey: true, category: true, branch: true } }),
   ]);
 
-  // Birinchi topilmagan varaqda to'xtaymiz: varaq nomlarida yil yo'q, shuning uchun
-  // uzilishdan keyingi nomdosh varaq boshqa davrga tegishli bo'lib chiqishi mumkin
-  let cut = allSheets.findIndex((s) => !s || s.length < 2);
+  // Eng yangi (joriy) oy varag'i hali OCHILMAGAN bo'lishi mumkin — bu oddiy holat
+  // (ofis hali shu oy varag'ini yaratmagan), xato emas. Shuning uchun boshidagi
+  // bunday "yo'q" oylarni o'tkazib yuboramiz. Biroq haqiqiy ma'lumot topilgandan
+  // KEYIN uchragan uzilishda to'xtaymiz: varaq nomlarida yil yo'q, shuning uchun
+  // uzilishdan keyingi nomdosh varaq boshqa (o'tgan yilgi) davrga tegishli bo'lib
+  // chiqishi mumkin.
+  let start = 0;
+  while (start < allSheets.length && !allSheets[start]) start++;
+  let cut = allSheets.findIndex((s, i) => i >= start && (!s || s.length < 2));
   if (cut === -1) cut = allSheets.length;
-  const targetMonths = candidates.slice(0, cut);
-  const sheets = allSheets.slice(0, cut);
+  const targetMonths = candidates.slice(start, cut);
+  const sheets = allSheets.slice(start, cut);
 
   // Har bir ustoz uchun oyma-oy ko'rsatkichlarni yig'amiz (kaliti — nameKey)
   const byKey = new Map<string, { name: string; branch: string | null; months: MonthMetrics[] }>();

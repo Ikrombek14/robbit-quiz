@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
@@ -245,13 +246,17 @@ function AnalysisView({ a, dim }: { a: TeacherAnalysis; dim: boolean }) {
 export default function StatsAnalysis() {
   const { teacher } = useAuth();
   const isAdmin = teacher?.isAdmin === true;
+  const [params] = useSearchParams();
+  // Foydalanuvchilar sahifasidan "Faoliyat tahlili" bosilganda ?q=<ism> bilan keladi —
+  // shu ustoz qidiruvda oldindan to'ldirilib, topilsa avtomatik ochiladi.
+  const jumpQ = params.get("q") ?? "";
   const [mine, setMine] = useState<TeacherAnalysis | null>(null);
   const [all, setAll] = useState<TeacherAnalysis[]>([]);
   const [period, setPeriod] = useState<3 | 6 | 12>(3);
   const [loading, setLoading] = useState(true);
   const [refetching, setRefetching] = useState(false);
   const [err, setErr] = useState("");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(jumpQ);
   const [branch, setBranch] = useState("");
   // Admin panelida tanlangan ustoz (nameKey) — to'liq tahlili ochiladi
   const [selected, setSelected] = useState<string | null>(null);
@@ -278,6 +283,16 @@ export default function StatsAnalysis() {
     [all, selected],
   );
 
+  // ?q= bilan kelingan bo'lsa — ro'yxat yuklangach mos ustozni avtomatik ochamiz
+  // (aniq mos kelishi bo'lmasa, birinchi qidiruv natijasi)
+  useEffect(() => {
+    if (!jumpQ.trim() || all.length === 0 || selected) return;
+    const needle = jumpQ.trim().toLowerCase();
+    const match = all.find((a) => a.name.toLowerCase() === needle) ?? all.find((a) => a.name.toLowerCase().includes(needle));
+    if (match) setSelected(match.nameKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [all]);
+
   // Tanlangan ustoz paneli ochilganda unga suriltiramiz
   useEffect(() => {
     if (selected) document.getElementById("admin-analysis-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -301,6 +316,11 @@ export default function StatsAnalysis() {
 
   const checkLabels = all[0]?.checks ?? [];
 
+  // Foydalanuvchilar sahifasidan o'tilgan ism Sheet'da topilmadimi — adminga tushuntiramiz
+  const jumpNotFound =
+    isAdmin && jumpQ.trim().length > 0 && all.length > 0 &&
+    !all.some((a) => a.name.toLowerCase().includes(jumpQ.trim().toLowerCase()));
+
   return (
     <Shell>
       <div className="card" style={{ marginBottom: 16 }}>
@@ -310,6 +330,15 @@ export default function StatsAnalysis() {
           oylar kesimidagi ko'rsatkichlaringiz va toifa holati
         </p>
       </div>
+
+      {jumpNotFound && (
+        <div className="card" style={{ marginBottom: 16, border: "2px solid var(--tertiary, #f0c419)" }}>
+          <p className="muted" style={{ margin: 0 }}>
+            "<b>{jumpQ}</b>" nomi hisobot Sheet'ida topilmadi. Ism imlosi Sheet'dagi
+            yozuvdan farq qilishi mumkin — pastdagi jadvalda qo'lda qidirib ko'ring.
+          </p>
+        </div>
+      )}
 
       {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
       {loading && <p className="muted">Yuklanmoqda…</p>}

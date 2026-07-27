@@ -260,6 +260,8 @@ export default function StatsAnalysis() {
   const [branch, setBranch] = useState("");
   // Admin panelida tanlangan ustoz (nameKey) — to'liq tahlili ochiladi
   const [selected, setSelected] = useState<string | null>(null);
+  // Sheets sog'lomligi — joriy oy varag'i ofis tomonidan hali yaratilmagan bo'lishi mumkin
+  const [sheetsHealth, setSheetsHealth] = useState<{ expectedMonth: string; sheetsHealthy: boolean; latestMonth: string | null } | null>(null);
 
   // O'z tahlili — davr o'zgarganda qayta olinadi; eski render xira holda turadi
   useEffect(() => {
@@ -273,8 +275,13 @@ export default function StatsAnalysis() {
   // Boshqa ustozlar tahlili faqat adminga ko'rinadi (davr bilan birga yangilanadi)
   useEffect(() => {
     if (!isAdmin) return;
-    api<{ months: string[]; analyses: TeacherAnalysis[] }>(`/stats/analysis/all?months=${period}`)
-      .then((r) => setAll(r.analyses))
+    api<{ months: string[]; analyses: TeacherAnalysis[]; expectedMonth: string; sheetsHealthy: boolean }>(
+      `/stats/analysis/all?months=${period}`
+    )
+      .then((r) => {
+        setAll(r.analyses);
+        setSheetsHealth({ expectedMonth: r.expectedMonth, sheetsHealthy: r.sheetsHealthy, latestMonth: r.months[0] ?? null });
+      })
       .catch(() => {}); // admin jadvali ochilmasa ham sahifa ishlayveradi
   }, [isAdmin, period]);
 
@@ -330,6 +337,16 @@ export default function StatsAnalysis() {
           oylar kesimidagi ko'rsatkichlaringiz va toifa holati
         </p>
       </div>
+
+      {isAdmin && sheetsHealth && !sheetsHealth.sheetsHealthy && (
+        <div className="card" style={{ marginBottom: 16, border: "2px solid var(--tertiary, #f0c419)" }}>
+          <p className="muted" style={{ margin: 0 }}>
+            ⚠️ <b>{sheetsHealth.expectedMonth}</b> oyi uchun statistika varag'i Sheet'da hali yaratilmagan
+            {sheetsHealth.latestMonth ? <> — hozircha eng so'nggi mavjud ma'lumot: <b>{sheetsHealth.latestMonth}</b></> : null}.
+            Ofisdan Sheet'ga yangi oy varag'ini qo'shishni so'rang.
+          </p>
+        </div>
+      )}
 
       {jumpNotFound && (
         <div className="card" style={{ marginBottom: 16, border: "2px solid var(--tertiary, #f0c419)" }}>

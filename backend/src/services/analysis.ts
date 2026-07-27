@@ -169,7 +169,9 @@ function parseTier(category: string | null): number {
   return t >= 1 && t <= 4 ? t : 1;
 }
 
-export async function getAllAnalyses(monthLimit = 3): Promise<{ months: string[]; analyses: TeacherAnalysis[] }> {
+export async function getAllAnalyses(
+  monthLimit = 3
+): Promise<{ months: string[]; analyses: TeacherAnalysis[]; expectedMonth: string; sheetsHealthy: boolean }> {
   const candidates = getTargetMonths(new Date(), monthLimit);
   const [allSheets, roster] = await Promise.all([
     Promise.all(candidates.map((m) => fetchMonthRows(m).catch(() => null))),
@@ -277,7 +279,12 @@ export async function getAllAnalyses(monthLimit = 3): Promise<{ months: string[]
   }
 
   analyses.sort((a, b) => a.name.localeCompare(b.name, "uz"));
-  return { months: availableMonths, analyses };
+  // Sog'lomlik: 20-sana qoidasiga ko'ra ENG YANGI kutilgan varaq (candidates[0]) hali
+  // topilmagan bo'lsa (ofis oy varag'ini yaratmagan) — admin buni ko'rishi kerak,
+  // aks holda "ma'lumot yo'q" bilan "varaq yaratilmagan"ni farqlash qiyin.
+  const expectedMonth = candidates[0];
+  const sheetsHealthy = availableMonths[0] === expectedMonth;
+  return { months: availableMonths, analyses, expectedMonth, sheetsHealthy };
 }
 
 export async function getAnalysisByName(name: string, monthLimit = 3): Promise<TeacherAnalysis | null> {

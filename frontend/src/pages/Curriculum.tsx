@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import SearchBar, { type LessonHit } from "../components/SearchBar";
 import QuizPicker from "../components/QuizPicker";
+import ExtraLessonsPanel from "../components/ExtraLessonsPanel";
 import type { QuizListItem, FolderItem } from "../types";
 
 // Darslar biriktirilgan slayd PAPKASI bo'yicha ranglanadi: bir papkadagi darslar bir xil
@@ -103,6 +104,9 @@ export default function Curriculum() {
   const canCreate = !!(teacher?.isAdmin || teacher?.canCreate); // "slayd qilish" ruxsati (quizni biriktira oladi)
 
   const saved = useRef(loadSaved()).current;
+  // "Qo'shimcha darslar" — uchinchi segment. Yoqilsa yosh/yo'nalish/yil tanlash
+  // kerak emas: to'g'ridan-to'g'ri umumiy qo'shimcha darslar ro'yxati chiqadi.
+  const [extraMode, setExtraMode] = useState(false);
   const [subject, setSubject] = useState<Subject>(saved.subject === "DASTURLASH" ? "DASTURLASH" : "ROBOTEXNIKA");
   const [ageGroup, setAgeGroup] = useState<AgeGroup | null>(saved.ageGroup ?? null);
   const [year, setYear] = useState<number | null>(saved.year ?? null);
@@ -276,6 +280,7 @@ export default function Curriculum() {
 
   // Yo'nalish almashganda yosh/yil tanlovi SAQLANADI (reset qilinmaydi)
   function changeSubject(s: Subject) {
+    setExtraMode(false);
     setSubject(s);
     setShowAdd(false); setEditingId(null);
   }
@@ -472,14 +477,27 @@ export default function Curriculum() {
         <SearchBar scope="lessons" onPick={(item) => pickLesson(item as LessonHit)} placeholder="Dars qidirish…" />
       </div>
 
-      {/* Yo'nalish (subject) */}
+      {/* Yo'nalish (subject) + "Qo'shimcha darslar" (uchinchi segment) */}
       <div className="cur-seg" style={{ marginBottom: 20 }}>
         {(["ROBOTEXNIKA", "DASTURLASH"] as Subject[]).map((s) => (
-          <button key={s} className={subject === s ? "active" : ""} onClick={() => changeSubject(s)}>
+          <button key={s} className={!extraMode && subject === s ? "active" : ""} onClick={() => changeSubject(s)}>
             {s === "ROBOTEXNIKA" ? "Robotexnika" : "Dasturlash"}
           </button>
         ))}
+        <button
+          className={extraMode ? "active" : ""}
+          onClick={() => { setExtraMode(true); setShowAdd(false); setEditingId(null); }}
+          title="O'quv rejadan tashqari qo'shimcha darslar"
+        >
+          Qo'shimcha darslar
+        </button>
       </div>
+
+      {/* Qo'shimcha darslar — yosh/yo'nalish/yil tanlanmaydi, to'g'ridan-to'g'ri ro'yxat */}
+      {extraMode ? (
+        <ExtraLessonsPanel />
+      ) : (
+      <>{/* --- ODATIY O'QUV DASTUR (yosh/yil/bo'lim filtrlari bilan) --- */}
 
       {/* Yosh toifasi + o'quv yili — bitta ixcham qator, har birida dars soni */}
       <div className="cur-filters">
@@ -899,6 +917,8 @@ export default function Curriculum() {
             </>
           )}
         </div>
+      )}
+      </>
       )}
 
       {toast && <div className="cur-toast">{toast}</div>}

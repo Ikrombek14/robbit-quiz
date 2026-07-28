@@ -27,7 +27,7 @@ function parseJson(s: string): unknown {
 
 // ---- Eksport: hamma ma'lumot bitta JSON ----
 backupRouter.get("/export", async (_req, res) => {
-  const [teachers, folders, quizzes, lessonPlans, workshops, guideSections, roster, gameRecords] = await Promise.all([
+  const [teachers, folders, quizzes, lessonPlans, workshops, extraLessons, guideSections, roster, gameRecords] = await Promise.all([
     prisma.teacher.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.folder.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.quiz.findMany({
@@ -36,6 +36,7 @@ backupRouter.get("/export", async (_req, res) => {
     }),
     prisma.lessonPlan.findMany({ orderBy: [{ subject: "asc" }, { ageGroup: "asc" }, { year: "asc" }, { order: "asc" }] }),
     prisma.workshop.findMany({ orderBy: { order: "asc" } }),
+    prisma.extraLesson.findMany({ orderBy: { order: "asc" } }),
     prisma.guideSection.findMany({ orderBy: { order: "asc" } }),
     prisma.rosterTeacher.findMany({ orderBy: { order: "asc" } }),
     prisma.gameRecord.findMany({ orderBy: { playedAt: "asc" }, include: { players: true } }),
@@ -53,6 +54,7 @@ backupRouter.get("/export", async (_req, res) => {
       slides: quizzes.reduce((s, q) => s + q.slides.length, 0),
       lessonPlans: lessonPlans.length,
       workshops: workshops.length,
+      extraLessons: extraLessons.length,
       guideSections: guideSections.length,
       roster: roster.length,
       gameRecords: gameRecords.length,
@@ -67,6 +69,7 @@ backupRouter.get("/export", async (_req, res) => {
     })),
     lessonPlans,
     workshops,
+    extraLessons,
     guideSections,
     roster,
     gameRecords,
@@ -249,6 +252,25 @@ backupRouter.post("/restore", upload.single("file"), async (req: AuthedRequest, 
         },
       });
       bump(restored, "workshops");
+    }
+
+    // 5c) Qo'shimcha darslar — id bo'yicha
+    const extraLessons = section("extraLessons") as any[];
+    const existingEx = new Set((await prisma.extraLesson.findMany({ select: { id: true } })).map((e) => e.id));
+    for (const e of extraLessons) {
+      if (!e?.id || existingEx.has(e.id)) {
+        bump(skipped, "extraLessons");
+        continue;
+      }
+      await prisma.extraLesson.create({
+        data: {
+          id: e.id, order: e.order ?? 0, title: e.title ?? "?",
+          description: e.description ?? null, author: e.author ?? null,
+          quizId: e.quizId && existingQuizIds.has(e.quizId) ? e.quizId : null,
+          createdAt: e.createdAt ? new Date(e.createdAt) : undefined,
+        },
+      });
+      bump(restored, "extraLessons");
     }
 
     // 6) GuideSections — id bo'yicha

@@ -183,6 +183,20 @@ model LessonPlan {
   createdAt DateTime @default(now())
 }
 
+// Qo'shimcha darslar — O'quv dastur sahifasida alohida (uchinchi) bo'lim.
+// Yosh toifasi/yo'nalish/yilga bo'linmaydi: hammasi bitta umumiy ro'yxatda
+// dars nomi bilan turadi (`order` — ro'yxatdagi o'rni). Asosiy o'quv rejadan
+// tashqaridagi qo'shimcha mavzular uchun.
+model ExtraLesson {
+  id          String   @id @default(cuid())
+  order       Int      @default(0)
+  title       String
+  description String?  // qisqa izoh (ixtiyoriy)
+  author      String?
+  quizId      String?  // biriktrilgan slayd (ixtiyoriy)
+  createdAt   DateTime @default(now())
+}
+
 // Workshoplar — o'quv dasturdan TASHQARI, bir martalik mashg'ulotlar.
 // Ataylab yosh toifasi/yo'nalish/yilga bo'linmaydi: hammasi bitta umumiy
 // ro'yxatda, workshop nomi bilan turadi (`order` — ro'yxatdagi o'rni).

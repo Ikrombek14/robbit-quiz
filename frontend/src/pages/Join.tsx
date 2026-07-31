@@ -216,7 +216,13 @@ export default function Join() {
       if (!silent) setNickname(saved.nickname);
       getSocket().emit("player:rejoin", { pin: saved.pin, playerId: saved.playerId }, (r: any) => {
         if (r.error) {
-          if (!silent) sessionStorage.removeItem("player");
+          // Server javob berdi — demak aloqa bor va o'yin haqiqatan yo'q (tugagan yoki
+          // server qayta ishga tushib snapshot muddati o'tgan). Jimgina qotib
+          // qolmasin: sessiyani tozalab kirish formasiga qaytaramiz. (Vaqtinchalik
+          // uzilishda callback umuman kelmaydi, shuning uchun bu xavfsiz.)
+          sessionStorage.removeItem("player");
+          if (r.error !== "O'yin topilmadi") setError(r.error); // kick kabi aniq sabab bo'lsa ko'rsatamiz
+          setPhase("form");
           return;
         }
         setNickname(r.nickname ?? saved.nickname);
@@ -287,13 +293,17 @@ export default function Join() {
     getSocket().emit(
       "player:join",
       { pin, nickname },
-      (r: { ok?: boolean; playerId?: string; error?: string; settings?: typeof stuSettings; answered?: boolean }) => {
+      (r: { ok?: boolean; playerId?: string; nickname?: string; error?: string; settings?: typeof stuSettings; answered?: boolean }) => {
         if (r.error) {
           setError(r.error);
           return;
         }
         if (r.settings) setStuSettings(r.settings);
-        sessionStorage.setItem("player", JSON.stringify({ pin, playerId: r.playerId, nickname }));
+        // Server ismni o'zgartirgan bo'lishi mumkin: shu nom band bo'lsa "(2)", "(3)"…
+        // qo'shib beradi. O'z natijamizni to'g'ri topish uchun aynan o'shani ishlatamiz.
+        const finalName = r.nickname ?? nickname;
+        setNickname(finalName);
+        sessionStorage.setItem("player", JSON.stringify({ pin, playerId: r.playerId, nickname: finalName }));
         // Shu nom bilan avval kirgan va joriy savolga javob bergan bo'lsa —
         // keladigan slide:show savolni qayta ochmaydi (qayta bosa olmaydi)
         answeredCurrentRef.current = r.answered === true;

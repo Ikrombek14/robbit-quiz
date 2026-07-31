@@ -97,6 +97,7 @@ interface GameState {
   stats: Map<number, QStat>;
   saved: boolean;
   settings: GameSettings;
+  banned: Set<string>; // kick qilingan o'quvchilar (nickKey) — qayta kira olmasin
 }
 
 const games = new Map<string, GameState>();
@@ -130,6 +131,24 @@ function norm(s: string): string {
 // (katta/kichik harf va ortiqcha bo'shliqlar farq qilmaydi)
 function nickKey(s: string): string {
   return String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Bitta o'yinda ko'pi bilan shuncha o'quvchi — cheksiz join spam'idan (xotira/DoS) himoya.
+const MAX_PLAYERS = 300;
+
+// Oddiy socket-darajali rate-limit: bitta socket berilgan hodisani `windowMs` ichida
+// `max` martadan ko'p yuborsa — ortig'i o'tkazib yuboriladi (true = bloklandi).
+// HTTP'da rate-limit bor edi, socket'da yo'q edi; join/typing/flag spam'ini cheklaydi.
+function rateLimited(socket: Socket, key: string, max: number, windowMs: number): boolean {
+  const now = Date.now();
+  const store = (socket.data.rl ??= {}) as Record<string, { count: number; reset: number }>;
+  const b = store[key];
+  if (!b || now > b.reset) {
+    store[key] = { count: 1, reset: now + windowMs };
+    return false;
+  }
+  b.count += 1;
+  return b.count > max;
 }
 
 function leaderboard(game: GameState) {
@@ -538,6 +557,7 @@ function serializeGame(game: GameState) {
     stats: [...game.stats.values()],
     saved: game.saved,
     settings: game.settings,
+    banned: [...game.banned],
   };
 }
 
@@ -578,6 +598,7 @@ function restoreGame(sg: any): void {
     stats,
     saved: sg.saved === true,
     settings: sg.settings ?? defaultSettings(),
+    banned: new Set(Array.isArray(sg.banned) ? sg.banned : []),
   };
   games.set(game.pin, game);
 
@@ -708,6 +729,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       stats: new Map(),
       saved: false,
       settings: defaultSettings(),
+      banned: new Set(),
     });
     socket.join(pin);
     socket.data.role = "host";
@@ -765,6 +787,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
   });
 
   socket.on("player:join", (data: { pin: string; nickname: string }, cb?: (r: unknown) => void) => {
+    // Rate-limit: bitta socket 10 soniyada 8 martadan ko'p join qila olmaydi (spam/DoS)
+    if (rateLimited(socket, "join", 8, 10_000)) {
+      cb?.({ error: "Juda ko'p urinish. Birozdan keyin urinib ko'ring." });
+      return;
+    }
     const game = games.get(data?.pin);
     if (!game) {
       cb?.({ error: "Bunday kod topilmadi" });
@@ -778,12 +805,37 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     }
     // 40 belgi: account bilan kirganlar to'liq ism-familiyasi bilan qatnashadi
     // (20 da uzun ismlar kesilib, /profile natijalariga bog'lanmay qolardi)
-    const nickname = (data.nickname ?? "").trim().slice(0, 40) || "O'quvchi";
+    const wanted = (data.nickname ?? "").trim().slice(0, 40) || "O'quvchi";
 
-    // DUBLIKATGA QARSHI: shu nom bilan yozuv allaqachon bo'lsa, yangi o'quvchi
-    // ochmaymiz — o'sha o'quvchi qaytib kirdi deb hisoblaymiz. Aks holda qayta
-    // kirgan o'quvchi "toza" yozuv olib, javob berganini unutib qayta bosardi.
-    const existing = [...game.players.values()].find((p) => nickKey(p.nickname) === nickKey(nickname));
+    // KICK: bu nom bilan chiqarilgan o'quvchi qayta kira olmaydi
+    if (game.banned.has(nickKey(wanted))) {
+      cb?.({ error: "Siz bu o'yindan chiqarilgansiz" });
+      return;
+    }
+
+    // DUBLIKAT ISM MANTIG'I:
+    //  - Xuddi shu nomli yozuv bor va UZILGAN bo'lsa → o'sha o'quvchi sessiyasini
+    //    yo'qotib qayta kirdi deb hisoblaymiz (ball/javob tarixi tiklanadi).
+    //  - Agar shu nomli o'quvchi hali ULANIB tursa → bu BOSHQA o'quvchi (masalan
+    //    sinfda ikkita "Ali"). Unga "(2)", "(3)"... qo'shib alohida yozuv beramiz,
+    //    aks holda ikkalasi bitta yozuvni buzib, ballari aralashib ketardi.
+    const existing = [...game.players.values()].find(
+      (p) => nickKey(p.nickname) === nickKey(wanted) && !p.connected,
+    );
+    let nickname = wanted;
+    if (!existing) {
+      const taken = new Set([...game.players.values()].map((p) => nickKey(p.nickname)));
+      if (taken.has(nickKey(nickname))) {
+        let n = 2;
+        while (taken.has(nickKey(`${wanted} (${n})`))) n += 1;
+        nickname = `${wanted} (${n})`;
+      }
+      // Xotira/DoS himoyasi: bitta o'yinda cheklangan sondan ortiq o'quvchi bo'lmasin
+      if (game.players.size >= MAX_PLAYERS) {
+        cb?.({ error: "O'yin to'la" });
+        return;
+      }
+    }
     const player: GamePlayer = existing ?? {
       playerId: genId(),
       socketId: socket.id,
@@ -823,7 +875,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     socket.data.pin = data.pin;
     socket.data.playerId = playerId;
     cb?.({
-      ok: true, playerId, settings: clientSettings(game), status: game.status, mode: game.mode,
+      ok: true, playerId, nickname: player.nickname, settings: clientSettings(game), status: game.status, mode: game.mode,
       // Joriy savolga allaqachon javob bergan bo'lsa — client savolni ochmaydi
       answered: game.status === "active" && game.mode === "LIVE" && player.answeredCurrent,
     });
@@ -854,6 +906,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     const player = game?.players.get(data?.playerId);
     if (!game || !player) {
       cb?.({ error: "O'yin topilmadi" });
+      return;
+    }
+    // Kick qilingan o'quvchi eski sessiyasi bilan qaytib kira olmasin
+    if (game.banned.has(nickKey(player.nickname))) {
+      cb?.({ error: "Siz bu o'yindan chiqarilgansiz" });
       return;
     }
     player.socketId = socket.id;
@@ -912,12 +969,13 @@ export function registerGameHandlers(io: Server, socket: Socket) {
   socket.on(
     "player:typing",
     (data: { pin: string; wpm: number; acc: number }, cb?: (r: { totalBonus: number; gained: number }) => void) => {
+      if (rateLimited(socket, "typing", 20, 10_000)) return; // spam himoyasi
       const game = games.get(data?.pin);
       const player = game?.players.get(String(socket.data.playerId ?? ""));
       if (!game || !player || game.status !== "lobby") return;
       const wpm = Math.round(Number(data?.wpm));
       const acc = Math.round(Number(data?.acc));
-      if (!Number.isFinite(wpm) || wpm <= 0 || wpm > 400) return; // real bo'lmagan qiymatlar
+      if (!Number.isFinite(wpm) || wpm <= 0 || wpm > 250) return; // real bo'lmagan (inson ~<250 WPM)
       if (!Number.isFinite(acc) || acc < 0 || acc > 100) return;
       if (wpm > player.typingWpm) {
         player.typingWpm = wpm;
@@ -998,6 +1056,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
 
   // TEST: o'quvchi javob beradi → keyingi savol (yoki natija) qaytadi
   socket.on("test:answer", (data: { pin: string; answer: any }, cb?: (r: unknown) => void) => {
+    if (rateLimited(socket, "testAnswer", 40, 10_000)) { cb?.({ error: "Juda tez" }); return; }
     const game = games.get(data?.pin);
     if (!game || game.mode !== "TEST" || game.status !== "active") {
       cb?.({ error: "Faol test yo'q" });
@@ -1043,6 +1102,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       game.status = "ended";
       await persistGame(game);
       io.to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game) });
+      // MUHIM: tugagan o'yinni xotiradan o'chiramiz (host:end kabi) — aks holda
+      // "Yakunlash" bilan tugatilgan har o'yin games Map'da qolib xotira shishardi.
+      games.delete(game.pin);
       return;
     }
     game.currentIndex += 1;
@@ -1091,6 +1153,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     const player = game.players.get(data?.playerId);
     if (!player) return;
     const kickedSocketId = player.socketId;
+    // Chiqarilgan o'quvchi qayta kirmasligi uchun ismini ban ro'yxatiga qo'shamiz
+    game.banned.add(nickKey(player.nickname));
     game.players.delete(data.playerId);
     // Chiqarilgan o'quvchiga xabar beramiz va o'yindan uzamiz
     io.to(kickedSocketId).emit("player:kicked");
@@ -1168,6 +1232,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
   });
 
   socket.on("player:answer", (data: { pin: string; answer: any }) => {
+    if (rateLimited(socket, "answer", 30, 10_000)) return; // spam himoyasi (bir savolga bitta javob yetarli)
     const game = games.get(data?.pin);
     if (!game || game.status !== "active") return;
     const player = game.players.get(socket.data.playerId);
@@ -1236,6 +1301,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
 
   // Anti-cheat: o'quvchi fullscreen'dan chiqdi / boshqa tabga o'tdi
   socket.on("player:flag", (data: { pin: string; type: string }) => {
+    if (rateLimited(socket, "flag", 20, 10_000)) return; // spam himoyasi
     const game = games.get(data?.pin);
     if (!game || !game.settings.antiCheat) return;
     const player = game.players.get(socket.data.playerId);

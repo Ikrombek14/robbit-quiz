@@ -37,9 +37,44 @@ model Teacher {
   // avtomatik moslik ishlamaydi; shu maydon to'ldirilsa statistika/tahlil aynan
   // shu nom bo'yicha olinadi va account ismiga TEGILMAYDI.
   statsName String?
+  // Ustoz o'zi to'ldiradigan profil ma'lumotlari (toifa oshirish arizasi uchun ham ishlatiladi)
+  phone     String?
   createdAt DateTime @default(now())
   quizzes   Quiz[]
   folders   Folder[]
+  certificates      TeacherCertificate[]
+  tierApplications  TierApplication[]
+}
+
+// Ustoz profiliga yuklagan sertifikatlar (til, texnik kurslar va h.k.) — toifa
+// oshirish arizasida "hujjat" sifatida bog'lanadi.
+model TeacherCertificate {
+  id        String   @id @default(cuid())
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  title     String
+  fileUrl   String
+  createdAt DateTime @default(now())
+}
+
+// Toifa oshirish arizasi. checklist/kpiSnapshot — topshirilgan lahzadagi holatning
+// JSON String sifatidagi "suratga olish"i: keyinchalik Sheet ma'lumotlari yoki
+// talablar o'zgarsa ham, ariza o'sha vaqtdagi haqiqiy holatni saqlab qoladi.
+model TierApplication {
+  id             String    @id @default(cuid())
+  teacherId      String
+  teacher        Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  fromTier       Int
+  toTier         Int
+  note           String? // ustozning qo'shimcha izohi / havolalari
+  checklist      String // JSON: [{key,label,checked}]
+  certificateIds String // JSON: string[] — ariza bilan bog'langan sertifikat id'lari
+  kpiSnapshot    String // JSON: TierCheck[] — topshirish vaqtidagi avtomatik ko'rsatkichlar
+  status         String    @default("PENDING") // PENDING | INTERVIEW | APPROVED | REJECTED
+  adminNote      String?
+  createdAt      DateTime  @default(now())
+  reviewedAt     DateTime?
+  reviewedBy     String?
 }
 
 // Kutubxona papkasi — loyihalarni guruhlash uchun. Egasiga tegishli.

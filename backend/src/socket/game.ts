@@ -124,8 +124,18 @@ function shuffle<T>(arr: T[]): T[] {
   }
   return a;
 }
+// Ochiq javob (OPEN/FILL_BLANK) taqqoslash uchun normallashtirish.
+// O'zbekchada apostrof telefon/kompyuter klaviaturasida har xil belgi bilan
+// chiqadi (' ' ' ʻ ʼ ` ´) — ko'zga bir xil, kompyuterga boshqa harf. Shu sabab
+// haqiqiy to'g'ri javob "xato" bo'lib qolardi. Barcha apostrof variantlarini
+// olib tashlab (o'quvchi umuman yozmasa ham mos kelsin), harflarni kichiklashtirib,
+// ortiqcha bo'shliqlarni siqib taqqoslaymiz.
 function norm(s: string): string {
-  return String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return String(s ?? "")
+    .toLowerCase()
+    .replace(/['‘’ʻʼ′`´]/g, "") // apostrof/tutuq variantlari
+    .replace(/\s+/g, " ")
+    .trim();
 }
 // Ism kaliti — bir xil o'quvchi qayta kirganda tanib olish uchun
 // (katta/kichik harf va ortiqcha bo'shliqlar farq qilmaydi)

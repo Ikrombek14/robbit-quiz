@@ -510,6 +510,12 @@ export default function Join() {
         <div className="present-stage">
           {qTimer}
           <h2 className="q-text">{slide.text}</h2>
+          {multi && (
+            <div className="multi-hint">
+              <span className="material-symbols-outlined">checklist</span>
+              Bir nechta to'g'ri javob bor — kerakli variantlarni belgilab, «Tasdiqlash»ni bosing
+            </div>
+          )}
           {slide.imageUrl && (
             <div className="center">
               <img src={slide.imageUrl} alt="" style={{ maxHeight: 220, borderRadius: 12 }} />
@@ -536,7 +542,7 @@ export default function Join() {
             <>
               <div className="spacer" />
               <button className="btn btn-lg btn-block" disabled={selected.length === 0} onClick={() => submit(selected)}>
-                Tasdiqlash
+                Tasdiqlash{selected.length > 0 ? ` (${selected.length} ta belgilandi)` : ""}
               </button>
             </>
           )}

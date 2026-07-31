@@ -187,6 +187,10 @@ export default function TestRunner({ pin, nickname }: { pin: string; nickname: s
         {/* MULTIPLE — bir nechta tanlab tasdiqlaydi */}
         {t === "MULTIPLE" && (
           <>
+            <div className="multi-hint">
+              <span className="material-symbols-outlined">checklist</span>
+              Bir nechta to'g'ri javob bor — kerakli variantlarni belgilab, «Keyingi»ni bosing
+            </div>
             <div className="answers-grid">
               {opts.map((o, i) => (
                 <button
@@ -202,7 +206,7 @@ export default function TestRunner({ pin, nickname }: { pin: string; nickname: s
             </div>
             <div className="spacer" />
             <button className="btn btn-lg btn-block" disabled={selected.length === 0} onClick={() => submit(selected)}>
-              Keyingi →
+              {selected.length > 0 ? `Keyingi → (${selected.length} ta belgilandi)` : "Keyingi →"}
             </button>
           </>
         )}

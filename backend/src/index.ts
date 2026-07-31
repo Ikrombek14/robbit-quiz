@@ -28,6 +28,8 @@ import { teachersRouter } from "./routes/teachers.js";
 import { adminRouter } from "./routes/admin.js";
 import { backupRouter } from "./routes/backup.js";
 import { statsRouter } from "./routes/stats.js";
+import { profileRouter } from "./routes/profile.js";
+import { tierApplicationsRouter } from "./routes/tierApplications.js";
 import { startStatsScheduler } from "./services/stats.js";
 
 const app = express();
@@ -103,6 +105,7 @@ app.use("/api/auth/google", authLimiter);
 app.use("/api/pdf", aiLimiter);
 app.use("/api/import", importLimiter);
 app.use("/api/upload", uploadLimiter);
+app.use("/api/profile/upload", uploadLimiter);
 
 // Yuklangan fayllar (PDF sahifalari rasmlari) — inline, sniff'siz
 // Rate-limited: ommaviy yuklab olishni cheklaydi
@@ -142,6 +145,8 @@ app.use("/api/teachers", teachersRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/backup", backupRouter);
 app.use("/api/stats", statsRouter);
+app.use("/api/profile", profileRouter);
+app.use("/api/tier-applications", tierApplicationsRouter);
 
 // Production: tayyor frontend'ni (statik) shu serverdan beramiz — bitta port, bitta origin
 if (config.production) {

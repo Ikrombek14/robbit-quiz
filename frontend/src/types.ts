@@ -275,3 +275,52 @@ export interface LeaderRow {
   score: number;
   lastGain: number;
 }
+
+// Toifa oshirish arizasi
+export interface TeacherCertificate {
+  id: string;
+  title: string;
+  fileUrl: string;
+  createdAt: string;
+}
+
+export interface ChecklistItem {
+  key: string;
+  label: string;
+  checked?: boolean;
+}
+
+export interface TierApplicationStatus {
+  found: boolean;
+  isExpert?: boolean;
+  fromTier?: number;
+  toTier?: number;
+  roleName?: string | null;
+  minExperience?: string | null;
+  kpiChecks?: TierCheck[];
+  checklist?: ChecklistItem[];
+  windowOpen?: boolean;
+  pending: { id: string; toTier: number; status: string; createdAt: string } | null;
+}
+
+export interface TierApplication {
+  id: string;
+  teacherId: string;
+  fromTier: number;
+  toTier: number;
+  note: string | null;
+  checklist: string; // JSON
+  certificateIds: string; // JSON
+  kpiSnapshot: string; // JSON
+  status: "PENDING" | "INTERVIEW" | "APPROVED" | "REJECTED";
+  adminNote: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  teacher?: { id: string; name: string; email: string; phone: string | null; picture: string | null };
+}
+
+// Admin ro'yxatida — sertifikat id'lari to'liq {title,fileUrl} bilan almashtirilgan holda keladi
+export interface TierApplicationAdmin extends TierApplication {
+  certificates: { id: string; title: string; fileUrl: string }[];
+}

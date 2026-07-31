@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import { TONE_STYLE } from "../stats";
 import type { MonthMetrics, TeacherAnalysis, TierCheck } from "../types";
-
-// Ariza formasi (keyingi toifaga o'tish) — Telegram botdagi havola bilan bir xil
-const ARIZA_URL = "https://forms.gle/n6pFxqYEfsyF6HDYA";
 
 // Faoliyat metrikalari: goodUp — qiymat oshsa yaxshimi (o'zgarish rangini aniqlaydi)
 const METRIC_DEFS: { key: keyof Omit<MonthMetrics, "month">; label: string; unit: string; goodUp: boolean }[] = [
@@ -206,7 +203,7 @@ function TierCard({ a }: { a: TeacherAnalysis }) {
           {a.passed ? (
             <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span style={{ fontWeight: 700, color: TONE_STYLE.good.fg }}>✅ Barcha talablarga javob berdingiz!</span>
-              <a className="btn btn-primary" href={ARIZA_URL} target="_blank" rel="noreferrer">📝 Ariza topshirish</a>
+              <Link className="btn btn-primary" to="/tier-application">📝 Ariza topshirish</Link>
             </div>
           ) : (
             <p className="muted" style={{ margin: "10px 0 0", fontSize: 13 }}>

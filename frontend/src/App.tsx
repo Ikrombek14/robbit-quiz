@@ -26,6 +26,8 @@ import Settings from "./pages/Settings";
 import BulkImport from "./pages/BulkImport";
 import StudentProfile from "./pages/StudentProfile";
 import Backup from "./pages/Backup";
+import TierApplication from "./pages/TierApplication";
+import TierApplicationsAdmin from "./pages/TierApplicationsAdmin";
 import Shell from "./components/Shell";
 
 // Kirish darvozalari:
@@ -116,6 +118,8 @@ export default function App() {
       <Route path="/backup" element={<Protected admin><Backup /></Protected>} />
       <Route path="/stats" element={<Protected><Stats /></Protected>} />
       <Route path="/stats/tahlil" element={<Protected><StatsAnalysis /></Protected>} />
+      <Route path="/tier-application" element={<Protected><TierApplication /></Protected>} />
+      <Route path="/tier-applications" element={<Protected admin><TierApplicationsAdmin /></Protected>} />
       <Route path="/settings" element={<Protected panel><Settings /></Protected>} />
 
       <Route path="*" element={<NotFound />} />

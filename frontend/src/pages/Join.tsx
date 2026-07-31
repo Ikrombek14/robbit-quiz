@@ -117,14 +117,14 @@ export default function Join() {
       setResults({ leaderboard: d.leaderboard });
       if (d.hostLeft) setError("O'qituvchi o'yindan chiqdi");
       setPhase("ended");
-      localStorage.removeItem("player");
+      sessionStorage.removeItem("player");
     };
     const onFs = () => {
       document.documentElement.requestFullscreen?.().catch(() => {});
     };
     const onSettings = (s: { antiCheat: boolean; disableRightClick: boolean; serious: boolean }) => setStuSettings(s);
     const onKicked = () => {
-      localStorage.removeItem("player");
+      sessionStorage.removeItem("player");
       setError("Sizni o'qituvchi o'yindan chiqardi");
       setPhase("kicked");
     };
@@ -208,7 +208,7 @@ export default function Join() {
   // Saqlangan sessiya bo'yicha o'yinga qaytish (refresh yoki socket reconnect).
   // silent=true — reconnect: xato bo'lsa sessiyani o'chirmaymiz (vaqtinchalik uzilish bo'lishi mumkin).
   function rejoinFromStorage(silent = false) {
-    const raw = localStorage.getItem("player");
+    const raw = sessionStorage.getItem("player");
     if (!raw) return;
     try {
       const saved = JSON.parse(raw) as { pin: string; playerId: string; nickname: string };
@@ -216,7 +216,7 @@ export default function Join() {
       if (!silent) setNickname(saved.nickname);
       getSocket().emit("player:rejoin", { pin: saved.pin, playerId: saved.playerId }, (r: any) => {
         if (r.error) {
-          if (!silent) localStorage.removeItem("player");
+          if (!silent) sessionStorage.removeItem("player");
           return;
         }
         setNickname(r.nickname ?? saved.nickname);
@@ -229,12 +229,27 @@ export default function Join() {
         // active bo'lsa phase'ni server yuboradigan slide:show / test:begin o'zi o'rnatadi
       });
     } catch {
-      localStorage.removeItem("player");
+      sessionStorage.removeItem("player");
     }
   }
 
-  // Qayta ulanish — sahifa yangilansa o'yinga qaytadi
+  // Qayta ulanish — FAQAT o'sha tabda sahifa yangilansa o'yinga qaytadi.
+  // sessionStorage ishlatamiz (localStorage EMAS): u har tab uchun alohida va
+  // brauzer/tab yopilganda o'chadi — shuning uchun brauzerni yopib yangi oynada
+  // kod terganda eski o'yinga avtomatik kirib qolish muammosi bo'lmaydi.
   useEffect(() => {
+    // Avvalgi versiyadan localStorage'da qolgan sessiyani tozalaymiz (u oynalar
+    // orasida umumiy bo'lgani uchun aynan shu bug manbai edi).
+    try { localStorage.removeItem("player"); } catch { /* ignore */ }
+    // Yangi o'yin havolasi (?pin=) bilan kelingan va saqlangan sessiya boshqa
+    // o'yinniki bo'lsa — eski o'yinga tortmaymiz (yangi kodga ustunlik beramiz).
+    const urlPin = params.get("pin") ?? params.get("gc");
+    if (urlPin) {
+      try {
+        const raw = sessionStorage.getItem("player");
+        if (raw && JSON.parse(raw).pin !== urlPin) return;
+      } catch { /* ignore */ }
+    }
     rejoinFromStorage(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -278,7 +293,7 @@ export default function Join() {
           return;
         }
         if (r.settings) setStuSettings(r.settings);
-        localStorage.setItem("player", JSON.stringify({ pin, playerId: r.playerId, nickname }));
+        sessionStorage.setItem("player", JSON.stringify({ pin, playerId: r.playerId, nickname }));
         // Shu nom bilan avval kirgan va joriy savolga javob bergan bo'lsa —
         // keladigan slide:show savolni qayta ochmaydi (qayta bosa olmaydi)
         answeredCurrentRef.current = r.answered === true;

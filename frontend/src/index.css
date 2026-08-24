@@ -215,6 +215,38 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 }
 .multi-hint .material-symbols-outlined { font-size: 24px; flex-shrink: 0; }
 
+/* ---------- Amaliyot dasturi (ustozlik amaliyoti vazifalari) ---------- */
+.pt-cat {
+  background: #2f6b3f; color: #fff;
+  font-weight: 800; font-size: 18px;
+  padding: 10px 18px; border-radius: 10px;
+  letter-spacing: 0.01em;
+}
+.pt-card {
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: 16px; padding: 18px 20px;
+}
+.pt-title { font-weight: 800; font-size: 17px; margin-bottom: 12px; color: var(--ink); }
+.pt-label {
+  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11.5px; font-weight: 800; color: var(--primary);
+  margin: 14px 0 6px;
+}
+.pt-card > .pt-label:first-child, .pt-title + .pt-label { margin-top: 0; }
+.pt-tasks { font-size: 15.5px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+.pt-num { font-weight: 800; color: var(--primary); }
+.pt-video {
+  position: relative; width: 100%; aspect-ratio: 16 / 9;
+  margin-top: 12px; border-radius: 12px; overflow: hidden; background: #000;
+}
+.pt-video iframe, .pt-video video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.pt-res { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.pt-res li { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
+.pt-res li .material-symbols-outlined { font-size: 18px; color: var(--muted); flex-shrink: 0; }
+.pt-res a { color: var(--primary); text-decoration: none; font-weight: 600; word-break: break-word; }
+.pt-res a:hover { text-decoration: underline; }
+.pt-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px; }
+
 /* ---------- Javob kartalari (oq + rangli A/B/C/D) ---------- */
 .answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
 /* Telefonda javoblar bitta ustun — matn siqilib qolmasin, barmoq bilan oson bosilsin */

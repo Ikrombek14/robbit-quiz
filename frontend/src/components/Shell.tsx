@@ -32,6 +32,7 @@ const NAV: NavItem[] = [
   { key: "home", label: "Bosh sahifa", icon: "home", path: "/dashboard", mobileHide: false, show: canApproved },
   { key: "curriculum", label: "O'quv dastur", icon: "menu_book", path: "/curriculum", mobileHide: false, show: canApproved },
   { key: "workshops", label: "Workshoplar", icon: "groups", path: "/workshops", mobileHide: false, show: canPanel },
+  { key: "practice", label: "Amaliyot dasturi", icon: "assignment", path: "/practice", mobileHide: false, show: canPanel },
   { key: "roadmap", label: "Yo'l xaritasi", icon: "route", path: "/roadmap", mobileHide: false, show: canStaff },
   { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library", mobileHide: false, show: canCreateNav },
   { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false, show: canApproved },

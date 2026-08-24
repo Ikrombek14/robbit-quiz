@@ -324,3 +324,19 @@ export interface TierApplication {
 export interface TierApplicationAdmin extends TierApplication {
   certificates: { id: string; title: string; fileUrl: string }[];
 }
+
+// Ustozlik amaliyoti vazifasi — kategoriya bo'yicha guruhlanadi
+export interface PracticeResource {
+  label: string;
+  url: string;
+}
+export interface PracticeTask {
+  id: string;
+  category: string; // guruh sarlavhasi (Scratch, Python...)
+  order: number;
+  title: string; // qisqa nom (ixtiyoriy)
+  tasks: string; // "Bajariladigan topshiriqlar" matni
+  videoUrl: string | null; // embed havolasi
+  resources: PracticeResource[]; // "Kerakli resurslar"
+  createdAt: string;
+}

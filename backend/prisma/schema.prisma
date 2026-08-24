@@ -232,6 +232,21 @@ model ExtraLesson {
   createdAt   DateTime @default(now())
 }
 
+// Ustozlik amaliyoti vazifalari — kategoriya bo'yicha guruhlangan amaliy
+// topshiriqlar (Scratch, Python, Arduino...). Har vazifada bajariladigan
+// topshiriq matni, video havolasi (embed) va kerakli resurslar (havolalar).
+// Yangi ustozlar (amaliyotchilar) ko'radi, admin boshqaradi.
+model PracticeTask {
+  id        String   @id @default(cuid())
+  category  String   @default("") // guruh sarlavhasi: "Scratch", "Python"...
+  order     Int      @default(0)  // umumiy tartib (render'da kategoriya bo'yicha guruhlanadi)
+  title     String   @default("") // qisqa nom (ixtiyoriy)
+  tasks     String   @default("") // "Bajariladigan topshiriqlar" — matn (ko'p qatorli)
+  videoUrl  String?  // video embed havolasi (YouTube/Vimeo/...)
+  resources String   @default("[]") // JSON: [{label,url}] — "Kerakli resurslar"
+  createdAt DateTime @default(now())
+}
+
 // Workshoplar — o'quv dasturdan TASHQARI, bir martalik mashg'ulotlar.
 // Ataylab yosh toifasi/yo'nalish/yilga bo'linmaydi: hammasi bitta umumiy
 // ro'yxatda, workshop nomi bilan turadi (`order` — ro'yxatdagi o'rni).

@@ -16,6 +16,7 @@ import Reports from "./pages/Reports";
 import ReportDetail from "./pages/ReportDetail";
 import Curriculum from "./pages/Curriculum";
 import Workshops from "./pages/Workshops";
+import Practice from "./pages/Practice";
 import Roadmap from "./pages/Roadmap";
 import Guide from "./pages/Guide";
 import Teachers from "./pages/Teachers";
@@ -111,6 +112,7 @@ export default function App() {
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />
       <Route path="/curriculum" element={<Protected><Curriculum /></Protected>} />
       <Route path="/workshops" element={<Protected panel><Workshops /></Protected>} />
+      <Route path="/practice" element={<Protected panel><Practice /></Protected>} />
       <Route path="/roadmap" element={<Protected staff><Roadmap /></Protected>} />
       <Route path="/guide" element={<Protected panel><Guide /></Protected>} />
       <Route path="/teachers" element={<Protected><Teachers /></Protected>} />

@@ -27,7 +27,7 @@ function parseJson(s: string): unknown {
 
 // ---- Eksport: hamma ma'lumot bitta JSON ----
 backupRouter.get("/export", async (_req, res) => {
-  const [teachers, folders, quizzes, lessonPlans, workshops, extraLessons, guideSections, roster, gameRecords] = await Promise.all([
+  const [teachers, folders, quizzes, lessonPlans, workshops, extraLessons, practiceTasks, guideSections, roster, gameRecords] = await Promise.all([
     prisma.teacher.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.folder.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.quiz.findMany({
@@ -37,6 +37,7 @@ backupRouter.get("/export", async (_req, res) => {
     prisma.lessonPlan.findMany({ orderBy: [{ subject: "asc" }, { ageGroup: "asc" }, { year: "asc" }, { order: "asc" }] }),
     prisma.workshop.findMany({ orderBy: { order: "asc" } }),
     prisma.extraLesson.findMany({ orderBy: { order: "asc" } }),
+    prisma.practiceTask.findMany({ orderBy: { order: "asc" } }),
     prisma.guideSection.findMany({ orderBy: { order: "asc" } }),
     prisma.rosterTeacher.findMany({ orderBy: { order: "asc" } }),
     prisma.gameRecord.findMany({ orderBy: { playedAt: "asc" }, include: { players: true } }),
@@ -55,6 +56,7 @@ backupRouter.get("/export", async (_req, res) => {
       lessonPlans: lessonPlans.length,
       workshops: workshops.length,
       extraLessons: extraLessons.length,
+      practiceTasks: practiceTasks.length,
       guideSections: guideSections.length,
       roster: roster.length,
       gameRecords: gameRecords.length,
@@ -70,6 +72,7 @@ backupRouter.get("/export", async (_req, res) => {
     lessonPlans,
     workshops,
     extraLessons,
+    practiceTasks,
     guideSections,
     roster,
     gameRecords,
@@ -271,6 +274,25 @@ backupRouter.post("/restore", upload.single("file"), async (req: AuthedRequest, 
         },
       });
       bump(restored, "extraLessons");
+    }
+
+    // 5d) Amaliyot vazifalari — id bo'yicha
+    const practiceTasks = section("practiceTasks") as any[];
+    const existingPt = new Set((await prisma.practiceTask.findMany({ select: { id: true } })).map((p) => p.id));
+    for (const p of practiceTasks) {
+      if (!p?.id || existingPt.has(p.id)) {
+        bump(skipped, "practiceTasks");
+        continue;
+      }
+      await prisma.practiceTask.create({
+        data: {
+          id: p.id, order: p.order ?? 0, category: p.category ?? "",
+          title: p.title ?? "", tasks: p.tasks ?? "", videoUrl: p.videoUrl ?? null,
+          resources: typeof p.resources === "string" ? p.resources : JSON.stringify(p.resources ?? []),
+          createdAt: p.createdAt ? new Date(p.createdAt) : undefined,
+        },
+      });
+      bump(restored, "practiceTasks");
     }
 
     // 6) GuideSections — id bo'yicha

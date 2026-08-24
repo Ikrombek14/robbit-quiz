@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../api";
+import { api, getToken } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import type { PracticeTask, PracticeResource } from "../types";
@@ -12,7 +12,7 @@ import type { PracticeTask, PracticeResource } from "../types";
 function toEmbed(raw: string): { embed: string | null; file: string | null } {
   const url = String(raw ?? "").trim();
   if (!url) return { embed: null, file: null };
-  if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(url)) return { embed: null, file: url };
+  if (/\.(mp4|webm|ogg|ogv|mov|m4v)(\?.*)?$/i.test(url)) return { embed: null, file: url };
   // YouTube
   let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
   if (m) return { embed: `https://www.youtube.com/embed/${m[1]}`, file: null };
@@ -28,9 +28,26 @@ interface EditState {
   title: string;
   tasks: string;
   videoUrl: string;
+  imageUrl: string;
   resources: PracticeResource[];
 }
-const emptyEdit = (): EditState => ({ category: "", title: "", tasks: "", videoUrl: "", resources: [] });
+const emptyEdit = (): EditState => ({ category: "", title: "", tasks: "", videoUrl: "", imageUrl: "", resources: [] });
+
+// Media (rasm/video) faylini serverga yuklaydi -> {url}
+async function uploadMedia(file: File): Promise<{ url: string; mime: string }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch("/api/upload/media", {
+    method: "POST",
+    headers: { authorization: `Bearer ${getToken()}` },
+    body: fd,
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error || "Yuklashda xatolik");
+  }
+  return res.json();
+}
 
 export default function Practice() {
   const { teacher } = useAuth();
@@ -50,6 +67,25 @@ export default function Practice() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<EditState>(emptyEdit());
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState<"video" | "image" | null>(null);
+
+  // Fayl tanlanganda serverga yuklab, videoUrl/imageUrl ga yozamiz
+  async function pickFile(kind: "video" | "image", e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // bir xil faylni qayta tanlash mumkin bo'lsin
+    if (!file) return;
+    setUploading(kind);
+    try {
+      const r = await uploadMedia(file);
+      if (kind === "video") setForm((f) => ({ ...f, videoUrl: r.url }));
+      else setForm((f) => ({ ...f, imageUrl: r.url }));
+      showToast("✅ Yuklandi");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Yuklashda xatolik");
+    } finally {
+      setUploading(null);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,7 +104,8 @@ export default function Practice() {
   function openEdit(t: PracticeTask) {
     setForm({
       category: t.category, title: t.title, tasks: t.tasks,
-      videoUrl: t.videoUrl ?? "", resources: t.resources.length ? t.resources : [],
+      videoUrl: t.videoUrl ?? "", imageUrl: t.imageUrl ?? "",
+      resources: t.resources.length ? t.resources : [],
     });
     setEditingId(t.id);
     setShowAdd(false);
@@ -90,6 +127,7 @@ export default function Practice() {
       title: form.title.trim(),
       tasks: form.tasks.trim(),
       videoUrl: form.videoUrl.trim() || null,
+      imageUrl: form.imageUrl.trim() || null,
       resources: form.resources.filter((r) => r.label.trim() || r.url.trim()),
     });
     try {
@@ -158,6 +196,10 @@ export default function Practice() {
                           <span className="pt-num">{i + 1}.</span>{" "}
                           {t.tasks || <span className="muted">—</span>}
                         </div>
+
+                        {t.imageUrl && (
+                          <img className="pt-img" src={t.imageUrl} alt={t.title || "rasm"} loading="lazy" />
+                        )}
 
                         {t.videoUrl && (
                           <div className="pt-video">
@@ -230,9 +272,46 @@ export default function Practice() {
                       onChange={(e) => setForm((f) => ({ ...f, tasks: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="f-label">Video havolasi (YouTube/Vimeo/.mp4 — ixtiyoriy)</label>
-                    <input value={form.videoUrl} placeholder="https://youtu.be/..."
-                      onChange={(e) => setForm((f) => ({ ...f, videoUrl: e.target.value }))} />
+                    <label className="f-label">Video (havola yoki fayl — ixtiyoriy)</label>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <input style={{ flex: 1, minWidth: 200 }} value={form.videoUrl}
+                        placeholder="https://youtu.be/... yoki fayl yuklang"
+                        onChange={(e) => setForm((f) => ({ ...f, videoUrl: e.target.value }))} />
+                      <label className="btn btn-ghost" style={{ padding: "8px 12px", fontSize: 13, cursor: uploading ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                        {uploading === "video" ? "Yuklanmoqda…" : "📹 Video yuklash"}
+                        <input type="file" accept="video/*" hidden disabled={uploading !== null}
+                          onChange={(e) => pickFile("video", e)} />
+                      </label>
+                      {form.videoUrl && (
+                        <button className="cur-mini-btn del" onClick={() => setForm((f) => ({ ...f, videoUrl: "" }))} title="Olib tashlash">
+                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                        </button>
+                      )}
+                    </div>
+                    <p className="muted" style={{ fontSize: 12, margin: "4px 0 0" }}>
+                      Fayl 50MB gacha. Katta/uzun videolar uchun YouTube havolasi tavsiya — serverga yuk bermaydi, disk to'lmaydi.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="f-label">Rasm (fayl yoki havola — ixtiyoriy)</label>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <input style={{ flex: 1, minWidth: 200 }} value={form.imageUrl}
+                        placeholder="https://... yoki fayl yuklang"
+                        onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))} />
+                      <label className="btn btn-ghost" style={{ padding: "8px 12px", fontSize: 13, cursor: uploading ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                        {uploading === "image" ? "Yuklanmoqda…" : "🖼️ Rasm yuklash"}
+                        <input type="file" accept="image/*" hidden disabled={uploading !== null}
+                          onChange={(e) => pickFile("image", e)} />
+                      </label>
+                      {form.imageUrl && (
+                        <button className="cur-mini-btn del" onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))} title="Olib tashlash">
+                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                        </button>
+                      )}
+                    </div>
+                    {form.imageUrl && (
+                      <img src={form.imageUrl} alt="" style={{ maxHeight: 120, borderRadius: 8, marginTop: 8, display: "block" }} />
+                    )}
                   </div>
                   <div>
                     <label className="f-label">Kerakli resurslar (havolalar)</label>

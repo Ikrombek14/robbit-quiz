@@ -27,6 +27,7 @@ const taskSchema = z.object({
   title: z.string().default(""),
   tasks: z.string().default(""),
   videoUrl: z.string().nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
   resources: z.array(resourceSchema).default([]),
   order: z.number().int().default(0),
 });
@@ -34,7 +35,7 @@ const taskSchema = z.object({
 // DB satridagi resources JSON-string'ni massivga aylantiradi
 function parseTask(t: {
   id: string; category: string; order: number; title: string;
-  tasks: string; videoUrl: string | null; resources: string; createdAt: Date;
+  tasks: string; videoUrl: string | null; imageUrl: string | null; resources: string; createdAt: Date;
 }) {
   let resources: { label: string; url: string }[] = [];
   try {
@@ -76,6 +77,7 @@ practiceRouter.post("/", requireAdmin, async (req, res) => {
       title: d.title.trim().slice(0, 200),
       tasks: d.tasks.trim().slice(0, 5000),
       videoUrl: d.videoUrl?.trim() || null,
+      imageUrl: d.imageUrl?.trim() || null,
       resources: JSON.stringify(d.resources.filter((r) => r.label.trim() || r.url.trim())),
       order: nextOrder,
     },
@@ -99,6 +101,7 @@ practiceRouter.put("/:id", requireAdmin, async (req, res) => {
         title: d.title.trim().slice(0, 200),
         tasks: d.tasks.trim().slice(0, 5000),
         videoUrl: d.videoUrl?.trim() || null,
+        imageUrl: d.imageUrl?.trim() || null,
         resources: JSON.stringify(d.resources.filter((r) => r.label.trim() || r.url.trim())),
       },
     });

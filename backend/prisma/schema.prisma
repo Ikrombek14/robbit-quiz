@@ -242,7 +242,8 @@ model PracticeTask {
   order     Int      @default(0)  // umumiy tartib (render'da kategoriya bo'yicha guruhlanadi)
   title     String   @default("") // qisqa nom (ixtiyoriy)
   tasks     String   @default("") // "Bajariladigan topshiriqlar" — matn (ko'p qatorli)
-  videoUrl  String?  // video embed havolasi (YouTube/Vimeo/...)
+  videoUrl  String?  // video: embed havolasi (YouTube/Vimeo) YOKI yuklangan fayl (/uploads/..mp4)
+  imageUrl  String?  // yuklangan yoki havola qilingan rasm
   resources String   @default("[]") // JSON: [{label,url}] — "Kerakli resurslar"
   createdAt DateTime @default(now())
 }

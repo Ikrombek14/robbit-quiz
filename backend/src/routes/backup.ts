@@ -288,6 +288,7 @@ backupRouter.post("/restore", upload.single("file"), async (req: AuthedRequest, 
         data: {
           id: p.id, order: p.order ?? 0, category: p.category ?? "",
           title: p.title ?? "", tasks: p.tasks ?? "", videoUrl: p.videoUrl ?? null,
+          imageUrl: p.imageUrl ?? null,
           resources: typeof p.resources === "string" ? p.resources : JSON.stringify(p.resources ?? []),
           createdAt: p.createdAt ? new Date(p.createdAt) : undefined,
         },

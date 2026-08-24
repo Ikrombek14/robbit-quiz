@@ -235,6 +235,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .pt-card > .pt-label:first-child, .pt-title + .pt-label { margin-top: 0; }
 .pt-tasks { font-size: 15.5px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
 .pt-num { font-weight: 800; color: var(--primary); }
+.pt-img { display: block; width: 100%; max-height: 420px; object-fit: contain; border-radius: 12px; margin-top: 12px; background: #000; }
 .pt-video {
   position: relative; width: 100%; aspect-ratio: 16 / 9;
   margin-top: 12px; border-radius: 12px; overflow: hidden; background: #000;

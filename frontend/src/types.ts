@@ -336,7 +336,8 @@ export interface PracticeTask {
   order: number;
   title: string; // qisqa nom (ixtiyoriy)
   tasks: string; // "Bajariladigan topshiriqlar" matni
-  videoUrl: string | null; // embed havolasi
+  videoUrl: string | null; // embed havolasi yoki yuklangan video fayl
+  imageUrl: string | null; // yuklangan/havola qilingan rasm
   resources: PracticeResource[]; // "Kerakli resurslar"
   createdAt: string;
 }

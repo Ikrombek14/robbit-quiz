@@ -194,6 +194,12 @@ input, textarea, select {
 }
 input:focus, textarea:focus, select:focus { border-color: var(--primary-strong); box-shadow: 0 0 0 3px var(--focus); }
 textarea { resize: vertical; }
+/* Checkbox/radio yuqoridagi input qoidasidan (width:100%, katta padding/margin) chiqib
+   ketishi kerak — aks holda flex qatorda label matnini siqib chetga otib yuboradi. */
+input[type="checkbox"], input[type="radio"] {
+  width: 18px; height: 18px; flex-shrink: 0; padding: 0; margin: 0; border-radius: 4px; accent-color: var(--primary);
+}
+input[type="radio"] { border-radius: 50%; }
 .pin-input { font-size: 34px; text-align: center; letter-spacing: 10px; font-weight: 700; color: var(--ink); }
 code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 

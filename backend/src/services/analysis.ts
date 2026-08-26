@@ -3,11 +3,11 @@ import { nameKey } from "../lib/nameKey.js";
 import { num, parseCSV, nameMatch, resolveByName } from "./stats.js";
 
 // Toifa tahlili — Telegram botdagi (Robbit Statistics) mantiq sayt uchun qayta ishlangan.
-// Oylik statistika varaqlari statistika Sheet'idan nomi bo'yicha (gviz CSV) olinadi,
+// Oylik statistika varaqlari statistika Sheet'idan nomi bo'yicha (gid orqali CSV) olinadi,
 // ustozning hozirgi toifasi esa saytdagi RosterTeacher (O'qituvchilar bo'limi) dan.
 const SHEET_ID = "1asJpws1tN-3YJNl15IQEeBTl8iIEePXjNy5Ri769fis";
-const gvizUrl = (sheet?: string) =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv${sheet ? `&sheet=${encodeURIComponent(sheet)}` : ""}`;
+const htmlviewUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/htmlview`;
+const exportCsvUrl = (gid: string) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
 
 const UZB_MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
 
@@ -16,12 +16,13 @@ const IGNORE_NAMES = ["umumiy", "jami", "ortacha", "o'rtacha", "minimal", "talab
 
 // Keyingi toifaga o'tish talablari (toifa -> talab):
 //   uv — uy vazifa bajarilishi kamida (%), davomat — kamida (%),
-//   ketgan — ko'pi bilan (%), kechUv — uy vazifani kech tekshirish ko'pi bilan (%),
-//   kechikish — oxirgi oyda ko'pi bilan (daqiqa)
-const REQUIREMENTS: Record<number, { uv: number; davomat: number; ketgan: number; kechUv: number; kechikish: number }> = {
-  2: { uv: 70, davomat: 80, ketgan: 10, kechUv: 6, kechikish: 10 },
-  3: { uv: 80, davomat: 85, ketgan: 8, kechUv: 4, kechikish: 10 },
-  4: { uv: 85, davomat: 85, ketgan: 6, kechUv: 2, kechikish: 10 },
+//   ketgan — ko'pi bilan (%), kechikish — oxirgi oyda ko'pi bilan (daqiqa)
+// ("Uy vazifani kech tekshirish" ko'rsatkichi ariza talabiga KIRMAYDI — faqat
+// ma'lumot uchun oylik faoliyat grafigida ko'rsatiladi, checks/passed'ga ta'sir qilmaydi)
+const REQUIREMENTS: Record<number, { uv: number; davomat: number; ketgan: number; kechikish: number }> = {
+  2: { uv: 70, davomat: 80, ketgan: 10, kechikish: 10 },
+  3: { uv: 80, davomat: 85, ketgan: 8, kechikish: 10 },
+  4: { uv: 85, davomat: 85, ketgan: 6, kechikish: 10 },
 };
 
 export const GURUH_LIMITLARI: Record<number, string> = {
@@ -81,7 +82,6 @@ export interface TeacherAnalysis {
 // O'tgan oylar deyarli o'zgarmaydi, joriy oy kun davomida to'ldiriladi — 3 soat yetarli.
 const MONTH_TTL_MS = 3 * 60 * 60 * 1000;
 const monthCache = new Map<string, { rows: string[][] | null; ts: number }>();
-let defaultSheetCache: { text: string; ts: number } | null = null;
 
 async function fetchText(url: string): Promise<string> {
   // 10s timeout — Sheet osilib qolsa so'rov cheksiz kutmasin
@@ -90,20 +90,44 @@ async function fetchText(url: string): Promise<string> {
   return res.text();
 }
 
-// Google gviz noto'g'ri varaq nomiga xato bermaydi — default varaqni qaytaraveradi.
-// Shu sabab oy varag'i defaultga aynan teng bo'lsa, varaq yo'q deb hisoblaymiz.
-// (export — stats.ts reytingda kechikishni oy varag'idan olishi uchun ham ishlatiladi)
+// ---- Varaq nomi -> gid xaritasi ----
+// Avval gviz (tqx=out:csv&sheet=NOM) ishlatilgan edi, lekin u ishonchsiz: noto'g'ri/
+// mavjud bo'lmagan nomga xato bermay, jimgina DEFOLT varaqni qaytaraveradi. Shu
+// sabab "natija defolt bilan aynan teng bo'lsa — demak bunday varaq yo'q" degan
+// heuristika ishlatilardi — biroq bu 2026-08'da noto'g'ri chiqdi: "Avgust" varag'i
+// HAQIQATDA bor edi, faqat tasodifan (yoki ofis ish uslubi tufayli) defolt varaqning
+// o'zi bilan bir xil bo'lib qoldi, va tizim uni "yo'q" deb noto'g'ri hisoblab, iyulga
+// qaytardi. Shuning uchun endi htmlview sahifasidan nom->gid xaritasi olinadi va
+// export?format=csv&gid=... orqali ANIQ varaq so'raladi — noto'g'ri gid http xato
+// beradi, fallback yo'q, noaniqlik qolmaydi.
+let gidMapCache: { map: Map<string, string>; ts: number } | null = null;
+const GID_MAP_TTL_MS = 6 * 60 * 60 * 1000; // varaqlar ro'yxati (nomlari) kamdan kam o'zgaradi
+
+async function getSheetGidMap(): Promise<Map<string, string>> {
+  if (gidMapCache && Date.now() - gidMapCache.ts < GID_MAP_TTL_MS) return gidMapCache.map;
+  const html = await fetchText(htmlviewUrl);
+  const map = new Map<string, string>();
+  const re = /items\.push\(\{name: "([^"]+)".*?gid: "(\d+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) map.set(m[1], m[2]);
+  gidMapCache = { map, ts: Date.now() };
+  return map;
+}
+
 export async function fetchMonthRows(month: string): Promise<string[][] | null> {
   const hit = monthCache.get(month);
   if (hit && Date.now() - hit.ts < MONTH_TTL_MS) return hit.rows;
 
-  if (!defaultSheetCache || Date.now() - defaultSheetCache.ts >= MONTH_TTL_MS) {
-    defaultSheetCache = { text: await fetchText(gvizUrl()), ts: Date.now() };
+  const gidMap = await getSheetGidMap();
+  const gid = gidMap.get(month);
+  if (!gid) {
+    monthCache.set(month, { rows: null, ts: Date.now() });
+    return null;
   }
-  const text = await fetchText(gvizUrl(month));
+  const text = await fetchText(exportCsvUrl(gid));
   // Bo'sh qatorlarni tashlab yuboramiz — varaqlarda o'n minglab bo'sh qator bor,
   // ularni keshda saqlash xotirani behuda yeydi
-  const rows = text === defaultSheetCache.text ? null : parseCSV(text).filter((r) => r.some((c) => c && c.trim()));
+  const rows = parseCSV(text).filter((r) => r.some((c) => c && c.trim()));
   monthCache.set(month, { rows, ts: Date.now() });
   return rows;
 }
@@ -251,7 +275,6 @@ export async function getAllAnalyses(
     const avgUv = avgOf(recent.map((m) => m.uvBajarish));
     const avgDav = avgOf(recent.map((m) => m.davomat));
     const avgKet = avgOf(recent.map((m) => m.ketgan));
-    const avgKechUv = avgOf(recent.map((m) => m.kechUv));
     const latest = entry.months[0] ?? null; // eng yangi oy birinchi turadi
     const lat = latest?.kechikish ?? null;
 
@@ -259,7 +282,6 @@ export async function getAllAnalyses(
       { key: "uv", label: "Uy vazifa bajarilishi", value: avgUv, required: req.uv, direction: "min", ok: avgUv != null && avgUv >= req.uv },
       { key: "davomat", label: "Davomat", value: avgDav, required: req.davomat, direction: "min", ok: avgDav != null && avgDav >= req.davomat },
       { key: "ketgan", label: "Ketgan o'quvchilar", value: avgKet, required: req.ketgan, direction: "max", ok: avgKet != null && avgKet <= req.ketgan },
-      { key: "kechUv", label: "Uy vazifani kech tekshirish", value: avgKechUv, required: req.kechUv, direction: "max", ok: avgKechUv != null && avgKechUv <= req.kechUv },
       { key: "kechikish", label: `Kechikish (${latest?.month ?? "oxirgi oy"})`, value: lat, required: req.kechikish, direction: "max", ok: lat != null && lat <= req.kechikish },
     ];
 

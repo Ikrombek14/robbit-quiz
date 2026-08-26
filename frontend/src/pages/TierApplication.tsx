@@ -48,6 +48,7 @@ export default function TierApplicationPage() {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [selectedCerts, setSelectedCerts] = useState<Record<string, boolean>>({});
   const [note, setNote] = useState("");
+  const [consultedStudyDept, setConsultedStudyDept] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -74,11 +75,13 @@ export default function TierApplicationPage() {
           note: note.trim() || undefined,
           checklist: status.checklist.map((c) => ({ key: c.key, checked: !!checked[c.key] })),
           certificateIds: Object.keys(selectedCerts).filter((id) => selectedCerts[id]),
+          consultedStudyDept,
         }),
       });
       setNote("");
       setChecked({});
       setSelectedCerts({});
+      setConsultedStudyDept(false);
       load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Xatolik");
@@ -89,7 +92,7 @@ export default function TierApplicationPage() {
 
   const allKpiOk = status?.kpiChecks?.every((c) => c.ok) ?? false;
   const allChecklistDone = (status?.checklist ?? []).every((c) => checked[c.key]);
-  const canSubmit = status?.found && !status.isExpert && !status.pending && status.windowOpen && allKpiOk && allChecklistDone && (status.checklist?.length ?? 0) > 0;
+  const canSubmit = status?.found && !status.isExpert && !status.pending && status.windowOpen && (allKpiOk || consultedStudyDept) && allChecklistDone && (status.checklist?.length ?? 0) > 0;
 
   return (
     <Shell>
@@ -145,10 +148,18 @@ export default function TierApplicationPage() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
               {status.kpiChecks?.map((c) => <CheckChip key={c.key} c={c} />)}
             </div>
-            {!allKpiOk && (
-              <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
-                ⚠️ Yuqoridagi ✗ belgili ko'rsatkichlar bajarilmaguncha ariza topshira olmaysiz.
-              </p>
+            {!allKpiOk && !status.pending && (
+              <div style={{ marginTop: 8, padding: 10, borderRadius: 10, border: "1px solid var(--tertiary, #f0c419)", background: "rgba(240,196,25,0.08)" }}>
+                <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                  ⚠️ Yuqoridagi ✗ belgili ko'rsatkichlar bajarilmagan. Agar bu bo'yicha o'quv bo'limi bilan
+                  gaplashib, ariza topshirishga ruxsat olgan bo'lsangiz, quyidagini belgilang — admin buni ko'radi.
+                </p>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={consultedStudyDept}
+                    onChange={(e) => setConsultedStudyDept(e.target.checked)} />
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>O'quv bo'limi bilan maslahatlashilgan</span>
+                </label>
+              </div>
             )}
 
             <h3 style={{ fontSize: 15, margin: "16px 0 8px" }}>Bajarilishi kerak bo'lgan vazifalar</h3>

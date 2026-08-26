@@ -66,6 +66,9 @@ const submitSchema = z.object({
   note: z.string().trim().max(2000).optional(),
   checklist: z.array(z.object({ key: z.string(), checked: z.boolean() })).default([]),
   certificateIds: z.array(z.string()).default([]),
+  // Avtomatik ko'rsatkichlardan biri bajarilmagan bo'lsa ham, ustoz o'quv bo'limi bilan
+  // maslahatlashganini belgilab ariza topshira oladi — admin buni panelda warning sifatida ko'radi.
+  consultedStudyDept: z.boolean().default(false),
 });
 
 // Ariza topshirish — barcha talablar serverda QAYTA tekshiriladi (client'ga ishonilmaydi).
@@ -107,9 +110,12 @@ tierApplicationsRouter.post("/", async (req: AuthedRequest, res) => {
     res.status(400).json({ error: "Siz allaqachon eng yuqori toifadasiz" });
     return;
   }
-  // Avtomatik ko'rsatkichlar (uy vazifa/davomat/ketgan/kechikish) HAM barchasi bajarilgan bo'lishi
-  // shart — bu qoida ilgari tashqi Google Form havolasida ham shunday edi (faqat passed'da ochilardi).
-  if (!analysis.passed) {
+  // Avtomatik ko'rsatkichlar (uy vazifa/davomat/ketgan/kechikish) barchasi bajarilgan bo'lishi
+  // shart — bu qoida ilgari tashqi Google Form havolasida ham shunday edi (faqat passed'da
+  // ochilardi). Istisno: ustoz o'quv bo'limi bilan maslahatlashganini belgilab topshirsa,
+  // bajarilmagan ko'rsatkich bo'lsa ham ariza qabul qilinadi — admin buni ko'rib chiqadi
+  // (kpiSnapshot'dagi ok:false bandlar + consultedStudyDept flag orqali warning ko'rinadi).
+  if (!analysis.passed && !parsed.data.consultedStudyDept) {
     res.status(400).json({ error: "Avtomatik ko'rsatkichlar bo'yicha hali barcha talablar bajarilmagan" });
     return;
   }
@@ -139,6 +145,7 @@ tierApplicationsRouter.post("/", async (req: AuthedRequest, res) => {
       ),
       certificateIds: JSON.stringify(certs.map((c) => c.id)),
       kpiSnapshot: JSON.stringify(analysis.checks),
+      consultedStudyDept: !analysis.passed && parsed.data.consultedStudyDept,
     },
   });
   res.json({ application: created });

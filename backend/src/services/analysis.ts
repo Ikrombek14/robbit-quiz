@@ -3,11 +3,12 @@ import { nameKey } from "../lib/nameKey.js";
 import { num, parseCSV, nameMatch, resolveByName } from "./stats.js";
 
 // Toifa tahlili — Telegram botdagi (Robbit Statistics) mantiq sayt uchun qayta ishlangan.
-// Oylik statistika varaqlari statistika Sheet'idan nomi bo'yicha (gid orqali CSV) olinadi,
+// Oylik statistika varaqlari statistika Sheet'idan nomi bo'yicha (gviz CSV) olinadi,
 // ustozning hozirgi toifasi esa saytdagi RosterTeacher (O'qituvchilar bo'limi) dan.
 const SHEET_ID = "1asJpws1tN-3YJNl15IQEeBTl8iIEePXjNy5Ri769fis";
-const htmlviewUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/htmlview`;
-const exportCsvUrl = (gid: string) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+const gvizUrl = (sheet?: string) =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv${sheet ? `&sheet=${encodeURIComponent(sheet)}` : ""}`;
+const defaultExportUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 
 const UZB_MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
 
@@ -90,41 +91,64 @@ async function fetchText(url: string): Promise<string> {
   return res.text();
 }
 
-// ---- Varaq nomi -> gid xaritasi ----
-// Avval gviz (tqx=out:csv&sheet=NOM) ishlatilgan edi, lekin u ishonchsiz: noto'g'ri/
-// mavjud bo'lmagan nomga xato bermay, jimgina DEFOLT varaqni qaytaraveradi. Shu
-// sabab "natija defolt bilan aynan teng bo'lsa — demak bunday varaq yo'q" degan
-// heuristika ishlatilardi — biroq bu 2026-08'da noto'g'ri chiqdi: "Avgust" varag'i
-// HAQIQATDA bor edi, faqat tasodifan (yoki ofis ish uslubi tufayli) defolt varaqning
-// o'zi bilan bir xil bo'lib qoldi, va tizim uni "yo'q" deb noto'g'ri hisoblab, iyulga
-// qaytardi. Shuning uchun endi htmlview sahifasidan nom->gid xaritasi olinadi va
-// export?format=csv&gid=... orqali ANIQ varaq so'raladi — noto'g'ri gid http xato
-// beradi, fallback yo'q, noaniqlik qolmaydi.
-let gidMapCache: { map: Map<string, string>; ts: number } | null = null;
-const GID_MAP_TTL_MS = 6 * 60 * 60 * 1000; // varaqlar ro'yxati (nomlari) kamdan kam o'zgaradi
+// ---- Defolt varaqning HAQIQIY nomi (faqat sarlavha, HEAD so'rov bilan) ----
+// export?format=csv so'rovida sheet/gid ko'rsatilmasa, joriy DEFOLT varaq qaytadi va
+// javobning Content-Disposition sarlavhasida o'sha varaqning haqiqiy nomi bo'ladi
+// (masalan "...- Avgust.csv"). Bu bizga aniq bilish imkonini beradi: agar so'ralgan oy
+// nomi aynan shu nomga teng bo'lsa, defolt varaq HAQIQATDA o'sha oyga tegishli — tasodif
+// emas (2026-08'da ofis "Avgust" varag'ini xuddi joriy/asosiy varaqning o'zi qilib
+// qo'ygan, natijada eski gviz-fallback heuristikasi buni noto'g'ri "yo'q" deb hisoblardi).
+// MUHIM: bu faqat NOMNI aniqlash uchun ishlatiladi — export'ning CSV formati gviz'dan
+// farq qiladi (sarlavha ikki qatorga bo'lingan, gviz esa birlashtirib beradi), shuning
+// uchun haqiqiy qatorlar HAR DOIM gviz'dan olinadi (pastda).
+let defaultNameCache: { name: string | null; ts: number } | null = null;
 
-async function getSheetGidMap(): Promise<Map<string, string>> {
-  if (gidMapCache && Date.now() - gidMapCache.ts < GID_MAP_TTL_MS) return gidMapCache.map;
-  const html = await fetchText(htmlviewUrl);
-  const map = new Map<string, string>();
-  const re = /items\.push\(\{name: "([^"]+)".*?gid: "(\d+)"/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) map.set(m[1], m[2]);
-  gidMapCache = { map, ts: Date.now() };
-  return map;
+async function getDefaultSheetName(): Promise<string | null> {
+  if (defaultNameCache && Date.now() - defaultNameCache.ts < MONTH_TTL_MS) return defaultNameCache.name;
+  const res = await fetch(defaultExportUrl, { method: "HEAD", signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`Sheet o'qib bo'lmadi (${res.status})`);
+  const disp = res.headers.get("content-disposition") ?? "";
+  const m = /filename\*=UTF-8''([^;]+)/.exec(disp);
+  let name: string | null = null;
+  if (m) {
+    const decoded = decodeURIComponent(m[1]).replace(/\.csv$/i, "");
+    const parts = decoded.split(" - ");
+    name = parts[parts.length - 1]?.trim() || null;
+  }
+  defaultNameCache = { name, ts: Date.now() };
+  return name;
+}
+
+let gvizDefaultCache: { text: string; ts: number } | null = null;
+
+async function getGvizDefaultText(): Promise<string> {
+  if (gvizDefaultCache && Date.now() - gvizDefaultCache.ts < MONTH_TTL_MS) return gvizDefaultCache.text;
+  const text = await fetchText(gvizUrl());
+  gvizDefaultCache = { text, ts: Date.now() };
+  return text;
 }
 
 export async function fetchMonthRows(month: string): Promise<string[][] | null> {
   const hit = monthCache.get(month);
   if (hit && Date.now() - hit.ts < MONTH_TTL_MS) return hit.rows;
 
-  const gidMap = await getSheetGidMap();
-  const gid = gidMap.get(month);
-  if (!gid) {
-    monthCache.set(month, { rows: null, ts: Date.now() });
-    return null;
+  const [defaultName, gvizDefaultText] = await Promise.all([getDefaultSheetName(), getGvizDefaultText()]);
+  let text: string;
+  if (month === defaultName) {
+    // Content-Disposition orqali TASDIQLANGAN holda shu oyga tegishli — qayta so'rab
+    // tasodifiy moslikni tekshirishning hojati yo'q.
+    text = gvizDefaultText;
+  } else {
+    text = await fetchText(gvizUrl(month));
+    // Google gviz noto'g'ri/mavjud bo'lmagan varaq nomiga xato bermaydi — defolt
+    // varaqni qaytaraveradi. Defolt HAQIQATDA boshqa oyga tegishli ekani yuqorida
+    // tasdiqlangan, shuning uchun natija defolt bilan bir xil bo'lsa — demak bunday
+    // varaq chindan ham yo'q (tasodifiy moslik emas).
+    if (text === gvizDefaultText) {
+      monthCache.set(month, { rows: null, ts: Date.now() });
+      return null;
+    }
   }
-  const text = await fetchText(exportCsvUrl(gid));
   // Bo'sh qatorlarni tashlab yuboramiz — varaqlarda o'n minglab bo'sh qator bor,
   // ularni keshda saqlash xotirani behuda yeydi
   const rows = parseCSV(text).filter((r) => r.some((c) => c && c.trim()));

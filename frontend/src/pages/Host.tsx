@@ -130,7 +130,7 @@ export default function Host() {
   // o'quvchilarga hech narsa broadcast qilinmaydi (faqat hostning o'z brauzeriga).
   const [allSlides, setAllSlides] = useState<Slide[] | null>(null);
   const [showPeek, setShowPeek] = useState(false);
-  const peekActiveRef = useRef<HTMLDivElement>(null);
+  const peekActiveRef = useRef<HTMLButtonElement>(null);
 
   // taymer
   const [endsAt, setEndsAt] = useState(0);
@@ -902,16 +902,23 @@ export default function Host() {
             .live-bottom hech qachon ekrandan chetga surilmaydi. */}
         <div className="live-bottom-wrap">
           {/* Keyingi slaydlar karuseli — asosiy slayd tagida, boshqaruv panelidan yuqorida.
-              Faqat KO'RISH: bosish bilan o'yin slaydi o'zgarmaydi, o'quvchilarga ham
-              hech narsa yuborilmaydi (allSlides faqat hostning brauzeriga REST orqali keldi). */}
+              Bosilgan slayd host:goto orqali DARHOL hammaga (o'quvchilarga ham) ko'rsatiladi
+              — xuddi "Keyingi"/"Oldingi" kabi (allSlides ro'yxati faqat hostning o'ziga REST
+              orqali kelgan, lekin bosish natijasi butun xonaga yuboriladi). */}
           {showPeek && allSlides && (
             <div className="host-peek-strip">
               {allSlides.map((s, i) => (
-                <div
+                <button
                   key={s.id ?? i}
                   ref={i === slide.index ? peekActiveRef : undefined}
+                  type="button"
                   className={`peek-thumb ${i === slide.index ? "active" : ""}`}
                   title={s.kind === "CONTENT" ? `Slayd ${i + 1}` : slideTitle(s)}
+                  onClick={() => {
+                    if (i === slide.index) return;
+                    socket.emit("host:goto", { pin, index: i });
+                    setShowPeek(false);
+                  }}
                 >
                   <span className="peek-thumb-num">{i + 1}</span>
                   <div className="peek-thumb-body">
@@ -924,7 +931,7 @@ export default function Host() {
                       </div>
                     )}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

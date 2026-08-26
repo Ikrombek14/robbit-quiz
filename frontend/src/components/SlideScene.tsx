@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import { STAGE_W, STAGE_H } from "../types";
 import type { SlideData, SlideBackground, SlideElement, ShapeElement, TextElement, ImageElement, DrawElement } from "../types";
 
@@ -163,8 +163,11 @@ function PositionedElement({ el }: { el: SlideElement }) {
 
 /**
  * width berilsa — shu kenglikka scale. Berilmasa — ota konteynerga moslashadi.
+ * memo — bir nechta nusxada bir vaqtda ko'rsatilganda (masalan Host'dagi "keyingi
+ * slaydlar" karuseli) ota komponent boshqa sababdan (masalan taymer tiki, 250ms'da
+ * bir marta) qayta render bo'lganda, o'zgarmagan slaydlar bekorga qayta chizilmasin.
  */
-export default function SlideScene({
+function SlideScene({
   data,
   width,
   className,
@@ -219,3 +222,5 @@ export default function SlideScene({
     </div>
   );
 }
+
+export default memo(SlideScene);

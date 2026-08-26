@@ -1156,6 +1156,18 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     showCurrent(game);
   });
 
+  // Xohlagan slaydga to'g'ridan sakrash (masalan "keyingi slaydlar" peek-karuselidan
+  // bosilganda). showCurrent generic — qanday yetib kelganidan qat'i nazar (next/prev/
+  // goto) hammasini bir xil to'g'ri boshqaradi (taymer, javob holatlari va h.k.).
+  socket.on("host:goto", (data: { pin: string; index: number }) => {
+    const game = games.get(data?.pin);
+    if (!game || game.hostSocketId !== socket.id) return;
+    const idx = Number(data?.index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= game.slides.length || idx === game.currentIndex) return;
+    game.currentIndex = idx;
+    showCurrent(game);
+  });
+
   // Host o'quvchini o'yindan chiqaradi (kick)
   socket.on("host:kick", (data: { pin: string; playerId: string }) => {
     const game = games.get(data?.pin);

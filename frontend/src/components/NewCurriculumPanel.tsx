@@ -44,7 +44,6 @@ export default function NewCurriculumPanel() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [quizList, setQuizList] = useState<QuizListItem[]>([]);
-  const [openModules, setOpenModules] = useState<Set<string>>(new Set());
 
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,14 +71,6 @@ export default function NewCurriculumPanel() {
     if (!canCreate) return;
     api<{ quizzes: QuizListItem[] }>("/quizzes").then((r) => setQuizList(r.quizzes)).catch(() => {});
   }, [canCreate]);
-
-  function toggleModule(m: string) {
-    setOpenModules((s) => {
-      const n = new Set(s);
-      if (n.has(m)) n.delete(m); else n.add(m);
-      return n;
-    });
-  }
 
   function openAddForm() {
     setForm({ module: "", title: "", author: "", quizId: "" });
@@ -136,6 +127,20 @@ export default function NewCurriculumPanel() {
   }
   const allModules = [...new Set(lessons.map((l) => l.module))];
 
+  // UZLUKSIZ raqamlash (1..N) — butun dastur bo'ylab ketma-ket, modul bo'yicha
+  // guruhlangan TO'LIQ ro'yxatdan hisoblanadi (qidiruvda ham raqam o'zgarmaydi).
+  const numberOf = new Map<string, number>();
+  {
+    const fullOrder: NewLesson[][] = [];
+    const fm = new Map<string, NewLesson[]>();
+    for (const l of lessons) {
+      if (!fm.has(l.module)) { fm.set(l.module, []); fullOrder.push(fm.get(l.module)!); }
+      fm.get(l.module)!.push(l);
+    }
+    let n = 1;
+    for (const arr of fullOrder) for (const l of arr) numberOf.set(l.id, n++);
+  }
+
   const withQuiz = lessons.filter((l) => l.quiz).length;
   const pct = lessons.length ? Math.round((withQuiz / lessons.length) * 100) : 0;
 
@@ -173,21 +178,18 @@ export default function NewCurriculumPanel() {
           )}
 
           {groups.map((g) => {
-            const open = q.length > 0 || openModules.has(g.module);
             const gWith = g.items.filter((l) => l.quiz).length;
             return (
-              <div key={g.module} style={{ marginBottom: 10 }}>
-                <button className="ncur-mod" onClick={() => toggleModule(g.module)} aria-expanded={open}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 22 }}>
-                    {open ? "expand_more" : "chevron_right"}
-                  </span>
+              <div key={g.module} style={{ marginBottom: 14 }}>
+                {/* Modul sarlavhasi — shunchaki ajratuvchi (bosish shart emas, hammasi ochiq) */}
+                <div className="ncur-mod" style={{ cursor: "default" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>auto_stories</span>
                   <span style={{ flex: 1, textAlign: "left" }}>{g.module}</span>
                   <span className="ncur-mod-count">{gWith}/{g.items.length}</span>
-                </button>
+                </div>
 
-                {open && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, marginLeft: 6 }}>
-                    {g.items.map((l, i) => {
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                  {g.items.map((l) => {
                       const hasQuiz = Boolean(l.quiz);
                       return (
                         <div key={l.id} className="cur-row" style={{ padding: "10px 14px" }}>
@@ -200,7 +202,7 @@ export default function NewCurriculumPanel() {
                           )}
                           <div style={{ flex: 1, minWidth: 160 }}>
                             <div style={{ fontWeight: 600, fontSize: 14.5 }}>
-                              {i + 1}. {l.title}
+                              {numberOf.get(l.id)}. {l.title}
                             </div>
                             {l.quiz && (
                               <div className="muted" style={{ marginTop: 2, fontSize: 12.5 }}>
@@ -243,7 +245,6 @@ export default function NewCurriculumPanel() {
                       );
                     })}
                   </div>
-                )}
               </div>
             );
           })}

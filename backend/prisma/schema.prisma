@@ -232,6 +232,20 @@ model ExtraLesson {
   createdAt   DateTime @default(now())
 }
 
+// YANGI o'quv dastur (robbit-yangi-oquv) — oylik modullar bo'yicha darslar.
+// Eski LessonPlan (JUNIOR/MIDDLE/SENIOR) tuzilmasidan farqli: bitta izchil
+// 12 oylik trek (1-6 dasturlash, 7-12 robototexnika). `module` — oy/kurs nomi
+// ("1-oy: Kompyuter savodxonligi + AI"), `order` — umumiy tartib.
+model NewCurriculumLesson {
+  id        String   @id @default(cuid())
+  module    String   // oy/kurs sarlavhasi
+  order     Int      @default(0)
+  title     String
+  author    String?
+  quizId    String?  // biriktirilgan slayd (keyin qo'shiladi)
+  createdAt DateTime @default(now())
+}
+
 // Ustozlik amaliyoti vazifalari — kategoriya bo'yicha guruhlangan amaliy
 // topshiriqlar (Scratch, Python, Arduino...). Har vazifada bajariladigan
 // topshiriq matni, video havolasi (embed) va kerakli resurslar (havolalar).

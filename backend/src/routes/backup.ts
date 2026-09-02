@@ -27,7 +27,7 @@ function parseJson(s: string): unknown {
 
 // ---- Eksport: hamma ma'lumot bitta JSON ----
 backupRouter.get("/export", async (_req, res) => {
-  const [teachers, folders, quizzes, lessonPlans, workshops, extraLessons, practiceTasks, guideSections, roster, gameRecords] = await Promise.all([
+  const [teachers, folders, quizzes, lessonPlans, workshops, extraLessons, practiceTasks, newCurriculumLessons, guideSections, roster, gameRecords] = await Promise.all([
     prisma.teacher.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.folder.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.quiz.findMany({
@@ -38,6 +38,7 @@ backupRouter.get("/export", async (_req, res) => {
     prisma.workshop.findMany({ orderBy: { order: "asc" } }),
     prisma.extraLesson.findMany({ orderBy: { order: "asc" } }),
     prisma.practiceTask.findMany({ orderBy: { order: "asc" } }),
+    prisma.newCurriculumLesson.findMany({ orderBy: { order: "asc" } }),
     prisma.guideSection.findMany({ orderBy: { order: "asc" } }),
     prisma.rosterTeacher.findMany({ orderBy: { order: "asc" } }),
     prisma.gameRecord.findMany({ orderBy: { playedAt: "asc" }, include: { players: true } }),
@@ -57,6 +58,7 @@ backupRouter.get("/export", async (_req, res) => {
       workshops: workshops.length,
       extraLessons: extraLessons.length,
       practiceTasks: practiceTasks.length,
+      newCurriculumLessons: newCurriculumLessons.length,
       guideSections: guideSections.length,
       roster: roster.length,
       gameRecords: gameRecords.length,
@@ -73,6 +75,7 @@ backupRouter.get("/export", async (_req, res) => {
     workshops,
     extraLessons,
     practiceTasks,
+    newCurriculumLessons,
     guideSections,
     roster,
     gameRecords,
@@ -294,6 +297,25 @@ backupRouter.post("/restore", upload.single("file"), async (req: AuthedRequest, 
         },
       });
       bump(restored, "practiceTasks");
+    }
+
+    // 5e) Yangi o'quv dastur darslari — id bo'yicha
+    const newCurriculumLessons = section("newCurriculumLessons") as any[];
+    const existingNc = new Set((await prisma.newCurriculumLesson.findMany({ select: { id: true } })).map((n) => n.id));
+    for (const n of newCurriculumLessons) {
+      if (!n?.id || existingNc.has(n.id)) {
+        bump(skipped, "newCurriculumLessons");
+        continue;
+      }
+      await prisma.newCurriculumLesson.create({
+        data: {
+          id: n.id, order: n.order ?? 0, module: n.module ?? "?", title: n.title ?? "?",
+          author: n.author ?? null,
+          quizId: n.quizId && existingQuizIds.has(n.quizId) ? n.quizId : null,
+          createdAt: n.createdAt ? new Date(n.createdAt) : undefined,
+        },
+      });
+      bump(restored, "newCurriculumLessons");
     }
 
     // 6) GuideSections — id bo'yicha

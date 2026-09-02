@@ -48,6 +48,7 @@ export default function TierApplicationPage() {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [selectedCerts, setSelectedCerts] = useState<Record<string, boolean>>({});
   const [note, setNote] = useState("");
+  const [consultedStudyDept, setConsultedStudyDept] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -74,11 +75,13 @@ export default function TierApplicationPage() {
           note: note.trim() || undefined,
           checklist: status.checklist.map((c) => ({ key: c.key, checked: !!checked[c.key] })),
           certificateIds: Object.keys(selectedCerts).filter((id) => selectedCerts[id]),
+          consultedStudyDept,
         }),
       });
       setNote("");
       setChecked({});
       setSelectedCerts({});
+      setConsultedStudyDept(false);
       load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Xatolik");
@@ -89,7 +92,17 @@ export default function TierApplicationPage() {
 
   const allKpiOk = status?.kpiChecks?.every((c) => c.ok) ?? false;
   const allChecklistDone = (status?.checklist ?? []).every((c) => checked[c.key]);
-  const canSubmit = status?.found && !status.isExpert && !status.pending && status.windowOpen && allKpiOk && allChecklistDone && (status.checklist?.length ?? 0) > 0;
+  const canSubmit = status?.found && !status.isExpert && !status.pending && status.windowOpen && (allKpiOk || consultedStudyDept) && allChecklistDone && (status.checklist?.length ?? 0) > 0;
+
+  // Tugma nega o'chirilganini aniq ko'rsatish uchun — "nima uchun bosilmayapti?"
+  // degan savolga sababsiz o'chirilgan tugmadan ko'ra aniqroq javob berish kerak.
+  const blockers: string[] = [];
+  if (status?.found && !status.isExpert && !status.pending) {
+    if (!status.windowOpen) blockers.push("Ariza oynasi yopiq — faqat har oyning 1–10 sanalari orasida qabul qilinadi.");
+    if (!allKpiOk && !consultedStudyDept) blockers.push('Yuqoridagi ✗ belgili ko\'rsatkichlar bajarilmagan — yoki "O\'quv bo\'limi bilan maslahatlashilgan" belgisini qo\'ying.');
+    if ((status.checklist?.length ?? 0) === 0) blockers.push("Talablar ro'yxati yuklanmadi — sahifani yangilab ko'ring yoki admin bilan bog'laning.");
+    else if (!allChecklistDone) blockers.push('Pastdagi "Bajarilishi kerak bo\'lgan vazifalar" ro\'yxatidagi barcha bandlarni belgilang.');
+  }
 
   return (
     <Shell>
@@ -128,9 +141,9 @@ export default function TierApplicationPage() {
           )}
 
           {!status.pending && !status.windowOpen && (
-            <div className="card" style={{ marginBottom: 16 }}>
-              <p className="muted" style={{ margin: 0 }}>
-                ⏳ Ariza faqat har oyning 1–10 sanalari orasida qabul qilinadi. Boshqa sanalarda topshirilgan arizalar ko'rib chiqilmaydi.
+            <div className="card" style={{ marginBottom: 16, border: "2px solid var(--tertiary, #f0c419)", background: "rgba(240,196,25,0.08)" }}>
+              <p style={{ margin: 0, fontWeight: 700 }}>
+                ⏳ Ariza oynasi hozir yopiq — faqat har oyning 1–10 sanalari orasida qabul qilinadi. Boshqa sanalarda "Ariza topshirish" tugmasi bosilmaydi.
               </p>
             </div>
           )}
@@ -145,10 +158,18 @@ export default function TierApplicationPage() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
               {status.kpiChecks?.map((c) => <CheckChip key={c.key} c={c} />)}
             </div>
-            {!allKpiOk && (
-              <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
-                ⚠️ Yuqoridagi ✗ belgili ko'rsatkichlar bajarilmaguncha ariza topshira olmaysiz.
-              </p>
+            {!allKpiOk && !status.pending && (
+              <div style={{ marginTop: 8, padding: 10, borderRadius: 10, border: "1px solid var(--tertiary, #f0c419)", background: "rgba(240,196,25,0.08)" }}>
+                <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                  ⚠️ Yuqoridagi ✗ belgili ko'rsatkichlar bajarilmagan. Agar bu bo'yicha o'quv bo'limi bilan
+                  gaplashib, ariza topshirishga ruxsat olgan bo'lsangiz, quyidagini belgilang — admin buni ko'radi.
+                </p>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={consultedStudyDept}
+                    onChange={(e) => setConsultedStudyDept(e.target.checked)} />
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>O'quv bo'limi bilan maslahatlashilgan</span>
+                </label>
+              </div>
             )}
 
             <h3 style={{ fontSize: 15, margin: "16px 0 8px" }}>Bajarilishi kerak bo'lgan vazifalar</h3>
@@ -182,6 +203,18 @@ export default function TierApplicationPage() {
             <h3 style={{ fontSize: 15, margin: "16px 0 8px" }}>Qo'shimcha izoh / havolalar (ixtiyoriy)</h3>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} disabled={!!status.pending}
               rows={3} placeholder="Masalan: dars taqdimotlariga havolalar, qo'shimcha izoh…" style={{ width: "100%" }} />
+
+            {!status.pending && blockers.length > 0 && (
+              <div style={{
+                marginTop: 14, padding: 12, borderRadius: 10,
+                border: "1px solid var(--danger, #e5484d)", background: "var(--danger-soft, rgba(229,72,77,0.08))",
+              }}>
+                <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 14 }}>⚠️ Hozircha topshira olmaysiz — sababi:</p>
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14 }}>
+                  {blockers.map((b, i) => <li key={i}>{b}</li>)}
+                </ul>
+              </div>
+            )}
 
             {!status.pending && (
               <button className="btn btn-primary" style={{ marginTop: 14 }} disabled={!canSubmit || busy} onClick={submit}>

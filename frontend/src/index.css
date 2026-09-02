@@ -194,6 +194,12 @@ input, textarea, select {
 }
 input:focus, textarea:focus, select:focus { border-color: var(--primary-strong); box-shadow: 0 0 0 3px var(--focus); }
 textarea { resize: vertical; }
+/* Checkbox/radio yuqoridagi input qoidasidan (width:100%, katta padding/margin) chiqib
+   ketishi kerak — aks holda flex qatorda label matnini siqib chetga otib yuboradi. */
+input[type="checkbox"], input[type="radio"] {
+  width: 18px; height: 18px; flex-shrink: 0; padding: 0; margin: 0; border-radius: 4px; accent-color: var(--primary);
+}
+input[type="radio"] { border-radius: 50%; }
 .pin-input { font-size: 34px; text-align: center; letter-spacing: 10px; font-weight: 700; color: var(--ink); }
 code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 
@@ -936,16 +942,19 @@ button.quiz-card:active { transform: translateY(0); }
 .lb-left, .lb-right { display: flex; align-items: center; gap: 10px; }
 .lb-center { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--muted); font-size: 14px; }
 
-/* Keyingi slaydlar karuseli (ko'rish-uchun, bosilsa navigatsiya qilmaydi) */
+/* Keyingi slaydlar karuseli — bosilgan slaydga darhol o'tiladi (host:goto) */
 .host-peek-strip {
   flex-shrink: 0; display: flex; gap: 10px; overflow-x: auto;
   padding: 10px 24px; border-top: 1px solid var(--border); background: var(--surface-2, var(--surface));
 }
 .peek-thumb {
-  flex: 0 0 auto; width: 110px; display: flex; flex-direction: column; gap: 4px;
-  border: 2px solid transparent; border-radius: 10px; padding: 3px; cursor: default;
+  flex: 0 0 auto; width: 110px; display: flex; flex-direction: column; gap: 4px; text-align: left;
+  border: 2px solid transparent; border-radius: 10px; padding: 3px; cursor: pointer;
+  background: none; appearance: none; font: inherit; color: inherit; transition: border-color 0.12s, transform 0.08s;
 }
-.peek-thumb.active { border-color: var(--primary); }
+.peek-thumb:hover:not(.active) { border-color: var(--border); }
+.peek-thumb:active { transform: scale(0.97); }
+.peek-thumb.active { border-color: var(--primary); cursor: default; }
 .peek-thumb-num { font-size: 11px; font-weight: 700; color: var(--muted); padding-left: 2px; }
 .peek-thumb-body { border-radius: 8px; overflow: hidden; background: #fff; aspect-ratio: 16 / 9; }
 .peek-toggle-btn {

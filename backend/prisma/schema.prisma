@@ -70,6 +70,10 @@ model TierApplication {
   checklist      String // JSON: [{key,label,checked}]
   certificateIds String // JSON: string[] — ariza bilan bog'langan sertifikat id'lari
   kpiSnapshot    String // JSON: TierCheck[] — topshirish vaqtidagi avtomatik ko'rsatkichlar
+  // Avtomatik ko'rsatkichlardan biri bajarilmagan bo'lsa ham, ustoz "o'quv bo'limi bilan
+  // maslahatlashilgan"ligini belgilab ariza topshirishi mumkin — bu holat adminga
+  // panelda warning sifatida ko'rsatiladi (kpiSnapshot'dagi ok:false bandlar bilan birga).
+  consultedStudyDept Boolean @default(false)
   status         String    @default("PENDING") // PENDING | INTERVIEW | APPROVED | REJECTED
   adminNote      String?
   createdAt      DateTime  @default(now())

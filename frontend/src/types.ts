@@ -312,6 +312,9 @@ export interface TierApplication {
   checklist: string; // JSON
   certificateIds: string; // JSON
   kpiSnapshot: string; // JSON
+  // true — ustoz avtomatik ko'rsatkichlardan biri bajarilmagan holda, o'quv bo'limi
+  // bilan maslahatlashganini belgilab topshirgan (admin panelida warning sifatida ko'rinadi)
+  consultedStudyDept: boolean;
   status: "PENDING" | "INTERVIEW" | "APPROVED" | "REJECTED";
   adminNote: string | null;
   createdAt: string;

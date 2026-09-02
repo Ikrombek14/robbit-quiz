@@ -45,6 +45,14 @@ function AppRow({ app, onChanged }: { app: TierApplicationAdmin; onChanged: () =
         <strong>{app.teacher?.name ?? "?"}</strong>
         <span className="muted" style={{ fontSize: 13 }}>{app.fromTier}-toifa → {app.toTier}-toifa</span>
         <StatusBadge status={app.status} />
+        {app.consultedStudyDept && (
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 9px", borderRadius: 8,
+            fontWeight: 700, fontSize: 12, color: TONE_STYLE.bad.fg, background: TONE_STYLE.bad.bg, border: `1px solid ${TONE_STYLE.bad.border}`,
+          }}>
+            ⚠️ Ko'rsatkich yetishmaydi — maslahatlashilgan
+          </span>
+        )}
         <span className="muted" style={{ fontSize: 12 }}>{new Date(app.createdAt).toLocaleDateString("uz")}</span>
         <span style={{ marginLeft: "auto" }} className="material-symbols-outlined">{open ? "expand_less" : "expand_more"}</span>
       </div>
@@ -54,6 +62,15 @@ function AppRow({ app, onChanged }: { app: TierApplicationAdmin; onChanged: () =
           <p style={{ margin: "0 0 8px", fontSize: 13 }}>
             📧 {app.teacher?.email} {app.teacher?.phone ? `· 📞 ${app.teacher.phone}` : ""}
           </p>
+
+          {app.consultedStudyDept && (
+            <div style={{ padding: 10, borderRadius: 10, border: `1px solid ${TONE_STYLE.bad.border}`, background: TONE_STYLE.bad.bg, marginBottom: 10 }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: TONE_STYLE.bad.fg }}>
+                ⚠️ Ustoz avtomatik ko'rsatkichlardan birini bajarmagan holda, o'quv bo'limi bilan
+                maslahatlashilganini belgilab ariza topshirgan. Quyidagi ✗ belgili bandga alohida e'tibor bering.
+              </p>
+            </div>
+          )}
 
           <h4 style={{ fontSize: 14, margin: "10px 0 6px" }}>Avtomatik ko'rsatkichlar (topshirish vaqtida)</h4>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

@@ -8,6 +8,7 @@ import { num, parseCSV, nameMatch, resolveByName } from "./stats.js";
 const SHEET_ID = "1asJpws1tN-3YJNl15IQEeBTl8iIEePXjNy5Ri769fis";
 const gvizUrl = (sheet?: string) =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv${sheet ? `&sheet=${encodeURIComponent(sheet)}` : ""}`;
+const defaultExportUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 
 const UZB_MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
 
@@ -16,12 +17,13 @@ const IGNORE_NAMES = ["umumiy", "jami", "ortacha", "o'rtacha", "minimal", "talab
 
 // Keyingi toifaga o'tish talablari (toifa -> talab):
 //   uv — uy vazifa bajarilishi kamida (%), davomat — kamida (%),
-//   ketgan — ko'pi bilan (%), kechUv — uy vazifani kech tekshirish ko'pi bilan (%),
-//   kechikish — oxirgi oyda ko'pi bilan (daqiqa)
-const REQUIREMENTS: Record<number, { uv: number; davomat: number; ketgan: number; kechUv: number; kechikish: number }> = {
-  2: { uv: 70, davomat: 80, ketgan: 10, kechUv: 6, kechikish: 10 },
-  3: { uv: 80, davomat: 85, ketgan: 8, kechUv: 4, kechikish: 10 },
-  4: { uv: 85, davomat: 85, ketgan: 6, kechUv: 2, kechikish: 10 },
+//   ketgan — ko'pi bilan (%), kechikish — oxirgi oyda ko'pi bilan (daqiqa)
+// ("Uy vazifani kech tekshirish" ko'rsatkichi ariza talabiga KIRMAYDI — faqat
+// ma'lumot uchun oylik faoliyat grafigida ko'rsatiladi, checks/passed'ga ta'sir qilmaydi)
+const REQUIREMENTS: Record<number, { uv: number; davomat: number; ketgan: number; kechikish: number }> = {
+  2: { uv: 70, davomat: 80, ketgan: 10, kechikish: 10 },
+  3: { uv: 80, davomat: 85, ketgan: 8, kechikish: 10 },
+  4: { uv: 85, davomat: 85, ketgan: 6, kechikish: 10 },
 };
 
 export const GURUH_LIMITLARI: Record<number, string> = {
@@ -81,7 +83,6 @@ export interface TeacherAnalysis {
 // O'tgan oylar deyarli o'zgarmaydi, joriy oy kun davomida to'ldiriladi — 3 soat yetarli.
 const MONTH_TTL_MS = 3 * 60 * 60 * 1000;
 const monthCache = new Map<string, { rows: string[][] | null; ts: number }>();
-let defaultSheetCache: { text: string; ts: number } | null = null;
 
 async function fetchText(url: string): Promise<string> {
   // 10s timeout — Sheet osilib qolsa so'rov cheksiz kutmasin
@@ -90,20 +91,67 @@ async function fetchText(url: string): Promise<string> {
   return res.text();
 }
 
-// Google gviz noto'g'ri varaq nomiga xato bermaydi — default varaqni qaytaraveradi.
-// Shu sabab oy varag'i defaultga aynan teng bo'lsa, varaq yo'q deb hisoblaymiz.
-// (export — stats.ts reytingda kechikishni oy varag'idan olishi uchun ham ishlatiladi)
+// ---- Defolt varaqning HAQIQIY nomi (faqat sarlavha, HEAD so'rov bilan) ----
+// export?format=csv so'rovida sheet/gid ko'rsatilmasa, joriy DEFOLT varaq qaytadi va
+// javobning Content-Disposition sarlavhasida o'sha varaqning haqiqiy nomi bo'ladi
+// (masalan "...- Avgust.csv"). Bu bizga aniq bilish imkonini beradi: agar so'ralgan oy
+// nomi aynan shu nomga teng bo'lsa, defolt varaq HAQIQATDA o'sha oyga tegishli — tasodif
+// emas (2026-08'da ofis "Avgust" varag'ini xuddi joriy/asosiy varaqning o'zi qilib
+// qo'ygan, natijada eski gviz-fallback heuristikasi buni noto'g'ri "yo'q" deb hisoblardi).
+// MUHIM: bu faqat NOMNI aniqlash uchun ishlatiladi — export'ning CSV formati gviz'dan
+// farq qiladi (sarlavha ikki qatorga bo'lingan, gviz esa birlashtirib beradi), shuning
+// uchun haqiqiy qatorlar HAR DOIM gviz'dan olinadi (pastda).
+let defaultNameCache: { name: string | null; ts: number } | null = null;
+
+async function getDefaultSheetName(): Promise<string | null> {
+  if (defaultNameCache && Date.now() - defaultNameCache.ts < MONTH_TTL_MS) return defaultNameCache.name;
+  const res = await fetch(defaultExportUrl, { method: "HEAD", signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`Sheet o'qib bo'lmadi (${res.status})`);
+  const disp = res.headers.get("content-disposition") ?? "";
+  const m = /filename\*=UTF-8''([^;]+)/.exec(disp);
+  let name: string | null = null;
+  if (m) {
+    const decoded = decodeURIComponent(m[1]).replace(/\.csv$/i, "");
+    const parts = decoded.split(" - ");
+    name = parts[parts.length - 1]?.trim() || null;
+  }
+  defaultNameCache = { name, ts: Date.now() };
+  return name;
+}
+
+let gvizDefaultCache: { text: string; ts: number } | null = null;
+
+async function getGvizDefaultText(): Promise<string> {
+  if (gvizDefaultCache && Date.now() - gvizDefaultCache.ts < MONTH_TTL_MS) return gvizDefaultCache.text;
+  const text = await fetchText(gvizUrl());
+  gvizDefaultCache = { text, ts: Date.now() };
+  return text;
+}
+
 export async function fetchMonthRows(month: string): Promise<string[][] | null> {
   const hit = monthCache.get(month);
   if (hit && Date.now() - hit.ts < MONTH_TTL_MS) return hit.rows;
 
-  if (!defaultSheetCache || Date.now() - defaultSheetCache.ts >= MONTH_TTL_MS) {
-    defaultSheetCache = { text: await fetchText(gvizUrl()), ts: Date.now() };
+  const [defaultName, gvizDefaultText] = await Promise.all([getDefaultSheetName(), getGvizDefaultText()]);
+  let text: string;
+  if (month === defaultName) {
+    // Content-Disposition orqali TASDIQLANGAN holda shu oyga tegishli — qayta so'rab
+    // tasodifiy moslikni tekshirishning hojati yo'q.
+    text = gvizDefaultText;
+  } else {
+    text = await fetchText(gvizUrl(month));
+    // Google gviz noto'g'ri/mavjud bo'lmagan varaq nomiga xato bermaydi — defolt
+    // varaqni qaytaraveradi. Defolt HAQIQATDA boshqa oyga tegishli ekani yuqorida
+    // tasdiqlangan, shuning uchun natija defolt bilan bir xil bo'lsa — demak bunday
+    // varaq chindan ham yo'q (tasodifiy moslik emas).
+    if (text === gvizDefaultText) {
+      monthCache.set(month, { rows: null, ts: Date.now() });
+      return null;
+    }
   }
-  const text = await fetchText(gvizUrl(month));
   // Bo'sh qatorlarni tashlab yuboramiz — varaqlarda o'n minglab bo'sh qator bor,
   // ularni keshda saqlash xotirani behuda yeydi
-  const rows = text === defaultSheetCache.text ? null : parseCSV(text).filter((r) => r.some((c) => c && c.trim()));
+  const rows = parseCSV(text).filter((r) => r.some((c) => c && c.trim()));
   monthCache.set(month, { rows, ts: Date.now() });
   return rows;
 }
@@ -251,7 +299,6 @@ export async function getAllAnalyses(
     const avgUv = avgOf(recent.map((m) => m.uvBajarish));
     const avgDav = avgOf(recent.map((m) => m.davomat));
     const avgKet = avgOf(recent.map((m) => m.ketgan));
-    const avgKechUv = avgOf(recent.map((m) => m.kechUv));
     const latest = entry.months[0] ?? null; // eng yangi oy birinchi turadi
     const lat = latest?.kechikish ?? null;
 
@@ -259,7 +306,6 @@ export async function getAllAnalyses(
       { key: "uv", label: "Uy vazifa bajarilishi", value: avgUv, required: req.uv, direction: "min", ok: avgUv != null && avgUv >= req.uv },
       { key: "davomat", label: "Davomat", value: avgDav, required: req.davomat, direction: "min", ok: avgDav != null && avgDav >= req.davomat },
       { key: "ketgan", label: "Ketgan o'quvchilar", value: avgKet, required: req.ketgan, direction: "max", ok: avgKet != null && avgKet <= req.ketgan },
-      { key: "kechUv", label: "Uy vazifani kech tekshirish", value: avgKechUv, required: req.kechUv, direction: "max", ok: avgKechUv != null && avgKechUv <= req.kechUv },
       { key: "kechikish", label: `Kechikish (${latest?.month ?? "oxirgi oy"})`, value: lat, required: req.kechikish, direction: "max", ok: lat != null && lat <= req.kechikish },
     ];
 

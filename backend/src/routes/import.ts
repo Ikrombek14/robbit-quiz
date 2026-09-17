@@ -1,4 +1,5 @@
 import { Router } from "express";
+import https from "node:https";
 import { requireAuth, requireCanCreate, type AuthedRequest } from "../auth.js";
 import { prisma } from "../prisma.js";
 import { localizeSlideImages } from "../services/externalImages.js";
@@ -376,6 +377,42 @@ export function mapQuizResponse(json: any): { title: string; slides: any[]; summ
   return { title: stripHtml(quiz?.info?.name ?? quiz?.name ?? ""), slides, summary };
 }
 
+// Wayground AWS WAF orqali serverimizning IPv4 manzilini bot deb bloklaydi
+// (202 + bo'sh tana + "x-amzn-waf-action: challenge"), IPv6 manzil esa ochiq.
+// Shu sabab avval IPv6 bilan urinamiz; IPv6 yo'q muhitda (masalan lokal dev)
+// yoki IPv6 ham bloklansa oddiy fetch (IPv4) ga qaytamiz.
+type RawResp = { status: number; waf: boolean; body: string };
+
+function getViaIPv6(url: string, headers: Record<string, string>, timeoutMs: number): Promise<RawResp> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers, family: 6, timeout: timeoutMs }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () =>
+        resolve({
+          status: res.statusCode ?? 0,
+          waf: Boolean(res.headers["x-amzn-waf-action"]),
+          body: Buffer.concat(chunks).toString("utf8"),
+        }),
+      );
+      res.on("error", reject);
+    });
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", reject);
+  });
+}
+
+async function getWayground(url: string, headers: Record<string, string>): Promise<RawResp> {
+  try {
+    const v6 = await getViaIPv6(url, headers, 8_000);
+    if (!v6.waf) return v6;
+  } catch {
+    /* IPv6 yo'q yoki ulanmadi — IPv4 ga o'tamiz */
+  }
+  const r = await fetch(url, { headers, signal: AbortSignal.timeout(20_000) });
+  return { status: r.status, waf: r.headers.has("x-amzn-waf-action"), body: await r.text() };
+}
+
 // Havoladan ochiq Wayground quizini olib, bizning {title, slides, summary}
 // formatiga aylantiradi. Xato bo'lsa mos HTTP status + xabar qaytaradi.
 // (Bitta va ommaviy import ham shu yagona mantiqdan foydalanadi.)
@@ -399,7 +436,14 @@ async function fetchWayground(url: string, cookie?: string): Promise<WgFetch> {
   }
   let json: any;
   try {
-    const r = await fetch(apiUrl, { headers, signal: AbortSignal.timeout(20_000) });
+    const r = await getWayground(apiUrl, headers);
+    if (r.waf || r.status === 202) {
+      return {
+        ok: false,
+        status: 502,
+        error: "Wayground serverimiz so'rovini bot deb blokladi (himoya tizimi). Birozdan keyin qayta urinib ko'ring.",
+      };
+    }
     if (r.status === 403 || r.status === 401) {
       return {
         ok: false,
@@ -409,10 +453,14 @@ async function fetchWayground(url: string, cookie?: string): Promise<WgFetch> {
           : "Bu quiz yopiq (private). Wayground login cookie'ingizni kiriting yoki quizni public qiling.",
       };
     }
-    if (!r.ok) {
+    if (r.status < 200 || r.status >= 300) {
       return { ok: false, status: 502, error: `Wayground javob bermadi (HTTP ${r.status}).` };
     }
-    json = await r.json();
+    try {
+      json = JSON.parse(r.body);
+    } catch {
+      return { ok: false, status: 502, error: "Wayground kutilmagan javob qaytardi (JSON emas)." };
+    }
   } catch {
     return { ok: false, status: 502, error: "Wayground'ga ulanib bo'lmadi. Internet yoki havolani tekshiring." };
   }

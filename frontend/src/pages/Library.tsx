@@ -251,7 +251,8 @@ export default function Library() {
               O'quv rejaga qo'shish{selected.size > 0 ? ` (${selected.size})` : ""}
             </button>
           )}
-          {canCreate && (
+          {/* Slaydni o'chirish — faqat admin (slaydchi tahrirlay oladi, o'chira olmaydi) */}
+          {isAdmin && (
             <button
               className="btn btn-ghost"
               disabled={selected.size === 0}
@@ -465,13 +466,15 @@ export default function Library() {
                   >
                     <span className="material-symbols-outlined">edit</span>
                   </button>
-                  <button
-                    className="row-action danger"
-                    onClick={(e) => remove(item.id, e)}
-                    title="O'chirish"
-                  >
-                    <span className="material-symbols-outlined">delete</span>
-                  </button>
+                  {isAdmin && (
+                    <button
+                      className="row-action danger"
+                      onClick={(e) => remove(item.id, e)}
+                      title="O'chirish"
+                    >
+                      <span className="material-symbols-outlined">delete</span>
+                    </button>
+                  )}
                 </>
               )}
             </div>

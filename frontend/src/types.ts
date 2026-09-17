@@ -130,7 +130,9 @@ export interface Quiz {
   title: string;
   description?: string | null;
   shuffle: boolean;
-  mine?: boolean; // egasi yoki admin — tahrirlash mumkin
+  mine?: boolean; // tahrirlash mumkin (admin, egasi yoki o'quv dasturdagi slayd uchun slaydchi)
+  canDelete?: boolean; // butun slaydni o'chirish — faqat admin
+  limitedRemove?: boolean; // boshqaning slaydi: bir saqlashda sahifa o'chirish cheklangan
   slides: Slide[];
 }
 

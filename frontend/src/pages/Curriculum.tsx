@@ -724,15 +724,15 @@ export default function Curriculum() {
                     <div
                       style={{
                         fontWeight: 600, fontSize: 15,
-                        cursor: isAdmin && hasQuiz ? "pointer" : "default",
-                        color: isAdmin && hasQuiz ? "var(--primary)" : undefined,
+                        cursor: canCreate && hasQuiz ? "pointer" : "default",
+                        color: canCreate && hasQuiz ? "var(--primary)" : undefined,
                       }}
                       // Faqat admin: mavzu nomiga bosilganda biriktirilgan slaydni tahrirlash uchun ochiladi
-                      onClick={(e) => { if (selectMode) return; if (isAdmin && hasQuiz) { e.stopPropagation(); navigate(`/quiz/${l.quiz!.id}`); } }}
-                      title={isAdmin && hasQuiz ? "Slaydni tahrirlash" : undefined}
+                      onClick={(e) => { if (selectMode) return; if (canCreate && hasQuiz) { e.stopPropagation(); navigate(`/quiz/${l.quiz!.id}`); } }}
+                      title={canCreate && hasQuiz ? "Slaydni tahrirlash" : undefined}
                     >
                       {l.order + 1}. {l.title}
-                      {isAdmin && hasQuiz && (
+                      {canCreate && hasQuiz && (
                         <span className="material-symbols-outlined" style={{ fontSize: 15, marginLeft: 5, verticalAlign: "middle", opacity: 0.7 }}>edit_note</span>
                       )}
                       {l.isDemo && (

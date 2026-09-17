@@ -65,6 +65,8 @@ export default function QuizEditor() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [shuffle, setShuffle] = useState(false);
+  // Boshqaning (o'quv dasturdagi) slaydi — sahifa o'chirish cheklangan, eslatma ko'rsatiladi
+  const [limitedRemove, setLimitedRemove] = useState(false);
   const [slides, setSlides] = useState<Slide[]>([]);
   const [selected, setSelected] = useState(0);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -108,6 +110,7 @@ export default function QuizEditor() {
         setDescription(r.quiz.description ?? "");
         setShuffle(r.quiz.shuffle);
         setSlides(r.quiz.slides);
+        setLimitedRemove(r.quiz.limitedRemove === true);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Xatolik"))
       .finally(() => setLoading(false));
@@ -437,6 +440,11 @@ export default function QuizEditor() {
         </div>
       </div>
 
+      {limitedRemove && (
+        <div className="error" style={{ margin: 16, background: "var(--primary-soft)", color: "var(--ink)", borderColor: "var(--primary)" }}>
+          ✏️ Siz o'quv dasturdagi umumiy slaydni tahrirlayapsiz. O'zgarishlarni saqlashingiz mumkin, lekin bir saqlashda faqat bir nechta sahifani o'chira olasiz. Butun slaydni o'chirish faqat adminda.
+        </div>
+      )}
       {error && <div className="error" style={{ margin: 16 }}>{error}</div>}
 
       <div className={`gs-editor ${tplOpen ? "with-tpl" : ""}`}>

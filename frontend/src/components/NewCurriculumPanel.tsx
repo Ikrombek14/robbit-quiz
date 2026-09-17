@@ -289,8 +289,19 @@ export default function NewCurriculumPanel() {
                               style={{ color: "var(--warn)", fontSize: 20, flexShrink: 0 }}>schedule</span>
                           )}
                           <div style={{ flex: 1, minWidth: 160 }}>
-                            <div style={{ fontWeight: 600, fontSize: 14.5 }}>
+                            <div
+                              style={{
+                                fontWeight: 600, fontSize: 14.5,
+                                cursor: canCreate && hasQuiz ? "pointer" : "default",
+                                color: canCreate && hasQuiz ? "var(--primary)" : undefined,
+                              }}
+                              onClick={() => { if (canCreate && hasQuiz) navigate(`/quiz/${l.quiz!.id}`); }}
+                              title={canCreate && hasQuiz ? "Slaydni tahrirlash" : undefined}
+                            >
                               {numberOf.get(l.id)}. {l.title}
+                              {canCreate && hasQuiz && (
+                                <span className="material-symbols-outlined" style={{ fontSize: 15, marginLeft: 5, verticalAlign: "middle", opacity: 0.7 }}>edit_note</span>
+                              )}
                             </div>
                             {l.quiz && (
                               <div className="muted" style={{ marginTop: 2, fontSize: 12.5 }}>

@@ -13,6 +13,24 @@ async function isAdminUser(teacherId?: string): Promise<boolean> {
   return t?.isAdmin === true;
 }
 
+// Quiz biror o'quv dasturga (O'quv dastur, Yangi o'quv dastur, Qo'shimcha darslar,
+// Workshoplar) biriktirilganmi — bunday slaydlar umumiy hisoblanadi.
+async function isLinkedQuiz(id: string): Promise<boolean> {
+  const [a, b, c, d] = await Promise.all([
+    prisma.lessonPlan.findFirst({ where: { quizId: id }, select: { id: true } }),
+    prisma.workshop.findFirst({ where: { quizId: id }, select: { id: true } }),
+    prisma.extraLesson.findFirst({ where: { quizId: id }, select: { id: true } }),
+    prisma.newCurriculumLesson.findFirst({ where: { quizId: id }, select: { id: true } }),
+  ]);
+  return Boolean(a || b || c || d);
+}
+
+// Boshqaning slaydini tahrirlayotgan slaydchi bir saqlashda ko'pi bilan shuncha
+// sahifani o'chira oladi — slaydni "bo'shatib" qo'yishdan himoya.
+function maxRemovable(oldCount: number): number {
+  return Math.max(2, Math.floor(oldCount * 0.2));
+}
+
 const slideSchema = z.object({
   kind: z.enum(["CONTENT", "QUESTION"]),
   type: z.string().nullable().optional(),
@@ -102,21 +120,17 @@ quizRouter.get("/", async (req: AuthedRequest, res) => {
 // O'quv dasturga biriktirilgan quizni esa har qanday login ustoz ko'ra oladi (preview/host uchun).
 quizRouter.get("/:id", async (req: AuthedRequest, res) => {
   const id = String(req.params.id);
-  const admin = await isAdminUser(req.teacherId);
+  const me = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { isAdmin: true, canCreate: true } });
+  const admin = me?.isAdmin === true;
   let quiz = await prisma.quiz.findFirst({
     where: admin ? { id } : { id, teacherId: req.teacherId },
     include: { slides: { orderBy: { order: "asc" } } },
   });
+  let linked = false;
   if (!quiz && !admin) {
-    // O'quv dasturga YOKI workshopga biriktirilgan quizni har qanday ustoz
-    // ko'ra oladi (tahrir emas — mine=false). Workshoplar umumiy bo'lgani uchun.
-    const [inCurriculum, inWorkshop, inExtra, inNewCur] = await Promise.all([
-      prisma.lessonPlan.findFirst({ where: { quizId: id }, select: { id: true } }),
-      prisma.workshop.findFirst({ where: { quizId: id }, select: { id: true } }),
-      prisma.extraLesson.findFirst({ where: { quizId: id }, select: { id: true } }),
-      prisma.newCurriculumLesson.findFirst({ where: { quizId: id }, select: { id: true } }),
-    ]);
-    if (inCurriculum || inWorkshop || inExtra || inNewCur) {
+    // O'quv dasturlarga biriktirilgan quizni har qanday ustoz ko'ra oladi (preview/host uchun)
+    linked = await isLinkedQuiz(id);
+    if (linked) {
       quiz = await prisma.quiz.findUnique({
         where: { id },
         include: { slides: { orderBy: { order: "asc" } } },
@@ -127,14 +141,19 @@ quizRouter.get("/:id", async (req: AuthedRequest, res) => {
     res.status(404).json({ error: "Quiz topilmadi" });
     return;
   }
+  const own = quiz.teacherId === req.teacherId;
   res.json({
     quiz: {
       id: quiz.id,
       title: quiz.title,
       description: quiz.description,
       shuffle: quiz.shuffle,
-      // Tahrirlash huquqi: egasi yoki admin. Curriculum orqali ko'rayotganlarga false.
-      mine: admin || quiz.teacherId === req.teacherId,
+      // Tahrirlash huquqi: admin, egasi, yoki o'quv dasturdagi slayd uchun slaydchi (canCreate)
+      mine: admin || own || (linked && me?.canCreate === true),
+      // Butun slaydni o'chirish — faqat admin
+      canDelete: admin,
+      // Boshqaning slaydini tahrirlayotgan slaydchi — sahifa o'chirish cheklangan
+      limitedRemove: !admin && !own,
       slides: quiz.slides.map(parseSlide),
     },
   });
@@ -208,25 +227,46 @@ quizRouter.put("/:id", requireCanCreate, async (req: AuthedRequest, res) => {
     return;
   }
   const admin = await isAdminUser(req.teacherId);
-  const owned = await prisma.quiz.findFirst({
-    where: admin ? { id: String(req.params.id) } : { id: String(req.params.id), teacherId: req.teacherId },
+  const id = String(req.params.id);
+  const target = await prisma.quiz.findUnique({
+    where: { id },
+    select: { id: true, teacherId: true, _count: { select: { slides: true } } },
   });
-  if (!owned) {
+  if (!target) {
+    res.status(404).json({ error: "Quiz topilmadi" });
+    return;
+  }
+  const own = target.teacherId === req.teacherId;
+  // Admin — hammasi; slaydchi — o'zinikini yoki o'quv dasturga biriktirilganini
+  if (!admin && !own && !(await isLinkedQuiz(id))) {
     res.status(404).json({ error: "Quiz topilmadi" });
     return;
   }
   const { title, description, shuffle, slides } = parsed.data;
-  await prisma.slide.deleteMany({ where: { quizId: owned.id } });
-  const quiz = await prisma.quiz.update({
-    where: { id: owned.id },
-    data: {
-      title,
-      description: description ?? null,
-      shuffle,
-      slides: { create: buildSlideCreate(slides) },
-    },
-    include: { slides: { orderBy: { order: "asc" } } },
-  });
+  if (!admin && !own) {
+    const removed = target._count.slides - slides.length;
+    const limit = maxRemovable(target._count.slides);
+    if (removed > limit) {
+      res.status(403).json({
+        error: `Bir saqlashda ko'pi bilan ${limit} ta sahifa o'chirish mumkin (siz ${removed} ta o'chirdingiz). Ko'proq o'chirish kerak bo'lsa adminga murojaat qiling.`,
+      });
+      return;
+    }
+  }
+  // O'chirish + qayta yaratish bitta tranzaksiyada — o'rtada xato bo'lsa sahifalar yo'qolmaydi
+  const [, quiz] = await prisma.$transaction([
+    prisma.slide.deleteMany({ where: { quizId: target.id } }),
+    prisma.quiz.update({
+      where: { id: target.id },
+      data: {
+        title,
+        description: description ?? null,
+        shuffle,
+        slides: { create: buildSlideCreate(slides) },
+      },
+      include: { slides: { orderBy: { order: "asc" } } },
+    }),
+  ]);
   res.json({
     quiz: {
       id: quiz.id,
@@ -238,12 +278,15 @@ quizRouter.put("/:id", requireCanCreate, async (req: AuthedRequest, res) => {
   });
 });
 
-// O'chirish — "slayd qilish" ruxsati kerak (admin har qanday loyihani o'chira oladi)
+// O'chirish — FAQAT admin. Slaydchi (canCreate) tahrirlay oladi, lekin o'chira olmaydi,
+// hatto o'zi yaratganini ham (slaydlar tasodifan yo'qolmasin).
 quizRouter.delete("/:id", requireCanCreate, async (req: AuthedRequest, res) => {
   const admin = await isAdminUser(req.teacherId);
-  const owned = await prisma.quiz.findFirst({
-    where: admin ? { id: String(req.params.id) } : { id: String(req.params.id), teacherId: req.teacherId },
-  });
+  if (!admin) {
+    res.status(403).json({ error: "Slaydni faqat admin o'chira oladi. O'chirish kerak bo'lsa adminga murojaat qiling." });
+    return;
+  }
+  const owned = await prisma.quiz.findUnique({ where: { id: String(req.params.id) } });
   if (!owned) {
     res.status(404).json({ error: "Quiz topilmadi" });
     return;

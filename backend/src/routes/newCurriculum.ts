@@ -128,20 +128,41 @@ newCurriculumRouter.put("/:id", requireAdmin, async (req, res) => {
     return;
   }
   const d = parsed.data;
-  try {
-    const lesson = await prisma.newCurriculumLesson.update({
-      where: { id: String(req.params.id) },
-      data: {
-        module: d.module.trim().slice(0, 120),
-        title: d.title.trim().slice(0, 200),
-        author: d.author?.trim() || null,
-        quizId: d.quizId || null,
-      },
-    });
-    res.json({ lesson });
-  } catch {
+  const id = String(req.params.id);
+  const current = await prisma.newCurriculumLesson.findUnique({ where: { id }, select: { module: true } });
+  if (!current) {
     res.status(404).json({ error: "Dars topilmadi" });
+    return;
   }
+  const newModule = d.module.trim().slice(0, 120);
+  await prisma.newCurriculumLesson.update({
+    where: { id },
+    data: {
+      module: newModule,
+      title: d.title.trim().slice(0, 200),
+      author: d.author?.trim() || null,
+      quizId: d.quizId || null,
+    },
+  });
+
+  // Modul almashsa — dars yangi modulning OXIRIGA ko'chadi (yangi modul bo'lsa ro'yxat
+  // oxiriga), aks holda eski tartib joyida qolib modullar bo'linib ketadi.
+  if (current.module !== newModule) {
+    const all = await prisma.newCurriculumLesson.findMany({
+      where: { id: { not: id } },
+      orderBy: { order: "asc" },
+      select: { id: true, module: true },
+    });
+    let insertAt = all.length;
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (all[i].module === newModule) { insertAt = i + 1; break; }
+    }
+    const seq = [...all.slice(0, insertAt).map((x) => x.id), id, ...all.slice(insertAt).map((x) => x.id)];
+    await prisma.$transaction(seq.map((sid, i) => prisma.newCurriculumLesson.update({ where: { id: sid }, data: { order: i } })));
+  }
+
+  const lesson = await prisma.newCurriculumLesson.findUnique({ where: { id } });
+  res.json({ lesson });
 });
 
 // Slayd biriktirish/yechish — "slayd qilish" ruxsati bo'lgan ustoz ham qila oladi

@@ -58,12 +58,14 @@ export default function NewCurriculumPanel() {
   const [form, setForm] = useState<EditState>({ module: "", title: "", author: "", quizId: "" });
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // silent=true — saqlash/o'chirishdan keyingi yangilash: skeleton ko'rsatilmaydi,
+  // aks holda ro'yxat bir zum yo'qolib sahifa tepaga sakrardi.
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const r = await api<{ lessons: NewLesson[] }>("/new-curriculum");
       setLessons(r.lessons);
-    } catch { /* ignore */ } finally { setLoading(false); }
+    } catch { /* ignore */ } finally { if (!silent) setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -80,10 +82,12 @@ export default function NewCurriculumPanel() {
     setForm({ module: l.module, title: l.title, author: l.author ?? "", quizId: l.quizId ?? "" });
     setEditingId(l.id); setShowAdd(false);
   }
+  function closeForm() { setShowAdd(false); setEditingId(null); }
 
   async function save() {
     if (!form.module.trim() || !form.title.trim()) { showToast("Modul va dars nomini kiriting"); return; }
     setSaving(true);
+    const wasEditing = Boolean(editingId);
     const body = JSON.stringify({
       module: form.module.trim(), title: form.title.trim(),
       author: form.author.trim() || null, quizId: form.quizId || null, order: 0,
@@ -91,17 +95,78 @@ export default function NewCurriculumPanel() {
     try {
       if (editingId) await api(`/new-curriculum/${editingId}`, { method: "PUT", body });
       else await api("/new-curriculum", { method: "POST", body });
-      await load();
-      setShowAdd(false); setEditingId(null);
-      showToast(editingId ? "✅ Saqlandi" : "✅ Qo'shildi");
+      await load(true);
+      closeForm();
+      showToast(wasEditing ? "✅ Saqlandi" : "✅ Qo'shildi");
     } catch (e) { showToast(e instanceof Error ? e.message : "Xatolik"); }
     finally { setSaving(false); }
   }
 
   async function removeLesson(l: NewLesson) {
     if (!confirm(`"${l.title}" darsini o'chirishni tasdiqlaysizmi?`)) return;
-    try { await api(`/new-curriculum/${l.id}`, { method: "DELETE" }); await load(); }
+    try { await api(`/new-curriculum/${l.id}`, { method: "DELETE" }); await load(true); }
     catch (e) { showToast(e instanceof Error ? e.message : "Xatolik"); }
+  }
+
+  // Modul ichida bir pog'ona yuqoriga/pastga surish (darslar modul bo'yicha
+  // ketma-ket turadi, shuning uchun qo'shni element shu modulniki bo'ladi)
+  async function moveLesson(l: NewLesson, dir: -1 | 1) {
+    const idx = lessons.findIndex((x) => x.id === l.id);
+    const j = idx + dir;
+    if (idx < 0 || j < 0 || j >= lessons.length || lessons[j].module !== l.module) return;
+    const prev = lessons;
+    const next = [...lessons];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setLessons(next.map((x, i) => ({ ...x, order: i })));
+    try {
+      await api("/new-curriculum/reorder", { method: "PATCH", body: JSON.stringify({ ids: next.map((x) => x.id) }) });
+    } catch (e) {
+      setLessons(prev);
+      showToast(e instanceof Error ? e.message : "Tartibni saqlab bo'lmadi");
+    }
+  }
+
+  function renderForm() {
+    return (
+      <div className={`cur-form ${editingId ? "editing" : ""}`} style={{ marginTop: editingId ? 0 : 10 }}
+        onKeyDown={(e) => { if (e.key === "Escape") closeForm(); }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>
+          {editingId ? "✏️ Darsni tahrirlash" : "➕ Yangi dars qo'shish"}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label className="f-label">Modul (oy) *</label>
+            <input list="ncur-modules" value={form.module}
+              placeholder="Masalan: 1-oy: Kompyuter savodxonligi + AI"
+              onChange={(e) => setForm((f) => ({ ...f, module: e.target.value }))} />
+            <datalist id="ncur-modules">
+              {allModules.map((m) => <option key={m} value={m} />)}
+            </datalist>
+          </div>
+          <div style={{ flex: 1.4, minWidth: 220 }}>
+            <label className="f-label">Dars nomi *</label>
+            <input value={form.title} autoFocus
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && save()} />
+          </div>
+          <div style={{ width: 150 }}>
+            <label className="f-label">Muallif</label>
+            <input value={form.author} onChange={(e) => setForm((f) => ({ ...f, author: e.target.value }))} placeholder="Ixtiyoriy" />
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label className="f-label">Slayd biriktirish</label>
+            <QuizPicker quizzes={quizList} value={form.quizId} placeholder="— Ixtiyoriy —"
+              onChange={(id) => setForm((f) => ({ ...f, quizId: id }))} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" onClick={save} disabled={saving || !form.module.trim() || !form.title.trim()}>
+              {saving ? "…" : editingId ? "Saqlash" : "Qo'shish"}
+            </button>
+            <button className="btn btn-ghost" onClick={closeForm}>Bekor</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   async function attachQuiz(l: NewLesson, quizId: string) {
@@ -189,8 +254,11 @@ export default function NewCurriculumPanel() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
-                  {g.items.map((l) => {
+                  {g.items.map((l, gi) => {
                       const hasQuiz = Boolean(l.quiz);
+                      // Tahrir formasi aynan shu dars o'rnida ochiladi (sahifa oxirida emas)
+                      if (isAdmin && editingId === l.id) return <div key={l.id}>{renderForm()}</div>;
+                      const canMove = isAdmin && !q;
                       return (
                         <div key={l.id} className="cur-row" style={{ padding: "10px 14px" }}>
                           {hasQuiz ? (
@@ -231,6 +299,16 @@ export default function NewCurriculumPanel() {
                                 onChange={(id) => attachQuiz(l, id)} placeholder="Slayd biriktirish…" />
                             </div>
                           )}
+                          {canMove && (
+                            <>
+                              <button className="cur-mini-btn" onClick={() => moveLesson(l, -1)} disabled={gi === 0} title="Yuqoriga surish">
+                                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_upward</span>
+                              </button>
+                              <button className="cur-mini-btn" onClick={() => moveLesson(l, 1)} disabled={gi === g.items.length - 1} title="Pastga surish">
+                                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_downward</span>
+                              </button>
+                            </>
+                          )}
                           {isAdmin && (
                             <>
                               <button className="cur-mini-btn edit" onClick={() => openEdit(l)} title="Tahrirlash">
@@ -249,44 +327,7 @@ export default function NewCurriculumPanel() {
             );
           })}
 
-          {isAdmin && (showAdd || editingId) && (
-            <div className="cur-form" style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                {editingId ? "✏️ Darsni tahrirlash" : "➕ Yangi dars qo'shish"}
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div style={{ flex: 1, minWidth: 220 }}>
-                  <label className="f-label">Modul (oy) *</label>
-                  <input list="ncur-modules" value={form.module}
-                    placeholder="Masalan: 1-oy: Kompyuter savodxonligi + AI"
-                    onChange={(e) => setForm((f) => ({ ...f, module: e.target.value }))} />
-                  <datalist id="ncur-modules">
-                    {allModules.map((m) => <option key={m} value={m} />)}
-                  </datalist>
-                </div>
-                <div style={{ flex: 1.4, minWidth: 220 }}>
-                  <label className="f-label">Dars nomi *</label>
-                  <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                    onKeyDown={(e) => e.key === "Enter" && save()} />
-                </div>
-                <div style={{ width: 150 }}>
-                  <label className="f-label">Muallif</label>
-                  <input value={form.author} onChange={(e) => setForm((f) => ({ ...f, author: e.target.value }))} placeholder="Ixtiyoriy" />
-                </div>
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <label className="f-label">Slayd biriktirish</label>
-                  <QuizPicker quizzes={quizList} value={form.quizId} placeholder="— Ixtiyoriy —"
-                    onChange={(id) => setForm((f) => ({ ...f, quizId: id }))} />
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn" onClick={save} disabled={saving || !form.module.trim() || !form.title.trim()}>
-                    {saving ? "…" : editingId ? "Saqlash" : "Qo'shish"}
-                  </button>
-                  <button className="btn btn-ghost" onClick={() => { setShowAdd(false); setEditingId(null); }}>Bekor</button>
-                </div>
-              </div>
-            </div>
-          )}
+          {isAdmin && showAdd && renderForm()}
 
           {isAdmin && !showAdd && !editingId && (
             <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={openAddForm}>+ Dars qo'shish</button>

@@ -17,13 +17,27 @@ async function requireAdmin(req: AuthedRequest, res: Response, next: NextFunctio
   next();
 }
 
+// order — butun dastur bo'ylab 0-asosli o'rin (ekrandagi "#" raqami minus 1).
+// Berilmasa: yaratishda ro'yxat oxiriga, yangilashda joyida qoladi.
 const lessonSchema = z.object({
   module: z.string().min(1),
   title: z.string().min(1),
   author: z.string().nullable().optional(),
   quizId: z.string().nullable().optional(),
-  order: z.number().int().default(0),
+  order: z.number().int().min(0).optional(),
 });
+
+// Darsni `idx` o'ringa qo'yib, butun ro'yxatni 0..n-1 qilib qayta raqamlaydi
+async function placeAt(id: string, idx: number): Promise<void> {
+  const others = await prisma.newCurriculumLesson.findMany({
+    where: { id: { not: id } },
+    orderBy: { order: "asc" },
+    select: { id: true },
+  });
+  const at = Math.max(0, Math.min(idx, others.length));
+  const seq = [...others.slice(0, at).map((o) => o.id), id, ...others.slice(at).map((o) => o.id)];
+  await prisma.$transaction(seq.map((sid, i) => prisma.newCurriculumLesson.update({ where: { id: sid }, data: { order: i } })));
+}
 
 // Tartib raqamlarini 0..n-1 qilib zichlaydi
 async function compactAll(): Promise<void> {
@@ -72,7 +86,9 @@ newCurriculumRouter.post("/", requireAdmin, async (req, res) => {
       order: agg._max.order != null ? agg._max.order + 1 : 0,
     },
   });
-  res.json({ lesson: created });
+  if (d.order !== undefined) await placeAt(created.id, d.order);
+  const lesson = await prisma.newCurriculumLesson.findUnique({ where: { id: created.id } });
+  res.json({ lesson });
 });
 
 // Ommaviy qo'shish — [{module,title}] ketma-ketlikda (seed uchun). Faqat admin.
@@ -145,20 +161,22 @@ newCurriculumRouter.put("/:id", requireAdmin, async (req, res) => {
     },
   });
 
-  // Modul almashsa — dars yangi modulning OXIRIGA ko'chadi (yangi modul bo'lsa ro'yxat
-  // oxiriga), aks holda eski tartib joyida qolib modullar bo'linib ketadi.
-  if (current.module !== newModule) {
+  if (d.order !== undefined) {
+    // "#" raqami berilgan — aynan shu o'ringa qo'yiladi
+    await placeAt(id, d.order);
+  } else if (current.module !== newModule) {
+    // Raqam berilmay modul almashsa — yangi modulning OXIRIGA (yangi modul bo'lsa
+    // ro'yxat oxiriga), aks holda eski joyida qolib modullar bo'linib ketadi.
     const all = await prisma.newCurriculumLesson.findMany({
       where: { id: { not: id } },
       orderBy: { order: "asc" },
-      select: { id: true, module: true },
+      select: { module: true },
     });
     let insertAt = all.length;
     for (let i = all.length - 1; i >= 0; i--) {
       if (all[i].module === newModule) { insertAt = i + 1; break; }
     }
-    const seq = [...all.slice(0, insertAt).map((x) => x.id), id, ...all.slice(insertAt).map((x) => x.id)];
-    await prisma.$transaction(seq.map((sid, i) => prisma.newCurriculumLesson.update({ where: { id: sid }, data: { order: i } })));
+    await placeAt(id, insertAt);
   }
 
   const lesson = await prisma.newCurriculumLesson.findUnique({ where: { id } });

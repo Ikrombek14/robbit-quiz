@@ -32,6 +32,7 @@ interface EditState {
   title: string;
   author: string;
   quizId: string;
+  order: number; // ekrandagi "#" (1-asosli, butun dastur bo'ylab)
 }
 
 export default function NewCurriculumPanel() {
@@ -55,7 +56,7 @@ export default function NewCurriculumPanel() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<EditState>({ module: "", title: "", author: "", quizId: "" });
+  const [form, setForm] = useState<EditState>({ module: "", title: "", author: "", quizId: "", order: 1 });
   const [saving, setSaving] = useState(false);
 
   // silent=true — saqlash/o'chirishdan keyingi yangilash: skeleton ko'rsatilmaydi,
@@ -75,14 +76,33 @@ export default function NewCurriculumPanel() {
   }, [canCreate]);
 
   function openAddForm() {
-    setForm({ module: "", title: "", author: "", quizId: "" });
+    const last = lessons[lessons.length - 1];
+    setForm({ module: last?.module ?? "", title: "", author: "", quizId: "", order: lessons.length + 1 });
     setShowAdd(true); setEditingId(null);
   }
   function openEdit(l: NewLesson) {
-    setForm({ module: l.module, title: l.title, author: l.author ?? "", quizId: l.quizId ?? "" });
+    const pos = lessons.findIndex((x) => x.id === l.id) + 1;
+    setForm({ module: l.module, title: l.title, author: l.author ?? "", quizId: l.quizId ?? "", order: pos });
     setEditingId(l.id); setShowAdd(false);
   }
   function closeForm() { setShowAdd(false); setEditingId(null); }
+
+  // "#" va modul maydonlari bir-biriga moslashadi — dars boshqa oyning o'rtasiga
+  // tushib qolmasin. Hisob tahrirlanayotgan darsning o'zisiz olib boriladi.
+  function moduleForPos(order: number, currentModule: string): string {
+    const others = lessons.filter((x) => x.id !== editingId);
+    const k = Math.max(0, Math.min(order - 1, others.length));
+    const prev = others[k - 1]?.module;
+    const next = others[k]?.module;
+    if (currentModule && (currentModule === prev || currentModule === next)) return currentModule;
+    return next ?? prev ?? currentModule;
+  }
+  function posForModule(module: string): number {
+    const others = lessons.filter((x) => x.id !== editingId);
+    let last = -1;
+    others.forEach((x, i) => { if (x.module === module) last = i; });
+    return last >= 0 ? last + 2 : others.length + 1;
+  }
 
   async function save() {
     if (!form.module.trim() || !form.title.trim()) { showToast("Modul va dars nomini kiriting"); return; }
@@ -90,7 +110,9 @@ export default function NewCurriculumPanel() {
     const wasEditing = Boolean(editingId);
     const body = JSON.stringify({
       module: form.module.trim(), title: form.title.trim(),
-      author: form.author.trim() || null, quizId: form.quizId || null, order: 0,
+      author: form.author.trim() || null, quizId: form.quizId || null,
+      // "#" bo'sh qolsa — order yuborilmaydi: tahrirda joyida qoladi, qo'shishda oxiriga
+      ...(form.order > 0 ? { order: form.order - 1 } : {}),
     });
     try {
       if (editingId) await api(`/new-curriculum/${editingId}`, { method: "PUT", body });
@@ -108,25 +130,8 @@ export default function NewCurriculumPanel() {
     catch (e) { showToast(e instanceof Error ? e.message : "Xatolik"); }
   }
 
-  // Modul ichida bir pog'ona yuqoriga/pastga surish (darslar modul bo'yicha
-  // ketma-ket turadi, shuning uchun qo'shni element shu modulniki bo'ladi)
-  async function moveLesson(l: NewLesson, dir: -1 | 1) {
-    const idx = lessons.findIndex((x) => x.id === l.id);
-    const j = idx + dir;
-    if (idx < 0 || j < 0 || j >= lessons.length || lessons[j].module !== l.module) return;
-    const prev = lessons;
-    const next = [...lessons];
-    [next[idx], next[j]] = [next[j], next[idx]];
-    setLessons(next.map((x, i) => ({ ...x, order: i })));
-    try {
-      await api("/new-curriculum/reorder", { method: "PATCH", body: JSON.stringify({ ids: next.map((x) => x.id) }) });
-    } catch (e) {
-      setLessons(prev);
-      showToast(e instanceof Error ? e.message : "Tartibni saqlab bo'lmadi");
-    }
-  }
-
   function renderForm() {
+    const maxPos = editingId ? lessons.length : lessons.length + 1;
     return (
       <div className={`cur-form ${editingId ? "editing" : ""}`} style={{ marginTop: editingId ? 0 : 10 }}
         onKeyDown={(e) => { if (e.key === "Escape") closeForm(); }}>
@@ -134,11 +139,27 @@ export default function NewCurriculumPanel() {
           {editingId ? "✏️ Darsni tahrirlash" : "➕ Yangi dars qo'shish"}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ width: 72 }}>
+            <label className="f-label">#</label>
+            <input type="number" min={1} max={maxPos} value={form.order || ""} style={{ textAlign: "center" }}
+              onChange={(e) => {
+                // Bo'sh qoldirish mumkin (yangi raqam yozish uchun) — 0 = kiritilmagan
+                if (e.target.value === "") { setForm((f) => ({ ...f, order: 0 })); return; }
+                const n = Math.max(1, Math.min(Math.round(Number(e.target.value)) || 1, maxPos));
+                setForm((f) => ({ ...f, order: n, module: moduleForPos(n, f.module) }));
+              }} />
+          </div>
           <div style={{ flex: 1, minWidth: 220 }}>
             <label className="f-label">Modul (oy) *</label>
             <input list="ncur-modules" value={form.module}
               placeholder="Masalan: 1-oy: Kompyuter savodxonligi + AI"
-              onChange={(e) => setForm((f) => ({ ...f, module: e.target.value }))} />
+              onChange={(e) => {
+                const v = e.target.value;
+                // Mavjud modul tanlansa — "#" shu modul oxiriga o'tadi
+                setForm((f) => (allModules.includes(v.trim())
+                  ? { ...f, module: v, order: posForModule(v.trim()) }
+                  : { ...f, module: v }));
+              }} />
             <datalist id="ncur-modules">
               {allModules.map((m) => <option key={m} value={m} />)}
             </datalist>
@@ -254,11 +275,10 @@ export default function NewCurriculumPanel() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
-                  {g.items.map((l, gi) => {
+                  {g.items.map((l) => {
                       const hasQuiz = Boolean(l.quiz);
                       // Tahrir formasi aynan shu dars o'rnida ochiladi (sahifa oxirida emas)
                       if (isAdmin && editingId === l.id) return <div key={l.id}>{renderForm()}</div>;
-                      const canMove = isAdmin && !q;
                       return (
                         <div key={l.id} className="cur-row" style={{ padding: "10px 14px" }}>
                           {hasQuiz ? (
@@ -298,16 +318,6 @@ export default function NewCurriculumPanel() {
                               <QuizPicker quizzes={quizList} value={l.quizId ?? ""}
                                 onChange={(id) => attachQuiz(l, id)} placeholder="Slayd biriktirish…" />
                             </div>
-                          )}
-                          {canMove && (
-                            <>
-                              <button className="cur-mini-btn" onClick={() => moveLesson(l, -1)} disabled={gi === 0} title="Yuqoriga surish">
-                                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_upward</span>
-                              </button>
-                              <button className="cur-mini-btn" onClick={() => moveLesson(l, 1)} disabled={gi === g.items.length - 1} title="Pastga surish">
-                                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_downward</span>
-                              </button>
-                            </>
                           )}
                           {isAdmin && (
                             <>

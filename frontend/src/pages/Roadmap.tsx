@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Shell from "../components/Shell";
+import { NEW_PLAN_PHASES, NEW_PLAN_EXTRA } from "../newPlan";
 
 // Robbit yo'l xaritasi — PDF roadmapning saytdagi jonli, moslashuvchan ko'rinishi.
 // 4 ta "sahifa" = 2 yo'nalish × 2 yosh toifasi. Har biri 3 ta modul, har modulda
@@ -181,8 +182,12 @@ const ROADMAPS: Roadmap[] = [
   },
 ];
 
+// "NEW" — yangi 12 oylik reja (tasdiqlangan); qolganlari — avvalgi yo'nalishlar
+type View = "NEW" | Subject;
+
 export default function RoadmapPage() {
-  const [subject, setSubject] = useState<Subject>("ROBOTEXNIKA");
+  const [view, setView] = useState<View>("NEW");
+  const subject: Subject = view === "NEW" ? "ROBOTEXNIKA" : view;
   const [age, setAge] = useState<Age>("9-11");
   const rm = ROADMAPS.find((r) => r.subject === subject && r.age === age) ?? ROADMAPS[0];
 
@@ -196,15 +201,16 @@ export default function RoadmapPage() {
           </p>
         </div>
 
-        {/* Yo'nalish */}
+        {/* Yangi reja + yo'nalishlar */}
         <div className="cur-seg" style={{ marginBottom: 16 }}>
-          {(["ROBOTEXNIKA", "DASTURLASH"] as Subject[]).map((s) => (
-            <button key={s} className={subject === s ? "active" : ""} onClick={() => setSubject(s)}>
-              {s === "ROBOTEXNIKA" ? "Robototexnika" : "Dasturlash"}
+          {(["NEW", "ROBOTEXNIKA", "DASTURLASH"] as View[]).map((v) => (
+            <button key={v} className={view === v ? "active" : ""} onClick={() => setView(v)}>
+              {v === "NEW" ? "Yangi reja" : v === "ROBOTEXNIKA" ? "Robototexnika" : "Dasturlash"}
             </button>
           ))}
         </div>
 
+        {view === "NEW" ? <NewPlanView /> : (<>
         {/* Yosh toifasi + davomiylik */}
         <div className="cur-filters" style={{ alignItems: "center", marginBottom: 22 }}>
           <div className="cur-filter-group">
@@ -267,7 +273,105 @@ export default function RoadmapPage() {
             );
           })}
         </div>
+        </>)}
       </div>
     </Shell>
+  );
+}
+
+// Yangi 12 oylik reja: 2 qism × 6 oy, har oyda tavsif va mavzular (yig'iladigan),
+// oxirida 12 oylik dasturga kirmaydigan qo'shimcha kurslar.
+function NewPlanView() {
+  const total = NEW_PLAN_PHASES.reduce((s, p) => s + p.months.reduce((a, m) => a + m.lessons.length, 0), 0);
+  return (
+    <>
+      <div className="rm-intro">
+        <p>
+          Robbit Akademiyasining yangi 12 oylik o'quv dasturi. Dastlabki 6 oy — <b>Dasturlash qismi</b>:
+          kompyuter savodxonligi va AI'dan boshlab Scratch, Python va C++ gacha. Keyingi 6 oy — <b>Robototexnika
+          qismi</b>: Spike, Elektronika, Arduino va ESP32.
+        </p>
+        <p>
+          Har oyda 11–14 ta dars. Har bir yangi tushuncha amaliy mashq bilan mustahkamlanadi, oy oxirida esa
+          yakuniy loyiha tayyorlanib himoya qilinadi.
+        </p>
+      </div>
+
+      <div className="np-stats">
+        <span className="np-stat"><span className="material-symbols-outlined">calendar_month</span>12 oy</span>
+        <span className="np-stat"><span className="material-symbols-outlined">menu_book</span>{total} dars</span>
+        <span className="np-stat"><span className="material-symbols-outlined">view_agenda</span>2 qism</span>
+      </div>
+
+      {NEW_PLAN_PHASES.map((phase) => {
+        const t = TINTS[phase.tint];
+        const n = phase.months.reduce((a, m) => a + m.lessons.length, 0);
+        return (
+          <section key={phase.title} className="np-phase"
+            style={{ ["--rm-line" as string]: t.line, ["--np-soft" as string]: t.soft }}>
+            <div className="np-phase-head">
+              <span className="rm-mod-icon" style={{ background: t.line }}>
+                <span className="material-symbols-outlined">{phase.icon}</span>
+              </span>
+              <div>
+                <h2 className="rm-mod-name">{phase.title}</h2>
+                <p className="rm-mod-desc">{phase.range} · {n} dars</p>
+              </div>
+            </div>
+            <div className="np-months">
+              {phase.months.map((m) => (
+                <article key={m.month} className="np-month">
+                  <div className="np-month-top">
+                    <span className="np-month-no">{m.month}-oy</span>
+                    <span className="np-month-count">{m.lessons.length} dars</span>
+                  </div>
+                  <div className="np-month-title">
+                    <span className="material-symbols-outlined">{m.icon}</span>
+                    {m.name}
+                  </div>
+                  <p className="np-month-desc">{m.desc}</p>
+                  <details className="np-topics">
+                    <summary>Mavzular</summary>
+                    <ol>{m.lessons.map((l, i) => <li key={i}>{l}</li>)}</ol>
+                  </details>
+                </article>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+
+      <div className="np-extra-head">
+        <span className="np-badge">Qo'shimcha taklif</span>
+        <span className="muted">12 oylik dasturga kirmaydi · bitirgandan keyin taklif etiladi · davomiyligi 6 oy</span>
+      </div>
+      {NEW_PLAN_EXTRA.map((track) => {
+        const t = TINTS[track.tint];
+        return (
+          <section key={track.title} className="np-phase"
+            style={{ ["--rm-line" as string]: t.line, ["--np-soft" as string]: t.soft }}>
+            <div className="np-phase-head">
+              <span className="rm-mod-icon" style={{ background: t.line }}>
+                <span className="material-symbols-outlined">{track.icon}</span>
+              </span>
+              <div>
+                <h2 className="rm-mod-name">{track.title}</h2>
+                <p className="rm-mod-desc">6 oy</p>
+              </div>
+            </div>
+            <div className="np-track">
+              {track.months.map((m) => (
+                <div key={m.month} className="np-step">
+                  <span className="rm-stage-step">{m.month}-oy</span>
+                  <span className="rm-stage-title">{m.name}</span>
+                  <span className="np-step-desc">{m.desc}</span>
+                  <ul className="np-step-topics">{m.topics.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </>
   );
 }

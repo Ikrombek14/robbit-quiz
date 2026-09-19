@@ -1656,6 +1656,57 @@ img, svg, video { max-width: 100%; height: auto; }
 .rm-stage-months .material-symbols-outlined { font-size: 15px; }
 .rm-arrow { flex: none; color: var(--rm-line); font-size: 22px; opacity: 0.65; }
 
+/* ---------- Yo'l xaritasi: Yangi reja (12 oylik) ---------- */
+.np-stats { display: flex; gap: 8px; flex-wrap: wrap; margin: -8px 0 20px; }
+.np-stat {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  background: var(--surface-high); font-weight: 700; font-size: 13.5px; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.np-stat .material-symbols-outlined { font-size: 17px; color: var(--primary); }
+.np-phase {
+  border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; margin-bottom: 18px;
+  background: var(--np-soft); box-shadow: inset 4px 0 0 var(--rm-line);
+}
+.np-phase-head { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.np-months { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 12px; }
+.np-month {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+}
+.np-month-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.np-month-no {
+  font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--rm-line);
+}
+.np-month-count { font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.np-month-title { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 16px; line-height: 1.25; color: var(--ink); }
+.np-month-title .material-symbols-outlined { font-size: 20px; color: var(--rm-line); }
+.np-month-desc { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.np-topics { margin-top: auto; border-top: 1px dashed var(--border); padding-top: 8px; }
+.np-topics summary {
+  cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; font-weight: 700; color: var(--rm-line); min-height: 28px;
+}
+.np-topics summary::-webkit-details-marker { display: none; }
+.np-topics summary::before { content: "▸"; transition: transform 0.15s; }
+.np-topics[open] summary::before { transform: rotate(90deg); }
+.np-topics summary:focus-visible { outline: 2px solid var(--rm-line); outline-offset: 2px; border-radius: 6px; }
+.np-topics ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; line-height: 1.55; color: var(--ink); }
+.np-extra-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 26px 0 12px; font-size: 13.5px; }
+.np-badge {
+  font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+  background: var(--primary-soft); color: var(--primary-strong, var(--primary));
+}
+.np-track { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 10px; }
+.np-step {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 5px;
+}
+.np-step-desc { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.np-step-topics { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+@media (max-width: 600px) { .np-phase { padding: 14px; } }
+@media (prefers-reduced-motion: reduce) { .np-topics summary::before { transition: none; } }
+
 @media (max-width: 860px) {
   .rm-module { grid-template-columns: 1fr; gap: 16px; }
   .rm-stages { flex-direction: column; }

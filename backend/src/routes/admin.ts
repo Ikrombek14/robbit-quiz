@@ -84,7 +84,8 @@ adminRouter.get("/users", async (req, res) => {
 // ---- Ustozlik so'rovini hal qilish (har qanday admin) ----
 // approve=true: ustoz huquqi beriladi (accessOverride=true), so'rov yopiladi.
 // approve=false: so'rov rad etiladi, foydalanuvchi o'quvchi bo'lib qoladi.
-const requestSchema = z.object({ approve: z.boolean() });
+// as="office" — ustoz emas, markaz admini (ma'lumot ko'ruvchi) qilinadi.
+const requestSchema = z.object({ approve: z.boolean(), as: z.enum(["teacher", "office"]).optional() });
 adminRouter.post("/users/:id/teacher-request", async (req: AuthedRequest, res) => {
   const parsed = requestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -99,9 +100,11 @@ adminRouter.post("/users/:id/teacher-request", async (req: AuthedRequest, res) =
   }
   const updated = await prisma.teacher.update({
     where: { id },
-    data: parsed.data.approve
-      ? { accessOverride: true, approved: true, teacherRequestAt: null, teacherRequestName: null }
-      : { teacherRequestAt: null, teacherRequestName: null },
+    data: !parsed.data.approve
+      ? { teacherRequestAt: null, teacherRequestName: null }
+      : parsed.data.as === "office"
+        ? { officeAdmin: true, teacherRequestAt: null, teacherRequestName: null }
+        : { accessOverride: true, approved: true, teacherRequestAt: null, teacherRequestName: null },
     select: {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,

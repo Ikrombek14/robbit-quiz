@@ -21,7 +21,8 @@ const canApproved = (t: NavRole | null) => !!(t?.isAdmin || t?.approved);
 const isAdmin = (t: NavRole | null) => !!t?.isAdmin;
 // "slayd qilish" ruxsati bo'lganlar (admin yoki canCreate) ko'radi
 const canCreateNav = (t: NavRole | null) => !!(t?.isAdmin || t?.canCreate);
-// Yo'l xaritasi — ustoz yoki ofis admin (pending ustoz ko'rmaydi)
+// Ustoz yoki markaz admini (officeAdmin, ma'lumot ko'ruvchi) — pending ko'rmaydi:
+// Yo'l xaritasi, Statistika, Ustozlar
 const canStaff = (t: NavRole | null) => !!(t?.isAdmin || t?.approved || t?.officeAdmin);
 // Yo'riqnoma / Sozlamalar — barcha markaz xodimlari (pending va ofis admin ham)
 const canPanel = (t: NavRole | null) => !!(t?.isAdmin || t?.approved || t?.officeAdmin || t?.teacherRequestPending);
@@ -35,11 +36,11 @@ const NAV: NavItem[] = [
   { key: "practice", label: "Amaliyot dasturi", icon: "assignment", path: "/practice", mobileHide: false, show: canPanel },
   { key: "roadmap", label: "Yo'l xaritasi", icon: "route", path: "/roadmap", mobileHide: false, show: canStaff },
   { key: "library", label: "Kutubxonam", icon: "library_books", path: "/library", mobileHide: false, show: canCreateNav },
-  { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false, show: canApproved },
+  { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false, show: canStaff },
   { key: "tier-application", label: "Toifa oshirish", icon: "military_tech", path: "/tier-application", mobileHide: true, show: canApproved },
   { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true, show: canApproved },
   { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canPanel },
-  { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true, show: canApproved },
+  { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true, show: canStaff },
   { key: "users", label: "Foydalanuvchilar", icon: "manage_accounts", path: "/users", mobileHide: true, show: isAdmin },
   { key: "tier-applications", label: "Toifa arizalari", icon: "assignment_turned_in", path: "/tier-applications", mobileHide: true, show: isAdmin },
   { key: "bulk", label: "Ommaviy import", icon: "cloud_download", path: "/bulk-import", mobileHide: true, show: canCreateNav },

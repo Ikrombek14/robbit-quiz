@@ -115,10 +115,10 @@ export default function App() {
       <Route path="/practice" element={<Protected panel><Practice /></Protected>} />
       <Route path="/roadmap" element={<Protected staff><Roadmap /></Protected>} />
       <Route path="/guide" element={<Protected panel><Guide /></Protected>} />
-      <Route path="/teachers" element={<Protected><Teachers /></Protected>} />
+      <Route path="/teachers" element={<Protected staff><Teachers /></Protected>} />
       <Route path="/users" element={<Protected admin><Users /></Protected>} />
       <Route path="/backup" element={<Protected admin><Backup /></Protected>} />
-      <Route path="/stats" element={<Protected><Stats /></Protected>} />
+      <Route path="/stats" element={<Protected staff><Stats /></Protected>} />
       <Route path="/stats/tahlil" element={<Protected><StatsAnalysis /></Protected>} />
       <Route path="/tier-application" element={<Protected><TierApplication /></Protected>} />
       <Route path="/tier-applications" element={<Protected admin><TierApplicationsAdmin /></Protected>} />

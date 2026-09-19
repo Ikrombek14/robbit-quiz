@@ -83,9 +83,12 @@ export default function Stats() {
           </p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, width: 300, maxWidth: "100%" }}>
-          <button className="btn btn-primary" onClick={() => navigate("/stats/tahlil")} style={{ justifyContent: "center" }}>
-            📈 Faoliyat tahlili
-          </button>
+          {/* Faoliyat tahlili — shaxsiy ko'rsatkich; markaz adminida (ustoz emas) bo'sh bo'lardi */}
+          {(teacher?.isAdmin || teacher?.approved) && (
+            <button className="btn btn-primary" onClick={() => navigate("/stats/tahlil")} style={{ justifyContent: "center" }}>
+              📈 Faoliyat tahlili
+            </button>
+          )}
           <input
             className="filter-search"
             placeholder="🔍 Ism bo'yicha qidirish…"

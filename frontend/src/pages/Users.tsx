@@ -148,17 +148,20 @@ export default function Users() {
   }
 
   // Ustozlik so'rovini tasdiqlash/rad etish (har qanday admin)
-  async function resolveRequest(u: AppUser, approve: boolean) {
+  // as="office" — ustoz emas, markaz admini (ma'lumot ko'ruvchi) qilinadi
+  async function resolveRequest(u: AppUser, approve: boolean, as: "teacher" | "office" = "teacher") {
     if (!approve && !confirm(`"${u.name}" so'rovini rad etishni tasdiqlaysizmi?`)) return;
     setBusy(u.id);
     setMsg("");
     try {
       const r = await api<{ user: AppUser }>(`/admin/users/${u.id}/teacher-request`, {
         method: "POST",
-        body: JSON.stringify({ approve }),
+        body: JSON.stringify({ approve, as }),
       });
       setRows((rs) => rs.map((x) => (x.id === u.id ? r.user : x)));
-      setMsg(approve ? `✓ "${u.name}" ustoz qilindi` : `"${u.name}" so'rovi rad etildi`);
+      setMsg(!approve
+        ? `"${u.name}" so'rovi rad etildi`
+        : as === "office" ? `✓ "${u.name}" markaz admini qilindi` : `✓ "${u.name}" ustoz qilindi`);
       setTimeout(() => setMsg(""), 5000);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Xatolik");
@@ -299,7 +302,11 @@ export default function Users() {
         if (requests.length === 0) return null;
         return (
           <div className="card" style={{ marginTop: 12, border: "2px solid var(--tertiary, #f0c419)" }}>
-            <h3 style={{ marginTop: 0 }}>🎓 Ustozlik so'rovlari ({requests.length})</h3>
+            <h3 style={{ marginTop: 0 }}>🎓 Kirish so'rovlari ({requests.length})</h3>
+            <p className="muted text-sm" style={{ margin: "-4px 0 6px" }}>
+              Har bir so'rovchiga rol tanlang: <b>Ustoz</b> — dars o'tadi; <b>Markaz admini</b> — faqat ma'lumot ko'radi
+              (Workshoplar, Amaliyot dasturi, Yo'l xaritasi, Statistika, Ustozlar, Yo'riqnoma).
+            </p>
             {requests.map((u) => (
               <div key={u.id} className="between" style={{ padding: "8px 0", gap: 10, flexWrap: "wrap" }}>
                 <span className="roster-name">
@@ -314,8 +321,12 @@ export default function Users() {
                   </span>
                 </span>
                 <span className="row" style={{ gap: 6 }}>
-                  <button className="btn" disabled={busy === u.id} onClick={() => resolveRequest(u, true)}>
-                    {busy === u.id ? "…" : "✓ Tasdiqlash"}
+                  <button className="btn" disabled={busy === u.id} onClick={() => resolveRequest(u, true, "teacher")}>
+                    {busy === u.id ? "…" : "🎓 Ustoz"}
+                  </button>
+                  <button className="btn btn-ghost" disabled={busy === u.id} onClick={() => resolveRequest(u, true, "office")}
+                    title="Ustoz emas — faqat ma'lumot ko'radi">
+                    {busy === u.id ? "…" : "👁 Markaz admini"}
                   </button>
                   <button className="btn btn-ghost" disabled={busy === u.id} onClick={() => resolveRequest(u, false)}>
                     Rad etish
@@ -348,7 +359,7 @@ export default function Users() {
             <span>#</span>
             <span>Foydalanuvchi</span>
             <span title="Slayd (loyiha) yaratish va tahrirlash ruxsati">Slayd ruxsati</span>
-            <span title="Ofis/qabul admini — faqat Yo'l xaritasi va Yo'riqnomani ko'radi (ustoz emas)">Ofis admin</span>
+            <span title="Markaz admini — ustoz emas, faqat ma'lumot ko'radi: Workshoplar, Amaliyot dasturi, Yo'l xaritasi, Statistika, Ustozlar, Yo'riqnoma">Markaz admini</span>
             {isSuper && <span title="O'quv dastur va Yo'riqnoma bo'limlariga kirish huquqi">Ustoz huquqi</span>}
             {isSuper && <span style={{ textAlign: "right" }} title="Parolni tiklash va admin huquqini boshqarish">Amallar</span>}
           </div>
@@ -434,15 +445,15 @@ export default function Users() {
                   </button>
                 </span>
 
-                {/* Ofis admin roli — har qanday admin boshqaradi (roadmap + yo'riqnoma) */}
+                {/* Markaz admini (officeAdmin) — ma'lumot ko'ruvchi, ustoz emas. Har qanday admin boshqaradi */}
                 <span>
                   <button
                     className={`grant-btn ${u.officeAdmin ? "on" : ""}`}
                     disabled={working}
                     onClick={() => patch(u, { officeAdmin: !u.officeAdmin })}
-                    title={u.officeAdmin ? "Bosilsa: ofis admin huquqi olib tashlanadi" : "Bosilsa: ofis admin (Yo'l xaritasi + Yo'riqnoma) beriladi"}
+                    title={u.officeAdmin ? "Bosilsa: markaz admini huquqi olib tashlanadi" : "Bosilsa: markaz admini (faqat ma'lumot ko'rish) beriladi"}
                   >
-                    {working ? "…" : u.officeAdmin ? "✓ Ofis admin" : "+ Ofis admin"}
+                    {working ? "…" : u.officeAdmin ? "✓ Markaz admini" : "+ Markaz admini"}
                   </button>
                 </span>
 

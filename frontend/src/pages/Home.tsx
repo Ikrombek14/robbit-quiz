@@ -98,7 +98,7 @@ export default function Home() {
           onClick={() => navigate("/login")}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 19 }}>login</span>
-          Ustoz sifatida kirish
+          Kirish
         </button>
       </section>
 

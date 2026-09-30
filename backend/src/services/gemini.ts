@@ -11,12 +11,15 @@ import { shuffleAnswerOptions } from "./questionShuffle.js";
 // yangi foydalanuvchilarga yopildi). Bitta nomga qotib qolmaslik uchun kandidatlar
 // ro'yxatidan birinchi ishlaganini tanlaymiz va xotirada eslab qolamiz — model eskirsa
 // keyingi so'rov avtomatik yangisiga o'tadi, kod o'zgartirish shart emas.
+// 2026-09-30 sinov (tekin kalit): 3.8-flash 4s ✅, 3.6-flash 3s ✅, flash-lite 5s ✅,
+// 3.5-flash 36s (doim "band"), flash-latest 503, gemini-3-flash va 2.5-flash 404.
+// Har modelning kunlik tekin kvotasi ALOHIDA (~20/kun) — ro'yxat qancha uzun bo'lsa, shuncha ko'p quiz.
 const MODEL_CANDIDATES = [
-  "gemini-3.5-flash", // 2026-07 holatida barqaror (GA), lekin tekin kvotasi juda kichik (~20/kun)
-  "gemini-3-flash",
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-flash-lite-latest", // lite — tekin kvotasi kengroq, vision ham bor
+  "gemini-3.5-flash", // ishlaydi, lekin juda sekin (yuqori talab)
   "gemini-flash-latest", // Google'ning "eng so'nggi flash" taxallusi
-  "gemini-flash-lite-latest", // lite — tekin kvotasi kengroq, vision ham bor (2026-07 sinovdan o'tgan)
-  "gemini-2.5-flash", // eski loyihalar uchun hali ishlashi mumkin
 ];
 let activeModel: string | null = null; // ishlagani shu yerda saqlanadi
 
@@ -121,6 +124,12 @@ export async function requestGeminiText(parts: unknown[], generationConfig: Reco
       if (activeModel === model) activeModel = null;
       continue;
     }
+    // 503 (model "band" — high demand) — vaqtinchalik, boshqa model odatda bo'sh bo'ladi
+    if (res.status === 503) {
+      console.warn(`[gemini] model band (${model}) — keyingi model sinaladi`);
+      if (activeModel === model) activeModel = null;
+      continue;
+    }
     break;
   }
 
@@ -128,6 +137,9 @@ export async function requestGeminiText(parts: unknown[], generationConfig: Reco
     // Tekin kvota tugagan holatni foydalanuvchiga tushunarli qilib qaytaramiz
     if (res?.status === 429) {
       throw new Error("AI kunlik/daqiqalik limiti tugadi (Gemini tekin reja). Birozdan keyin qayta urinib ko'ring.");
+    }
+    if (res?.status === 503) {
+      throw new Error("AI hozir band (barcha modellar). 1–2 daqiqadan keyin qayta urinib ko'ring.");
     }
     throw new Error(data.error?.message || `Gemini xatosi (${res?.status ?? "ulanish"})`);
   }

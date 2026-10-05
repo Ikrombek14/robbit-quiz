@@ -2,6 +2,9 @@ import { useState } from "react";
 import Shell from "../components/Shell";
 import { NEW_PLAN_PHASES, NEW_PLAN_EXTRA } from "../newPlan";
 
+// Qo'shimcha takliflar (12 oylikdan keyingi kurslar) hozircha yashirilgan
+const SHOW_NEW_PLAN_EXTRA = false;
+
 // Robbit yo'l xaritasi — PDF roadmapning saytdagi jonli, moslashuvchan ko'rinishi.
 // 4 ta "sahifa" = 2 yo'nalish × 2 yosh toifasi. Har biri 3 ta modul, har modulda
 // 3 bosqich (nom + oy oralig'i). Ma'lumot statik — API kerak emas.
@@ -341,6 +344,8 @@ function NewPlanView() {
         );
       })}
 
+      {/* Qo'shimcha takliflar vaqtincha yashirilgan — qayta ko'rsatish uchun SHOW_NEW_PLAN_EXTRA = true */}
+      {SHOW_NEW_PLAN_EXTRA && <>
       <div className="np-extra-head">
         <span className="np-badge">Qo'shimcha taklif</span>
         <span className="muted">12 oylik dasturga kirmaydi · bitirgandan keyin taklif etiladi · davomiyligi 6 oy</span>
@@ -372,6 +377,7 @@ function NewPlanView() {
           </section>
         );
       })}
+      </>}
     </>
   );
 }

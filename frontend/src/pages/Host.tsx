@@ -124,6 +124,7 @@ export default function Host() {
   const [answeredNames, setAnsweredNames] = useState<string[]>([]);
   const [results, setResults] = useState<Results | null>(null);
   const [error, setError] = useState("");
+  const [canRestart, setCanRestart] = useState(false); // dars yopilib qolgan — "Qayta boshlash" tugmasi
 
   // Keyingi slaydlarni oldindan ko'rish (joriy slaydni tark etmasdan). Butun quiz
   // egasi (host) uchun oddiy REST orqali — o'yin ustidan hech narsa o'zgarmaydi,
@@ -234,7 +235,21 @@ export default function Host() {
       if (!savedPin) return;
       socket.emit("host:resume", { pin: savedPin, token: getToken() }, (r: any) => {
         if (r.error) {
-          setError("Aloqa qayta tiklandi, lekin o'yin topilmadi (server qayta ishga tushgan bo'lishi mumkin)");
+          // Server aniq sababni aytadi (r.reason) — taxminiy xabar o'rniga shuni ko'rsatamiz
+          if (r.reason === "auth") {
+            // Dars serverda tirik bo'lishi mumkin — kalitni o'chirmaymiz, qayta kirgach davom etadi
+            setError("Kirish muddati tugagan. Qayta kiring — dars kelgan joyidan davom etadi.");
+            return;
+          }
+          localStorage.removeItem(`host:${quizId}`);
+          setCanRestart(true);
+          setError(
+            r.reason === "hostLeft"
+              ? "Bu kompyuter 2 soatdan ko'p aloqasiz qolgani uchun dars yopilgan. Natijalar «Hisobotlar» bo'limida saqlangan."
+              : r.reason === "ended"
+                ? "Bu dars allaqachon yakunlangan. Natijalar «Hisobotlar» bo'limida saqlangan."
+                : "Aloqa tiklandi, lekin dars topilmadi. Darsni qayta boshlashingiz mumkin.",
+          );
           return;
         }
         applyResume(r);
@@ -244,6 +259,32 @@ export default function Host() {
     return () => { socket.io.off("reconnect", onReconnect); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quizId]);
+
+  // Dars davomida ekran o'chmasin: noutbuk uxlab qolsa socket uziladi va ustoz qaytguncha
+  // dars "egasiz" qoladi (amaliyot paytida noutbukka tegilmaydi — aynan shunda uxlaydi).
+  // Wake Lock faqat sahifa ko'rinib turganda ishlaydi, shu sabab qaytganda qayta olamiz.
+  const lessonLive = phase !== "ended" && !error;
+  useEffect(() => {
+    if (!lessonLive) return;
+    const wl = (navigator as Navigator & { wakeLock?: { request(type: "screen"): Promise<{ release(): Promise<void> }> } }).wakeLock;
+    if (!wl) return;
+    let lock: { release(): Promise<void> } | null = null;
+    let stopped = false;
+    const acquire = () => {
+      if (stopped || document.visibilityState !== "visible") return;
+      wl.request("screen").then(
+        (l) => { if (stopped) void l.release().catch(() => {}); else lock = l; },
+        () => { /* ruxsat berilmadi (masalan quvvat tejash rejimi) — jim o'tamiz */ },
+      );
+    };
+    acquire();
+    document.addEventListener("visibilitychange", acquire);
+    return () => {
+      stopped = true;
+      document.removeEventListener("visibilitychange", acquire);
+      void lock?.release().catch(() => {});
+    };
+  }, [lessonLive]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -473,7 +514,13 @@ export default function Host() {
       <div className="center-screen">
         <div className="card card-narrow center">
           <div className="error">{error}</div>
-          <button className="btn" onClick={() => navigate(-1)}>Orqaga qaytish</button>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            {canRestart && (
+              // Sahifani yangilaymiz: saqlangan PIN o'chirilgan, shuning uchun yangi sessiya ochiladi
+              <button className="btn" onClick={() => window.location.reload()}>Darsni qayta boshlash</button>
+            )}
+            <button className={canRestart ? "btn btn-ghost" : "btn"} onClick={() => navigate(-1)}>Orqaga qaytish</button>
+          </div>
         </div>
       </div>
     );

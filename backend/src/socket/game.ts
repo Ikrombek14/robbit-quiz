@@ -93,9 +93,11 @@ interface GameState {
   practiceEndsAt: number; // amaliyot (mashq) taymeri tugash vaqti (ms epoch); 0 = yo'q
   timer: ReturnType<typeof setTimeout> | null;
   hostGraceTimer: ReturnType<typeof setTimeout> | null; // host uzilganda kutish (sahifa yangilash uchun)
+  hostLostAt: number; // host uzilgan vaqt (ms epoch); 0 = host ulangan
   votes: Record<string, number>;
   stats: Map<number, QStat>;
   saved: boolean;
+  recordId: string | null; // hisobotga yozilgan GameRecord id (qayta saqlashda dublikat bo'lmasin)
   settings: GameSettings;
   banned: Set<string>; // kick qilingan o'quvchilar (nickKey) — qayta kira olmasin
 }
@@ -385,12 +387,37 @@ function checkTestCorrect(s: LoadedSlide, answer: any): boolean {
   return scoreAnswer(s, answer, 0, 1).correct;
 }
 
+// Natijani hisobotga yozadi. Bir o'yin BIR NECHA marta saqlanishi mumkin (host uzoq
+// uzilganda oraliq saqlash, keyin dars davom etib yakuniy saqlash) — shunda mavjud
+// yozuv YANGILANADI (recordId), dublikat hisobot paydo bo'lmaydi.
 async function persistGame(game: GameState) {
   if (game.saved) return;
   game.saved = true;
   if (game.players.size === 0) return;
+  const questionStats = JSON.stringify([...game.stats.values()]);
+  const players = [...game.players.values()].map((p) => ({
+    nickname: p.nickname,
+    score: p.score,
+    correctCount: p.correctCount,
+    totalAnswered: p.totalAnswered,
+    details: JSON.stringify(p.testDetails ?? []),
+  }));
   try {
-    await prisma.gameRecord.create({
+    if (game.recordId) {
+      try {
+        await prisma.$transaction([
+          prisma.gamePlayerRecord.deleteMany({ where: { gameId: game.recordId } }),
+          prisma.gameRecord.update({
+            where: { id: game.recordId },
+            data: { mode: game.mode, totalSlides: game.slides.length, questionStats, players: { create: players } },
+          }),
+        ]);
+        return;
+      } catch {
+        game.recordId = null; // yozuv o'chirilgan bo'lishi mumkin — quyida yangisini yozamiz
+      }
+    }
+    const rec = await prisma.gameRecord.create({
       data: {
         teacherId: game.teacherId,
         quizId: game.quizId,
@@ -398,18 +425,12 @@ async function persistGame(game: GameState) {
         pin: game.pin,
         mode: game.mode,
         totalSlides: game.slides.length,
-        questionStats: JSON.stringify([...game.stats.values()]),
-        players: {
-          create: [...game.players.values()].map((p) => ({
-            nickname: p.nickname,
-            score: p.score,
-            correctCount: p.correctCount,
-            totalAnswered: p.totalAnswered,
-            details: JSON.stringify(p.testDetails ?? []),
-          })),
-        },
+        questionStats,
+        players: { create: players },
       },
+      select: { id: true },
     });
+    game.recordId = rec.id;
   } catch (e) {
     console.error("persistGame xato:", e);
   }
@@ -524,20 +545,53 @@ function emitTestProgress(game: GameState) {
   });
 }
 
-// Host uzilganda (sahifa yangilash, internet blip, YOKI server restart/deploy) darhol
-// o'yinni tugatmaymiz — grace davri beramiz. Shu vaqtda host:resume kelsa (eski yoki
-// tiklangan o'yinga), timer bekor qilinadi. staleHostId — timer o'rnatilgan paytdagi
-// hostSocketId ("" restore holatida): agar shu muddatda o'zgarmagan bo'lsa, host qaytmagan.
-function armHostGraceTimer(game: GameState, staleHostId: string, ms = 30 * 60 * 1000) {
+// Host uzilganda (sahifa yangilash, internet blip, noutbuk uxlab qolishi YOKI server
+// restart/deploy) darhol o'yinni tugatmaymiz — IKKI BOSQICHLI kutish:
+//   1) HOST_SAVE_AFTER_MS — natijalar hisobotga yoziladi, lekin o'yin O'CHMAYDI:
+//      ustoz qaytsa (host:resume) kelgan joyidan davom ettiradi.
+//   2) HOST_ABANDON_AFTER_MS — shundan keyingina o'yin butunlay yopiladi.
+// (2026-10-07: amaliyot paytida ustoz noutbuki 33 daqiqa uxlab qolgan, o'shanda yagona
+// 30 daqiqalik muddat darsni o'chirib yuborgan edi — dars 80 daqiqa davom etadi.)
+// staleHostId — timer o'rnatilgan paytdagi hostSocketId ("" restore holatida): agar shu
+// muddatda o'zgarmagan bo'lsa, host qaytmagan. lostAt — host uzilgan vaqt.
+const HOST_SAVE_AFTER_MS = 30 * 60 * 1000;
+const HOST_ABANDON_AFTER_MS = 2 * 60 * 60 * 1000;
+
+// Yaqinda yopilgan o'yinlar (12 soat) — host kech qaytsa aniq sababni aytish uchun
+type EndReason = "ended" | "hostLeft";
+const endedPins = new Map<string, { at: number; reason: EndReason }>();
+function removeGame(game: GameState, reason: EndReason) {
+  games.delete(game.pin);
+  const now = Date.now();
+  for (const [p, e] of endedPins) if (now - e.at > 12 * 60 * 60 * 1000) endedPins.delete(p);
+  endedPins.set(game.pin, { at: now, reason });
+}
+
+function armHostGraceTimer(game: GameState, staleHostId: string, lostAt = Date.now()) {
   if (game.hostGraceTimer) clearTimeout(game.hostGraceTimer);
+  game.hostLostAt = lostAt;
+  const elapsed = Date.now() - lostAt;
+  const saveStage = elapsed < HOST_SAVE_AFTER_MS;
+  const wait = Math.max(0, (saveStage ? HOST_SAVE_AFTER_MS : HOST_ABANDON_AFTER_MS) - elapsed);
   game.hostGraceTimer = setTimeout(async () => {
     game.hostGraceTimer = null;
     if (game.hostSocketId !== staleHostId) return; // qaytib keldi
+    if (saveStage) {
+      // 1-bosqich: oraliq saqlash — hisobotda ko'rinadi, o'yin esa tirik qoladi
+      await persistGame(game);
+      if (game.hostSocketId !== staleHostId || !games.has(game.pin)) return;
+      console.log(`[game ${game.pin}] host ${Math.round(HOST_SAVE_AFTER_MS / 60000)} daqiqadan beri yo'q — natija saqlandi, o'yin kutmoqda`);
+      armHostGraceTimer(game, staleHostId, lostAt);
+      return;
+    }
+    // 2-bosqich: host qaytmadi — yopamiz (oraliq saqlashdan keyingi javoblar ham yozilsin)
     clearGameTimer(game);
+    game.saved = false;
     await persistGame(game);
     IO().to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game), hostLeft: true });
-    games.delete(game.pin);
-  }, ms);
+    removeGame(game, "hostLeft");
+    console.log(`[game ${game.pin}] host qaytmadi — o'yin yopildi (${game.players.size} o'quvchi)`);
+  }, wait);
 }
 
 // ----- O'yin holatini diskka saqlash / tiklash (deploy/restart paytida o'yinlar o'lmasin) -----
@@ -566,6 +620,8 @@ function serializeGame(game: GameState) {
     votes: game.votes,
     stats: [...game.stats.values()],
     saved: game.saved,
+    recordId: game.recordId,
+    hostLostAt: game.hostLostAt,
     settings: game.settings,
     banned: [...game.banned],
   };
@@ -604,9 +660,11 @@ function restoreGame(sg: any): void {
     practiceEndsAt: 0, // qisqa amaliyot taymeri restart oralig'ida ma'nosini yo'qotadi — tiklanmaydi
     timer: null,
     hostGraceTimer: null,
+    hostLostAt: 0,
     votes: sg.votes ?? {},
     stats,
     saved: sg.saved === true,
+    recordId: typeof sg.recordId === "string" ? sg.recordId : null,
     settings: sg.settings ?? defaultSettings(),
     banned: new Set(Array.isArray(sg.banned) ? sg.banned : []),
   };
@@ -618,8 +676,9 @@ function restoreGame(sg: any): void {
     if (game.timerEndsAt <= Date.now()) revealCurrent(game);
     else scheduleTimer(game);
   }
-  // Host hali qaytmagan — grace davri beramiz (deploy odatda soniyalarda tiklanadi)
-  armHostGraceTimer(game, "");
+  // Host hali qaytmagan — grace davri beramiz (deploy odatda soniyalarda tiklanadi).
+  // Restart'dan oldin ham uzilgan bo'lsa, o'sha vaqtdan hisoblaymiz (muddat qayta boshlanmasin).
+  armHostGraceTimer(game, "", sg.hostLostAt > 0 ? sg.hostLostAt : Date.now());
 }
 
 // Oldingi avtosaqlashda faol o'yin bor edimi — idle paytda bo'sh faylni qayta-qayta
@@ -670,8 +729,8 @@ function loadGameSnapshot(): void {
     // (keyingi avtosaqlash/graceful shutdown yangisini yozadi).
     fs.unlinkSync(SNAPSHOT_PATH);
     const parsed = JSON.parse(raw) as { savedAt: number; games: any[] };
-    // Host grace muddati 30 daqiqa — 40 daqiqadan eski snapshot allaqachon ma'nosiz
-    if (!parsed?.savedAt || Date.now() - parsed.savedAt > 40 * 60 * 1000) return;
+    // O'yin host'siz HOST_ABANDON_AFTER_MS gacha yashaydi — undan eski snapshot ma'nosiz
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > HOST_ABANDON_AFTER_MS + 10 * 60 * 1000) return;
     for (const sg of parsed.games ?? []) restoreGame(sg);
     if (parsed.games?.length) {
       console.log(`♻️  ${parsed.games.length} ta faol o'yin tiklandi (restart/deploy'dan keyin)`);
@@ -735,9 +794,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       practiceEndsAt: 0,
       timer: null,
       hostGraceTimer: null,
+      hostLostAt: 0,
       votes: {},
       stats: new Map(),
       saved: false,
+      recordId: null,
       settings: defaultSettings(),
       banned: new Set(),
     });
@@ -768,10 +829,19 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     const teacherId = verifyToken(data?.token ?? "");
     const game = games.get(data?.pin);
     if (!game || !teacherId || game.teacherId !== teacherId) {
-      cb?.({ error: "O'yin topilmadi" });
+      // reason — mijoz aniq xabar ko'rsatishi uchun: auth (token eskirgan), owner (boshqa
+      // akkaunt), ended (dars yakunlangan), hostLeft (uzoq aloqasiz qolib yopilgan), unknown
+      const reason = !teacherId ? "auth" : game ? "owner" : endedPins.get(String(data?.pin))?.reason ?? "unknown";
+      console.log(`[game ${String(data?.pin).slice(0, 8)}] host:resume rad etildi — ${reason}`);
+      cb?.({ error: "O'yin topilmadi", reason });
       return;
     }
+    if (game.hostLostAt && Date.now() - game.hostLostAt > 60_000) {
+      console.log(`[game ${game.pin}] host qaytdi — ${Math.round((Date.now() - game.hostLostAt) / 1000)} s uzilgan edi`);
+    }
     game.hostSocketId = socket.id;
+    game.hostLostAt = 0;
+    game.saved = false; // oraliq saqlangan bo'lsa ham, dars davom etadi — yakunida qayta yoziladi
     // Sahifa yangilandi — grace timerni bekor qilamiz, o'yin davom etadi
     if (game.hostGraceTimer) {
       clearTimeout(game.hostGraceTimer);
@@ -1114,7 +1184,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       io.to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game) });
       // MUHIM: tugagan o'yinni xotiradan o'chiramiz (host:end kabi) — aks holda
       // "Yakunlash" bilan tugatilgan har o'yin games Map'da qolib xotira shishardi.
-      games.delete(game.pin);
+      removeGame(game, "ended");
       return;
     }
     game.currentIndex += 1;
@@ -1129,7 +1199,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     game.status = "ended";
     await persistGame(game);
     io.to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game) });
-    games.delete(game.pin);
+    removeGame(game, "ended");
   });
 
   socket.on("host:fullscreen", (data: { pin: string }) => {

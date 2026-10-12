@@ -13,6 +13,7 @@ import {
 import { generateQuestionsFromSlidesGemini, extractLessonTopicGemini } from "../services/gemini.js";
 import { fetchExternalImage } from "../services/externalImages.js";
 import { config } from "../config.js";
+import { prisma } from "../prisma.js";
 import { UPLOADS_DIR } from "./upload.js";
 
 const upload = multer({
@@ -22,8 +23,19 @@ const upload = multer({
 
 export const pdfRouter = Router();
 
-// PDF yuklash -> AI savollar yaratadi -> ro'yxat qaytariladi (hali saqlanmaydi)
-pdfRouter.post("/generate", requireAuth, requireCanCreate, upload.single("pdf"), async (req, res) => {
+// Claude (Anthropic) PULLIK kalit — faqat CLAUDE_EMAILS dagi akkauntlar ishlatadi,
+// qolgan hamma Gemini (tekin reja) orqali ishlaydi. Kalit yo'q bo'lsa hech kim ishlatmaydi.
+async function claudeUser(teacherId: string | undefined): Promise<string | null> {
+  if (!config.anthropicApiKey || !teacherId) return null;
+  if (config.claudeEmails.includes("*")) return "*";
+  const t = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { email: true } });
+  const email = t?.email.trim().toLowerCase() ?? "";
+  return config.claudeEmails.includes(email) ? email : null;
+}
+
+// PDF yuklash -> AI savollar yaratadi -> ro'yxat qaytariladi (hali saqlanmaydi).
+// Bu yo'l faqat Claude bilan ishlaydi (Gemini varianti yo'q) — shuning uchun faqat ruxsatli akkauntga.
+pdfRouter.post("/generate", requireAuth, requireCanCreate, upload.single("pdf"), async (req: AuthedRequest, res) => {
   const file = (req as unknown as { file?: { buffer: Buffer; mimetype: string } }).file;
   if (!file) {
     res.status(400).json({ error: "PDF fayl yuborilmadi" });
@@ -31,6 +43,10 @@ pdfRouter.post("/generate", requireAuth, requireCanCreate, upload.single("pdf"),
   }
   if (file.mimetype !== "application/pdf") {
     res.status(400).json({ error: "Faqat PDF fayl qabul qilinadi" });
+    return;
+  }
+  if (!(await claudeUser(req.teacherId))) {
+    res.status(403).json({ error: "PDF'dan savol yasash bu akkauntda yoqilmagan. Slaydlarni yuklab, muharrirdagi «AI savol» tugmasidan foydalaning." });
     return;
   }
   const count = Math.min(Math.max(Number(req.body.count ?? 10) || 10, 1), 30);
@@ -161,8 +177,24 @@ pdfRouter.post("/generate-from-slides", requireAuth, requireCanCreate, async (re
     createdAt: Date.now(),
   };
   aiJobs.set(jobId, job);
-  // Provayder tanlovi: GEMINI_API_KEY bo'lsa Gemini (tekin reja), aks holda Claude
-  const generate = config.geminiApiKey ? generateQuestionsFromSlidesGemini : generateQuestionsFromSlides;
+  // Provayder tanlovi: CLAUDE_EMAILS dagi akkaunt → Claude (pullik kalit), qolgan hamma → Gemini
+  // (tekin reja). Claude xato bersa (balans tugashi va h.k.) o'sha akkaunt ham Gemini'ga tushadi.
+  const claudeEmail = await claudeUser(req.teacherId);
+  const generate = async (imgs: SlideImage[], txts: string[], ex: string[], n: number): Promise<GeneratedQuestion[]> => {
+    if (claudeEmail) {
+      const t0 = Date.now();
+      try {
+        const qs = (await generateQuestionsFromSlides(imgs, txts, ex, n)).slice(0, n);
+        console.log(`[ai] Claude (${claudeEmail}) — ${qs.length} savol, ${Math.round((Date.now() - t0) / 1000)} s`);
+        return qs;
+      } catch (e) {
+        console.warn(`[ai] Claude xato (${claudeEmail}): ${e instanceof Error ? e.message.slice(0, 160) : e}${config.geminiApiKey ? " — Gemini'ga o'tildi" : ""}`);
+        if (!config.geminiApiKey) throw e;
+      }
+    }
+    if (!config.geminiApiKey) throw new Error("AI sozlanmagan (GEMINI_API_KEY yo'q).");
+    return generateQuestionsFromSlidesGemini(imgs, txts, ex, n);
+  };
   collectSlideImages(imageUrls, job)
     .then((slideImages) => {
       if (slideImages.length === 0 && cleanTexts.length === 0) {

@@ -39,6 +39,13 @@ model Teacher {
   statsName String?
   // Ustoz o'zi to'ldiradigan profil ma'lumotlari (toifa oshirish arizasi uchun ham ishlatiladi)
   phone     String?
+  // Tekshirilmagan uy vazifa bloki (Sheet'da 50 tadan ko'p bo'lsa). Har kungi birinchi
+  // kirish = 1 "ogohlantirish": 1 → ERP'ga yo'naltirish, 2 → ogohlantirish, 3+ → to'liq blok.
+  // Raqam 50 va undan kam bo'lsa hisob 0 ga qaytadi. hwUnlockUntil — platforma admini
+  // vaqtincha (12 soat) ochgan muddat.
+  hwStrikes     Int       @default(0)
+  hwStrikeDay   String? // oxirgi hisoblangan kun, "YYYY-MM-DD" (Toshkent vaqti)
+  hwUnlockUntil DateTime?
   createdAt DateTime @default(now())
   quizzes   Quiz[]
   folders   Folder[]

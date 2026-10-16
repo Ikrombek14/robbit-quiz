@@ -30,6 +30,7 @@ import Backup from "./pages/Backup";
 import TierApplication from "./pages/TierApplication";
 import TierApplicationsAdmin from "./pages/TierApplicationsAdmin";
 import Shell from "./components/Shell";
+import HomeworkReminder from "./components/HomeworkReminder";
 
 // Kirish darvozalari:
 //  student — o'quvchi sahifasi (hamma uchun ochiq, kirsa bo'ldi)
@@ -37,9 +38,23 @@ import Shell from "./components/Shell";
 //  staff   — ustoz yoki ofis admin (pending EMAS): Yo'l xaritasi
 //  create  — "slayd qilish" ruxsati; admin — faqat admin
 //  (default) — ustoz sahifalari: faqat ustoz/admin; ofis admin/pending o'z bosh sahifasiga yo'naltiriladi
-function Protected({ children, admin, create, student, staff, panel }: {
+type ProtectedProps = {
   children: ReactNode; admin?: boolean; create?: boolean; student?: boolean; staff?: boolean; panel?: boolean;
-}) {
+};
+
+// Xodim sahifalariga kirganda tekshirilmagan uy vazifa nazorati (eslatma → ERP → ogohlantirish → blok)
+function Protected(props: ProtectedProps) {
+  const { teacher } = useAuth();
+  if (props.student) return <ProtectedInner {...props} />;
+  return (
+    <>
+      <ProtectedInner {...props} />
+      {teacher && <HomeworkReminder />}
+    </>
+  );
+}
+
+function ProtectedInner({ children, admin, create, student, staff, panel }: ProtectedProps) {
   const { teacher, loading } = useAuth();
   if (loading) return <div className="container">Yuklanmoqda…</div>;
   if (!teacher) return <Navigate to="/admin" replace />;

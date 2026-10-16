@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth, homePath } from "../auth";
 import { getTheme, toggleTheme, type Theme } from "../theme";
-import HomeworkReminder from "./HomeworkReminder";
 
 type NavRole = { isAdmin?: boolean; approved?: boolean; canCreate?: boolean; officeAdmin?: boolean; teacherRequestPending?: boolean };
 
@@ -124,8 +123,6 @@ export default function Shell({ children }: { children: ReactNode }) {
       </aside>
       <main className="shell-main">{children}</main>
     </div>
-    {/* Saytga kirganda tekshirilmagan uy vazifalar haqida bir martalik ogohlantirish */}
-    <HomeworkReminder />
     </div>
   );
 }

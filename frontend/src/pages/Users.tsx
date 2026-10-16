@@ -247,6 +247,24 @@ export default function Users() {
     }
   }
 
+  // Uy vazifa blokini 12 soatga ochish (faqat platforma admini — sahifa o'zi admin uchun)
+  async function hwUnlock(u: AppUser) {
+    if (!confirm(`"${u.name}" uchun platformani 12 soatga ochasizmi?`)) return;
+    setBusy(u.id);
+    setMsg("");
+    try {
+      const resp = await api<{ user: AppUser }>(`/admin/users/${u.id}/hw-unlock`, { method: "POST" });
+      setRows((rs) => rs.map((x) => (x.id === u.id ? resp.user : x)));
+      setMsg(`🔓 "${u.name}" uchun platforma 12 soatga ochildi`);
+      setTimeout(() => setMsg(""), 5000);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Ochishda xatolik");
+      setTimeout(() => setMsg(""), 6000);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function patch(u: AppUser, body: { accessOverride?: boolean | null; isAdmin?: boolean; canCreate?: boolean; officeAdmin?: boolean }) {
     setBusy(u.id);
     setMsg("");
@@ -428,6 +446,24 @@ export default function Users() {
                           📊 {u.statsName ? `Statistika: ${u.statsName}` : "Statistikaga biriktirish"}
                         </button>
                       )}
+                      {/* Tekshirilmagan uy vazifa (50+) ogohlantirishlari / blok holati */}
+                      {u.hwStrikes > 0 && (u.hwUnlockUntil ? (
+                        <span className="text-sm" style={{ color: "var(--success)" }}>
+                          🔓 Ochilgan: {new Date(u.hwUnlockUntil).toLocaleString("uz-UZ", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} gacha
+                        </span>
+                      ) : (
+                        <button
+                          style={{
+                            background: "none", border: "none", padding: 0,
+                            color: "var(--danger, #e05661)", cursor: "pointer", fontSize: 13, textDecoration: "underline",
+                          }}
+                          disabled={working}
+                          onClick={() => hwUnlock(u)}
+                          title="Tekshirilmagan uy vazifa 50 tadan ko'p — bosilsa platforma 12 soatga ochiladi"
+                        >
+                          {u.hwStrikes >= 3 ? "🔒 Bloklangan · 12 soatga ochish" : `⚠️ Uy vazifa: ${u.hwStrikes}-ogohlantirish · 12 soatga ochish`}
+                        </button>
+                      ))}
                     </span>
                   </span>
                 </span>

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../auth.js";
 import { computeApproved, isAdminEmail, findApprovedByNameKey } from "../lib/approval.js";
+import { HW_UNLOCK_HOURS } from "../services/hwGate.js";
 
 // Foydalanuvchilar (saytga kirgan ustoz accountlari) ustidan admin nazorati.
 // Faqat admin: ustoz huquqini (approved) berish/olib tashlash va admin huquqini boshqarish.
@@ -23,6 +24,8 @@ function publicUser(t: {
   teacherRequestAt?: Date | null;
   teacherRequestName?: string | null;
   statsName?: string | null;
+  hwStrikes?: number;
+  hwUnlockUntil?: Date | null;
   createdAt: Date;
   _count?: { quizzes: number };
 }) {
@@ -39,6 +42,8 @@ function publicUser(t: {
     teacherRequestAt: t.teacherRequestAt ?? null, // ustozlik so'rovi (kutilayotgan)
     teacherRequestName: t.teacherRequestName ?? null,
     statsName: t.statsName ?? null, // admin qo'lda biriktirgan statistika nomi (Sheet'dagi)
+    hwStrikes: t.hwStrikes ?? 0, // tekshirilmagan uy vazifa ogohlantirishlari (3+ = bloklangan)
+    hwUnlockUntil: t.hwUnlockUntil && t.hwUnlockUntil > new Date() ? t.hwUnlockUntil : null,
     envAdmin: isAdminEmail(t.email), // env ADMIN_EMAILS'dagi = super admin — huquqini olib bo'lmaydi
     quizCount: t._count?.quizzes ?? 0,
     createdAt: t.createdAt,
@@ -75,6 +80,7 @@ adminRouter.get("/users", async (req, res) => {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
       teacherRequestAt: true, teacherRequestName: true, statsName: true,
+      hwStrikes: true, hwUnlockUntil: true,
       _count: { select: { quizzes: true } },
     },
   });
@@ -109,6 +115,7 @@ adminRouter.post("/users/:id/teacher-request", async (req: AuthedRequest, res) =
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
       teacherRequestAt: true, teacherRequestName: true, statsName: true,
+      hwStrikes: true, hwUnlockUntil: true,
       _count: { select: { quizzes: true } },
     },
   });
@@ -158,6 +165,7 @@ adminRouter.post("/users/:id/bind-roster", async (req: AuthedRequest, res) => {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
       teacherRequestAt: true, teacherRequestName: true, statsName: true,
+      hwStrikes: true, hwUnlockUntil: true,
       _count: { select: { quizzes: true } },
     },
   });
@@ -190,6 +198,31 @@ adminRouter.post("/users/:id/stats-name", async (req: AuthedRequest, res) => {
       id: true, email: true, name: true, picture: true, isAdmin: true,
       approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
       teacherRequestAt: true, teacherRequestName: true, statsName: true,
+      hwStrikes: true, hwUnlockUntil: true,
+      _count: { select: { quizzes: true } },
+    },
+  });
+  res.json({ user: publicUser(updated) });
+});
+
+// ---- Uy vazifa blokini vaqtincha ochish (faqat platforma admini — router requireAdmin) ----
+// HW_UNLOCK_HOURS soat davomida bloklanmaydi va hisob oshmaydi. Muddat tugaganda
+// Sheet'dagi son hali ham 50 dan ko'p bo'lsa — blok qaytadi.
+adminRouter.post("/users/:id/hw-unlock", async (req: AuthedRequest, res) => {
+  const id = String(req.params.id);
+  const target = await prisma.teacher.findUnique({ where: { id }, select: { id: true } });
+  if (!target) {
+    res.status(404).json({ error: "Foydalanuvchi topilmadi" });
+    return;
+  }
+  const updated = await prisma.teacher.update({
+    where: { id },
+    data: { hwUnlockUntil: new Date(Date.now() + HW_UNLOCK_HOURS * 3600_000) },
+    select: {
+      id: true, email: true, name: true, picture: true, isAdmin: true,
+      approved: true, canCreate: true, officeAdmin: true, accessOverride: true, createdAt: true,
+      teacherRequestAt: true, teacherRequestName: true, statsName: true,
+      hwStrikes: true, hwUnlockUntil: true,
       _count: { select: { quizzes: true } },
     },
   });

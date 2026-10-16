@@ -3,6 +3,7 @@ import { requireAuth, type AuthedRequest } from "../auth.js";
 import { prisma } from "../prisma.js";
 import { getAllStats, getStatByName, statsUpdatedAt } from "../services/stats.js";
 import { getAllAnalyses, getAnalysisByName } from "../services/analysis.js";
+import { checkHwGate, HW_LIMIT } from "../services/hwGate.js";
 
 // Ustozlar statistikasi (Google Sheet'dan). Barcha kirgan ustozlar ko'ra oladi.
 export const statsRouter = Router();
@@ -24,6 +25,17 @@ statsRouter.get("/me", async (req: AuthedRequest, res) => {
     res.json({ stat });
   } catch {
     res.json({ stat: null }); // statistika manbasi vaqtincha ishlamasa — sahifa baribir ochiladi
+  }
+});
+
+// Tekshirilmagan uy vazifa bloki — frontend saytga kirishda bir marta chaqiradi.
+// level: ok | redirect (ERP'ga) | warn | block
+statsRouter.post("/hw-gate", async (req: AuthedRequest, res) => {
+  try {
+    const r = await checkHwGate(req.teacherId!);
+    res.json({ ...r, limit: HW_LIMIT });
+  } catch {
+    res.json({ level: "ok", count: null, strikes: 0, limit: HW_LIMIT });
   }
 });
 

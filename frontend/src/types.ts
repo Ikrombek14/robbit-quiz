@@ -198,6 +198,8 @@ export interface AppUser {
   teacherRequestAt: string | null; // ustozlik so'rovi yuborilgan vaqt (kutilayotgan bo'lsa)
   teacherRequestName: string | null; // so'rovda ko'rsatilgan ism-familiya
   statsName: string | null; // admin qo'lda biriktirgan statistika (Sheet) nomi
+  hwStrikes: number; // tekshirilmagan uy vazifa ogohlantirishlari (3+ = platforma yopilgan)
+  hwUnlockUntil: string | null; // admin vaqtincha ochgan muddat (faol bo'lsa)
   envAdmin: boolean; // ADMIN_EMAILS'dagi (super admin) — huquqini panelda olib bo'lmaydi
   quizCount: number;
   createdAt: string;

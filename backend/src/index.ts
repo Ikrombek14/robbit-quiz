@@ -32,6 +32,7 @@ import { backupRouter } from "./routes/backup.js";
 import { statsRouter } from "./routes/stats.js";
 import { profileRouter } from "./routes/profile.js";
 import { tierApplicationsRouter } from "./routes/tierApplications.js";
+import { hwBlockGuard } from "./services/hwGate.js";
 import { startStatsScheduler } from "./services/stats.js";
 
 const app = express();
@@ -129,6 +130,8 @@ app.get("/api/health", (_req, res) => {
 });
 
 // API marshrutlari
+// Tekshirilmagan uy vazifa bloki (3-ogohlantirishdan keyin) — barcha himoyalangan API uchun
+app.use("/api", hwBlockGuard);
 app.use("/api/auth", authRouter);
 app.use("/api/quizzes", quizRouter);
 app.use("/api/folders", folderRouter);

@@ -730,7 +730,7 @@ export default function Host() {
     return (
       <div className="live-wrap">
         <div className="live-top">
-          <div className="lt-code">Kod: <strong>{pin}</strong></div>
+          <LiveCode pin={pin} />
           <div className="lt-title">{title} · Test rejimi</div>
           <div className="row">
             <button className="tool-btn danger" onClick={endPresentation}>
@@ -809,7 +809,7 @@ export default function Host() {
     return (
       <div className="live-wrap">
         <div className="live-top">
-          <div className="lt-code">Kod: <strong>{pin}</strong></div>
+          <LiveCode pin={pin} />
           <div className="lt-title">{title}</div>
           <div className="row">
             <button className="tool-btn" onClick={toggleFullscreen} title="To'liq ekran">
@@ -1171,6 +1171,24 @@ function HostAnswers({ slide, results }: { slide: PublicSlide; results: Results 
 }
 
 /* ---------------- QR kod ---------------- */
+// Yuqori paneldagi "Kod: ..." — sichqoncha ustiga borsa o'yin kodi ekran o'rtasida katta
+// ko'rinadi (o'yin boshlangandan keyin kech qolgan o'quvchilarga ko'rsatish uchun).
+// Popup pointer-events:none — sichqoncha yorliqdan chiqishi bilan yo'qoladi.
+function LiveCode({ pin }: { pin: string }) {
+  return (
+    <div className="lt-code">
+      Kod: <strong>{pin}</strong>
+      <div className="lt-code-pop" aria-hidden>
+        <div className="lt-code-pop-card">
+          <div className="lt-code-pop-url">{window.location.host}/join</div>
+          <div className="lt-code-pop-pin">{pin}</div>
+          <QrImage text={`${window.location.origin}/join?pin=${pin}`} size={180} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function QrImage({ text, size }: { text: string; size: number }) {
   const [url, setUrl] = useState("");
   useEffect(() => {

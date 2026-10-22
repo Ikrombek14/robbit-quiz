@@ -1,5 +1,5 @@
 import { prisma } from "../prisma.js";
-import { nameKey } from "../lib/nameKey.js";
+import { nameKey, looseNameKey } from "../lib/nameKey.js";
 import { num, parseCSV, nameMatch, resolveByName } from "./stats.js";
 
 // Toifa tahlili — Telegram botdagi (Robbit Statistics) mantiq sayt uchun qayta ishlangan.
@@ -66,8 +66,9 @@ export interface TierCheck {
 }
 
 export interface TeacherAnalysis {
-  name: string;
+  name: string; // eng yangi oy varag'idagi yozilishi
   nameKey: string;
+  aliases: string[]; // shu ustozning turli oylardagi barcha yozilishlari (Sheet'da ism o'zgarib turadi)
   branch: string | null;
   currentTier: number;
   targetTier: number;
@@ -161,6 +162,7 @@ export async function fetchMonthRows(month: string): Promise<string[][] | null> 
 // indekslar qat'iy emas — sarlavha matnidan qidiriladi. gviz ikki qatorli sarlavhani
 // bitta qatorga birlashtirib beradi (ichida \n bilan).
 export interface Cols {
+  hhId: number; // "HH ID" (2026-08 dan bor; eski varaqlarda -1)
   name: number;
   ketgan: number;
   bajarmagan: number;
@@ -174,7 +176,10 @@ export function detectCols(header: string[]): Cols | null {
   const H = header.map((h) => h.toLowerCase().replace(/\s+/g, " ").trim());
   const find = (pred: (h: string) => boolean) => H.findIndex((h) => h && pred(h));
 
-  const name = find((h) => h.includes("ism-familiya") || h.includes("ism familiya"));
+  // Odatda "O'qituvchi Ism-Familiya"; Fevral varag'ida esa shunchaki "O'qituvchi"
+  // (aks holda butun oy tahlildan jim tushib qolardi)
+  let name = find((h) => h.includes("ism-familiya") || h.includes("ism familiya"));
+  if (name === -1) name = find((h) => /^o[`'ʻʼ‘’]?qituvchi$/.test(h));
   if (name === -1) return null;
 
   // "Ketganlar ... Soni" dan keyingi "Foiz" ustuni — ketganlar foizi
@@ -187,6 +192,7 @@ export function detectCols(header: string[]): Cols | null {
   }
 
   return {
+    hhId: find((h) => h.replace(/\s/g, "") === "hhid" || h.startsWith("hh id")),
     name,
     ketgan,
     bajarmagan: find((h) => h.includes("bajarmagan")), // "Uy vazifa Bajarmagan ... Foiz" — o'zi foiz
@@ -239,8 +245,22 @@ export async function getAllAnalyses(
   const targetMonths = candidates.slice(start, cut);
   const sheets = allSheets.slice(start, cut);
 
-  // Har bir ustoz uchun oyma-oy ko'rsatkichlarni yig'amiz (kaliti — nameKey)
-  const byKey = new Map<string, { name: string; branch: string | null; months: MonthMetrics[] }>();
+  // Har bir ustoz uchun oyma-oy ko'rsatkichlarni yig'amiz.
+  // Bitta ustoz turli oylarda TURLICHA yozilishi mumkin (2026-10: Sheet'da "YULDASHEV
+  // XOJIMUHAMMAD" (Iyun–Iyul) → "... NODIRBEK OGLI" (Avg–Sen) → "Yuldashev Xojimuhammad"
+  // (Okt)). Faqat ism kaliti bo'yicha guruhlansa bitta odam bir necha kartaga bo'linib,
+  // toifa talablari chala oylar bo'yicha tekshirilardi. Shu sabab oylar ENG YANGIDAN
+  // eskisiga qarab yig'iladi va qator mavjud guruhga quyidagi tartibda biriktiriladi:
+  //   1) HH ID bir xil (2026-08 dan har qatorda bor) — eng ishonchli;
+  //   2) ism kaliti bir xil (HH ID'lar zid bo'lmasa);
+  //   3) qisqa ism to'liq ismning ichida (kamida 2 so'z — familiya + ism): faqat YAGONA
+  //      nomzod bo'lsa, HH ID'lar zid bo'lmasa va o'sha guruhda bu oy hali bo'lmasa
+  //      (bir oyda ikki qator — ikki xil odam degani).
+  // Shu oy guruhda allaqachon bo'lsa (takroriy qator) — birinchisi qoladi (avvalgidek).
+  interface Group { name: string; hhIds: Set<string>; keys: Set<string>; tokens: Set<string>; aliases: Set<string>; months: MonthMetrics[] }
+  const groups: Group[] = [];
+  const tokensOf = (s: string) => new Set(looseNameKey(s).split(" ").filter(Boolean));
+  const within = (a: Set<string>, b: Set<string>) => [...a].every((t) => b.has(t));
   const availableMonths: string[] = [];
 
   for (let mi = 0; mi < targetMonths.length; mi++) {
@@ -270,12 +290,30 @@ export async function getAllAnalyses(
       if (metrics.davomat == null && metrics.uvBajarish == null && metrics.ketgan == null) continue;
       const key = nameKey(rawName);
       if (!key) continue;
-      let entry = byKey.get(key);
-      if (!entry) {
-        entry = { name: rawName, branch: null, months: [] };
-        byKey.set(key, entry);
+      const month = targetMonths[mi];
+      const hhRaw = cols.hhId === -1 ? "" : String(r[cols.hhId] ?? "").trim();
+      const hhId = /^\d+$/.test(hhRaw) ? hhRaw : "";
+      const hhOk = (g: Group) => !hhId || g.hhIds.size === 0 || g.hhIds.has(hhId);
+      const hasMonth = (g: Group) => g.months.some((m) => m.month === month);
+
+      let g = hhId ? groups.find((x) => x.hhIds.has(hhId)) : undefined;
+      if (!g) g = groups.find((x) => x.keys.has(key) && hhOk(x));
+      if (!g) {
+        const tk = tokensOf(rawName);
+        const cands = groups.filter((x) =>
+          Math.min(tk.size, x.tokens.size) >= 2 && (within(tk, x.tokens) || within(x.tokens, tk)) && hhOk(x) && !hasMonth(x));
+        if (cands.length === 1) g = cands[0];
       }
-      if (!entry.months.some((m) => m.month === targetMonths[mi])) entry.months.push(metrics);
+      if (g && hasMonth(g)) continue; // shu oyda takroriy qator — birinchisi qoladi
+      if (!g) {
+        g = { name: rawName, hhIds: new Set(), keys: new Set(), tokens: new Set(), aliases: new Set(), months: [] };
+        groups.push(g);
+      }
+      if (hhId) g.hhIds.add(hhId);
+      g.keys.add(key);
+      g.aliases.add(rawName);
+      for (const t of tokensOf(rawName)) g.tokens.add(t);
+      g.months.push(metrics);
     }
   }
 
@@ -287,7 +325,8 @@ export async function getAllAnalyses(
   };
 
   const analyses: TeacherAnalysis[] = [];
-  for (const [key, entry] of byKey) {
+  for (const entry of groups) {
+    const key = nameKey(entry.name); // eng yangi oydagi yozilish
     const { tier, branch } = tierFor(entry.name, key);
     const isExpert = tier >= 4;
     const targetTier = isExpert ? 4 : tier + 1;
@@ -312,6 +351,7 @@ export async function getAllAnalyses(
     analyses.push({
       name: entry.name,
       nameKey: key,
+      aliases: [...entry.aliases],
       branch,
       currentTier: tier,
       targetTier,
@@ -336,6 +376,11 @@ export async function getAllAnalyses(
 export async function getAnalysisByName(name: string, monthLimit = 3): Promise<TeacherAnalysis | null> {
   if (!nameKey(name)) return null;
   const { analyses } = await getAllAnalyses(monthLimit);
+  // Avval ustozning Sheet'dagi HAR QANDAY oydagi yozilishi bilan aniq moslik (masalan
+  // profilida eski "... NODIRBEK OGLI" shakli turgan bo'lsa ham to'g'ri kartani topadi)
+  const key = nameKey(name);
+  const byAlias = analyses.filter((a) => a.aliases.some((x) => nameKey(x) === key));
+  if (byAlias.length === 1) return byAlias[0];
   // Statistika bilan AYNAN bir xil qidiruv zanjiri (aniq → yumshoq → prefiks → 1-harf)
   return resolveByName(analyses, name);
 }

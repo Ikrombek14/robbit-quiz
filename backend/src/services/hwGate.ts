@@ -1,9 +1,11 @@
 import type { Request, Response, NextFunction } from "express";
 import { prisma } from "../prisma.js";
 import { verifyToken } from "../auth.js";
-import { getStatByName } from "./stats.js";
+import { erpHwConfigured, getErpHwCount } from "./erpHomework.js";
 
-// Tekshirilmagan uy vazifa bloki. Sheet'dagi son HW_LIMIT dan KO'P bo'lsa, ustozning
+// Tekshirilmagan uy vazifa bloki. Son — ERP'dan JONLI (services/erpHomework.ts): faol
+// o'quvchilarning 48 soatdan ko'p tekshirilmay turgan ishlari (2026-10-22 gacha kuniga bir
+// marta yangilanadigan Google Sheet'dan olinardi). Son HW_LIMIT dan KO'P bo'lsa, ustozning
 // har kungi birinchi kirishi 1 "ogohlantirish" hisoblanadi:
 //   1 → ERP'ga yo'naltiriladi, 2 → qattiq ogohlantirish, 3+ → platforma to'liq yopiladi.
 // Son HW_LIMIT va undan kam bo'lsa hisob 0 ga qaytadi (blok o'zi ochiladi).
@@ -21,8 +23,11 @@ function today(): string {
 const levelOf = (strikes: number): HwLevel =>
   strikes <= 0 ? "ok" : strikes === 1 ? "redirect" : strikes === 2 ? "warn" : "block";
 
+let warnedUnconfigured = false;
+
 // Saytga kirishda chaqiriladi (/api/stats/hw-gate). Kun ichida qayta chaqirilsa hisob oshmaydi.
-export async function checkHwGate(teacherId: string): Promise<{ level: HwLevel; count: number | null; strikes: number }> {
+// fresh=true — "Qayta tekshirish" tugmasi: ERP'dan yangi son olinadi (kesh chetlab o'tiladi).
+export async function checkHwGate(teacherId: string, fresh = false): Promise<{ level: HwLevel; count: number | null; strikes: number }> {
   const t = await prisma.teacher.findUnique({
     where: { id: teacherId },
     select: { name: true, statsName: true, isAdmin: true, officeAdmin: true, hwStrikes: true, hwStrikeDay: true, hwUnlockUntil: true },
@@ -33,13 +38,18 @@ export async function checkHwGate(teacherId: string): Promise<{ level: HwLevel; 
 
   let count: number | null = null;
   try {
-    count = (await getStatByName(t.statsName?.trim() || t.name))?.uyTekshirilmaganSoni ?? null;
+    if (!erpHwConfigured()) {
+      if (!warnedUnconfigured) console.warn("[hw] DASHBOARD_INTERNAL_TOKEN sozlanmagan — uy vazifa bloki o'chiq");
+      warnedUnconfigured = true;
+      throw new Error("sozlanmagan");
+    }
+    count = await getErpHwCount(t.statsName?.trim() || t.name, fresh);
   } catch {
-    // Sheet ochilmasa — texnik nosozlik uchun hisobni oshirmaymiz (avvaldan bloklangan bo'lsa blok qoladi)
+    // Son olinmasa — texnik nosozlik uchun hisobni oshirmaymiz (avvaldan bloklangan bo'lsa blok qoladi)
     return { level: t.hwStrikes >= 3 ? "block" : "ok", count: null, strikes: t.hwStrikes };
   }
 
-  // Sheet'da topilmadi yoki son chegaradan oshmagan — hisob 0 ga qaytadi
+  // ERP'dagi faol ustozlar orasida topilmadi yoki son chegaradan oshmagan — hisob 0 ga qaytadi
   if (count == null || count <= HW_LIMIT) {
     if (t.hwStrikes !== 0 || t.hwStrikeDay) {
       await prisma.teacher.update({ where: { id: teacherId }, data: { hwStrikes: 0, hwStrikeDay: null } });

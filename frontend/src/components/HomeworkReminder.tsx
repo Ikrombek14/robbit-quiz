@@ -3,8 +3,9 @@ import { useLocation } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 
-// Tekshirilmagan uy vazifa nazorati — ustoz saytga KIRGANDA ishlaydi. Manba: Google Sheet
-// statistikasi, hisob backend'da (/stats/hw-gate, services/hwGate.ts):
+// Tekshirilmagan uy vazifa nazorati — ustoz saytga KIRGANDA ishlaydi. Manba: ERP (jonli,
+// dashboard ichki API orqali) — 48 soatdan ko'p tekshirilmay turgan ishlar; hisob backend'da
+// (/stats/hw-gate, services/hwGate.ts):
 //  • 10–50 ta  — oddiy eslatma (har tab-sessiyada bir marta)
 //  • 50 dan ko'p — har kungi birinchi kirish 1 ogohlantirish:
 //      1-kun → ERP'ga yo'naltiriladi, 2-kun → qattiq ogohlantirish, 3-kundan → to'liq blok.
@@ -14,13 +15,17 @@ const ERP_URL = "https://admin.robbit.uz/signin";
 const SHOWN_KEY = "hw_reminder_shown";
 
 type Level = "ok" | "redirect" | "warn" | "block";
-interface Gate { level: Level; count: number | null; strikes: number; limit: number }
+interface Gate { level: Level; count: number | null; strikes: number; limit: number; olderThanHours?: number }
 
-// Sahifalar orasida yurganda qayta so'ramaymiz (Protected har marshrutda qayta chiziladi)
+// Sahifalar orasida yurganda qayta so'ramaymiz (Protected har marshrutda qayta chiziladi).
+// force — "Qayta tekshirish": server ERP'dan yangi sonni oladi (fresh).
 let cached: { teacherId: string; p: Promise<Gate> } | null = null;
 function loadGate(teacherId: string, force = false): Promise<Gate> {
   if (force || cached?.teacherId !== teacherId) {
-    cached = { teacherId, p: api<Gate>("/stats/hw-gate", { method: "POST" }) };
+    cached = {
+      teacherId,
+      p: api<Gate>("/stats/hw-gate", { method: "POST", body: JSON.stringify(force ? { fresh: true } : {}) }),
+    };
   }
   return cached.p;
 }
@@ -68,6 +73,7 @@ export default function HomeworkReminder() {
   }
 
   const count = gate.count ?? 0;
+  const hours = gate.olderThanHours ?? 48;
   const countEl = <b style={{ color: "var(--danger, #e05661)", fontSize: 20 }}>{count} ta</b>;
 
   // 3-ogohlantirishdan keyin — to'liq blok (yopib bo'lmaydi)
@@ -78,12 +84,12 @@ export default function HomeworkReminder() {
           <div style={{ fontSize: 50 }}>🔒</div>
           <h2 style={{ margin: "8px 0 4px" }}>Platforma vaqtincha yopildi</h2>
           <p style={{ fontSize: 16, lineHeight: 1.55, margin: "8px 0 0" }}>
-            Sizda {countEl} tekshirilmagan uy vazifa bor. Platformadan foydalanish uchun
-            ularni <b>{gate.limit} tadan kamaytiring</b>.
+            Sizda {hours} soatdan ko'p tekshirilmay turgan {countEl} uy vazifa bor. Platformadan
+            foydalanish uchun ularni <b>{gate.limit} tadan kamaytiring</b>.
           </p>
           <p className="muted text-sm" style={{ marginTop: 8 }}>
-            Statistika kuniga bir marta yangilanadi. Tekshirib bo'lgan bo'lsangiz va shoshilinch
-            kerak bo'lsa — platforma admini vaqtincha ochib berishi mumkin.
+            Son ERP'dan jonli olinadi: tekshirib bo'lgach «Qayta tekshirish»ni bosing — platforma
+            darhol ochiladi. Shoshilinch bo'lsa, platforma admini vaqtincha ochib berishi mumkin.
           </p>
           <button className="btn btn-block" style={{ marginTop: 14 }} onClick={goErp}>
             ERP'ga o'tib tekshirish
@@ -109,8 +115,8 @@ export default function HomeworkReminder() {
           <div style={{ fontSize: 46 }}>📝</div>
           <h2 style={{ margin: "8px 0 4px" }}>Avval uy vazifalarni tekshiring</h2>
           <p style={{ fontSize: 16, lineHeight: 1.55, margin: "8px 0 0" }}>
-            Sizda {countEl} tekshirilmagan uy vazifa bor ({gate.limit} tadan ko'p).
-            Hozir ERP tizimiga yo'naltirilasiz…
+            Sizda {hours} soatdan ko'p tekshirilmay turgan {countEl} uy vazifa bor ({gate.limit} tadan
+            ko'p). Hozir ERP tizimiga yo'naltirilasiz…
           </p>
           <button className="btn btn-block" style={{ marginTop: 14 }} onClick={goErp}>ERP'ga o'tish</button>
         </div>
@@ -126,8 +132,8 @@ export default function HomeworkReminder() {
           <div style={{ fontSize: 46 }}>⚠️</div>
           <h2 style={{ margin: "8px 0 4px", color: "var(--danger, #e05661)" }}>Oxirgi ogohlantirish!</h2>
           <p style={{ fontSize: 16, lineHeight: 1.55, margin: "8px 0 0" }}>
-            Sizda {countEl} tekshirilmagan uy vazifa bor. Ertaga ham {gate.limit} tadan ko'p
-            bo'lsa, <b>platforma siz uchun yopiladi</b>.
+            Sizda {hours} soatdan ko'p tekshirilmay turgan {countEl} uy vazifa bor. Ertaga ham
+            {" "}{gate.limit} tadan ko'p bo'lsa, <b>platforma siz uchun yopiladi</b>.
           </p>
           <button className="btn btn-block" style={{ marginTop: 14 }} onClick={goErp}>ERP'ga o'tib tekshirish</button>
           <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={dismiss}>Tushunarli</button>
@@ -144,7 +150,8 @@ export default function HomeworkReminder() {
         <div style={{ fontSize: 46 }}>📝</div>
         <h2 style={{ margin: "8px 0 4px" }}>Tekshirilmagan uy vazifalar!</h2>
         <p style={{ fontSize: 16, lineHeight: 1.55, margin: "8px 0 0" }}>
-          Siz {countEl} uy vazifasini tekshirmagansiz. Iltimos, bugundan qoldirmasdan tekshirib qo'ying.
+          Sizda {hours} soatdan beri tekshirilmay turgan {countEl} uy vazifa bor. Iltimos, bugundan
+          qoldirmasdan tekshirib qo'ying.
         </p>
         <p className="muted text-sm" style={{ marginTop: 8 }}>
           {gate.limit} tadan oshsa platformadan foydalanish cheklanadi.

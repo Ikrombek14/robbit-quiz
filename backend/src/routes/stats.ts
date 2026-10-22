@@ -4,6 +4,7 @@ import { prisma } from "../prisma.js";
 import { getAllStats, getStatByName, statsUpdatedAt, getSheetStatus } from "../services/stats.js";
 import { getAllAnalyses, getAnalysisByName } from "../services/analysis.js";
 import { checkHwGate, HW_LIMIT } from "../services/hwGate.js";
+import { HW_OLDER_THAN_HOURS } from "../services/erpHomework.js";
 
 // Ustozlar statistikasi (Google Sheet'dan). Barcha kirgan ustozlar ko'ra oladi.
 export const statsRouter = Router();
@@ -32,10 +33,11 @@ statsRouter.get("/me", async (req: AuthedRequest, res) => {
 // level: ok | redirect (ERP'ga) | warn | block
 statsRouter.post("/hw-gate", async (req: AuthedRequest, res) => {
   try {
-    const r = await checkHwGate(req.teacherId!);
-    res.json({ ...r, limit: HW_LIMIT });
+    // fresh — "Qayta tekshirish" tugmasi (ERP'dan yangi son)
+    const r = await checkHwGate(req.teacherId!, req.body?.fresh === true);
+    res.json({ ...r, limit: HW_LIMIT, olderThanHours: HW_OLDER_THAN_HOURS });
   } catch {
-    res.json({ level: "ok", count: null, strikes: 0, limit: HW_LIMIT });
+    res.json({ level: "ok", count: null, strikes: 0, limit: HW_LIMIT, olderThanHours: HW_OLDER_THAN_HOURS });
   }
 });
 

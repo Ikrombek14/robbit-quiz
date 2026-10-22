@@ -13,6 +13,9 @@ export const config = {
   // AI savol generatsiyasi sukut bo'yicha shu orqali ketadi.
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  // Hisobot dashboard ichki API — ERP'dan jonli tekshirilmagan uy vazifalar soni (hwGate)
+  dashboardUrl: (process.env.DASHBOARD_INTERNAL_URL ?? "https://dashboard.robbitonline.uz").replace(/\/$/, ""),
+  dashboardToken: process.env.DASHBOARD_INTERNAL_TOKEN ?? "",
   production: process.env.NODE_ENV === "production",
   adminEmails: (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean),
   // Robbit ERP (admin.robbit.uz) integratsiyasi — server-to-server, faqat o'qish

@@ -15,12 +15,13 @@ export default function Stats() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState("");
+  const [sheetErr, setSheetErr] = useState(""); // joriy oy varag'i muammosi (Sheet)
   const [q, setQ] = useState("");
   const [branch, setBranch] = useState("");
 
   useEffect(() => {
-    api<{ stats: TeacherStat[]; updatedAt?: number | null }>("/stats/all")
-      .then((r) => { setRows(r.stats); setUpdatedAt(r.updatedAt ?? null); })
+    api<{ stats: TeacherStat[]; updatedAt?: number | null; sheet?: { ok: boolean; month: string; error: string | null } | null }>("/stats/all")
+      .then((r) => { setRows(r.stats); setUpdatedAt(r.updatedAt ?? null); setSheetErr(r.sheet?.error ?? ""); })
       .catch((e) => setErr(e instanceof Error ? e.message : "Xatolik"))
       .finally(() => setLoading(false));
   }, []);
@@ -30,8 +31,9 @@ export default function Stats() {
     setRefreshing(true);
     setErr("");
     try {
-      const r = await api<{ stats: TeacherStat[]; updatedAt?: number | null }>("/stats/refresh", { method: "POST" });
+      const r = await api<{ stats: TeacherStat[]; updatedAt?: number | null; sheet?: { ok: boolean; month: string; error: string | null } | null }>("/stats/refresh", { method: "POST" });
       setRows(r.stats);
+      setSheetErr(r.sheet?.error ?? "");
       setUpdatedAt(r.updatedAt ?? null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Xatolik");
@@ -110,6 +112,12 @@ export default function Stats() {
       </div>
 
       {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
+      {sheetErr && (
+        <div className="error" style={{ marginBottom: 12 }}>
+          ⚠️ Statistika ko'rsatilmayapti: {sheetErr}.{" "}
+          {isAdmin ? "Google Sheet'ni to'g'rilab, \"Yangilash\" tugmasini bosing." : "Admin bilan bog'laning."}
+        </div>
+      )}
 
       {loading ? (
         <p className="muted">Yuklanmoqda…</p>

@@ -1,5 +1,4 @@
 import { nameKey, looseNameKey } from "../lib/nameKey.js";
-import { getTargetMonths, fetchMonthRows, detectCols } from "./analysis.js";
 
 // Ustozlar statistikasi — Google Sheet'dan (CSV export) jonli olinadi va keshlanadi.
 // Manba jadval ikki qatorli sarlavhaga ega; ma'lumot 3-qatordan boshlanadi.
@@ -62,63 +61,90 @@ export function statsUpdatedAt(): number | null {
   return cache?.ts ?? null;
 }
 
-// Kechikish (daqiqa) — OY VARAG'IDAN olinadi (default varaqda bu ustun to'ldirilmaydi,
-// hammaga 0 chiqib qolardi). 20-sana qoidasi bo'yicha eng yangi mavjud oy varag'i
-// topiladi, undagi "Kechikish → Daqiqa" ustuni sarlavhadan aniqlanadi va
-// nameKey(ism) → daqiqa xaritasi qaytadi. Varaq topilmasa null.
-async function fetchKechikishFromMonth(): Promise<{ month: string; byKey: Map<string, number | null> } | null> {
-  for (const month of getTargetMonths(new Date(), 3)) {
-    let rows: string[][] | null;
-    try {
-      rows = await fetchMonthRows(month);
-    } catch {
-      continue; // tarmoq xatosi — keyingi oyni sinaymiz
-    }
-    if (!rows || rows.length < 2) continue;
-    const cols = detectCols(rows[0]);
-    if (!cols || cols.kechikish === -1) continue;
-    const byKey = new Map<string, number | null>();
-    for (let i = 1; i < rows.length; i++) {
-      const r = rows[i] ?? [];
-      const key = nameKey(String(r[cols.name] ?? "").trim());
-      if (key && !byKey.has(key)) byKey.set(key, num(r[cols.kechikish]));
-    }
-    if (byKey.size) return { month, byKey };
+// Statistika HAR DOIM joriy oy varag'idan olinadi (Toshkent vaqti bo'yicha, masalan "Oktabr").
+// Defolt (birinchi) varaq ishlatilmaydi — ofis yangi oy varag'ini ochib, eskisini birinchi
+// o'rinda qoldirib ketadi (2026-10: defolt "Sentabr" edi, sayt eski raqamlarni ko'rsatgan).
+// Joriy oy varag'i yo'q/bo'sh/ustunlari boshqacha bo'lsa — statistika bo'sh qaytadi va
+// sheetStatus orqali adminlarga "Sheet'ni to'g'rilang" ogohlantirishi chiqadi.
+const MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+const gviz = (sheet?: string) =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv${sheet ? `&sheet=${encodeURIComponent(sheet)}` : ""}`;
+
+export interface SheetStatus { ok: boolean; month: string; error: string | null }
+let sheetStatus: SheetStatus | null = null;
+export function getSheetStatus(): SheetStatus | null {
+  return sheetStatus;
+}
+
+function currentMonth(): string {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent" }));
+  return MONTHS[now.getMonth()];
+}
+
+async function getText(u: string, init?: RequestInit): Promise<Response> {
+  // 10s timeout — Google Sheets javob bermay osilib qolsa, so'rov cheksiz kutmasin
+  const r = await fetch(u, { ...init, signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error(`Statistika yuklab bo'lmadi (${r.status})`);
+  return r;
+}
+
+// Defolt varaqning nomi (export javobidagi Content-Disposition'dan, masalan "... - Oktabr.csv")
+async function defaultSheetName(): Promise<string | null> {
+  const r = await getText(CSV_URL, { method: "HEAD" });
+  const m = /filename\*=UTF-8''([^;]+)/.exec(r.headers.get("content-disposition") ?? "");
+  return m ? decodeURIComponent(m[1]).replace(/\.csv$/i, "").split(" - ").pop()?.trim() ?? null : null;
+}
+
+// Joriy oy varag'i qatorlari yoki muammo matni. Tarmoq xatosida throw qiladi.
+async function fetchMonthSheet(month: string): Promise<{ rows: string[][] } | { error: string }> {
+  const [text, defaultText] = await Promise.all([
+    getText(gviz(month)).then((r) => r.text()),
+    getText(gviz()).then((r) => r.text()),
+  ]);
+  // gviz mavjud bo'lmagan varaq nomiga xato bermay defolt varaqni qaytaradi — natija
+  // defolt bilan bir xil bo'lsa va defolt boshqa oyga tegishli bo'lsa, varaq yo'q
+  if (text === defaultText && (await defaultSheetName()) !== month) {
+    return { error: `Sheet'da "${month}" varag'i topilmadi` };
   }
-  return null;
+  const rows = parseCSV(text).filter((r) => r.some((c) => c && c.trim()));
+  const h = (rows[0] ?? []).map((x) => x.toLowerCase());
+  if (!h[2]?.includes("qituvchi") || !h[7]?.includes("tekshirilmagan")) {
+    return { error: `"${month}" varag'ida ustunlar tartibi boshqacha (C — O'qituvchi, H — Uy vazifa Tekshirilmagan bo'lishi kerak)` };
+  }
+  const filled = rows.filter((r) => /^\d+$/.test(String(r[0] ?? "").trim()) && String(r[7] ?? "").trim());
+  if (filled.length < 5) return { error: `"${month}" varag'i hali to'ldirilmagan` };
+  return { rows };
 }
 
 export async function getAllStats(force = false): Promise<TeacherStat[]> {
   if (!force && cache && Date.now() - cache.ts < TTL_MS) return cache.data;
 
-  let res: Response;
+  const month = currentMonth();
+  let sheet: Awaited<ReturnType<typeof fetchMonthSheet>>;
   try {
-    // 10s timeout — Google Sheets javob bermay osilib qolsa, so'rov cheksiz
-    // kutmasin (AbortSignal.timeout). Timeout ham catch'ga tushadi → eski kesh beriladi.
-    res = await fetch(CSV_URL, { signal: AbortSignal.timeout(10_000) });
+    sheet = await fetchMonthSheet(month);
   } catch (e) {
     if (cache) return cache.data; // tarmoq/timeout xatosi — eski kesh yangisidan yaxshi
     throw e;
   }
-  if (!res.ok) {
-    if (cache) return cache.data; // Sheet vaqtincha javob bermasa — eski keshni beramiz
-    throw new Error(`Statistika yuklab bo'lmadi (${res.status})`);
+  if ("error" in sheet) {
+    sheetStatus = { ok: false, month, error: sheet.error };
+    cache = { data: [], ts: Date.now() };
+    return [];
   }
-  const text = await res.text();
+  sheetStatus = { ok: true, month, error: null };
 
-  const rows = parseCSV(text);
-
-  // Ustun indekslari — asosiy (ishonchli to'ldirilgan) strukturalangan jadvaldan:
+  // Ustun indekslari (gviz — sarlavha bitta qator, ma'lumot keyingi qatorlardan):
   // 0=HH ID, 2=O'qituvchi, 3=Filial, 4=Ketganlar SONI,
   // 7=Uy vazifa Tekshirilmagan SONI, 10=Uy vazifa Bajarmagan(%),
   // 12=Kechikish(daqiqa), 14=O'quvchilar davomati(%),
   // 17=Umumiy ball, 20=Guruhlar soni
   const data: TeacherStat[] = [];
-  for (let i = 2; i < rows.length; i++) {
-    const r = (rows[i] ?? []) as unknown[];
+  for (const row of sheet.rows) {
+    const r = row as unknown[];
     const name = String(r[2] ?? "").trim();
     const id = String(r[0] ?? "").trim();
-    if (!name || !/^\d+$/.test(id)) continue; // faqat haqiqiy ustoz qatorlari
+    if (!name || !/^\d+$/.test(id)) continue; // faqat haqiqiy ustoz qatorlari (sarlavha ham o'tib ketadi)
 
     const bajarmagan = num(r[10]); // bajarmaganlar foizi
     data.push({
@@ -129,27 +155,11 @@ export async function getAllStats(force = false): Promise<TeacherStat[]> {
       uyBajarilishi: bajarmagan == null ? null : Math.max(0, Math.round((100 - bajarmagan) * 10) / 10),
       uyTekshirilmaganSoni: num(r[7]),
       kechikish: num(r[12]),
-      kechikishOy: null,
+      kechikishOy: month,
       ketganlar: num(r[4]),
       guruhlar: num(r[20]),
       umumiyBall: num(r[17]),
     });
-  }
-
-  // Kechikishni oy varag'idan ustiga yozamiz — default varaqdagi qiymat ishonchsiz
-  // (doim 0). Oy varag'i ochilmasa, default qiymatlar qoladi (sahifa buzilmaydi).
-  try {
-    const late = await fetchKechikishFromMonth();
-    if (late) {
-      for (const s of data) {
-        if (late.byKey.has(s.nameKey)) {
-          s.kechikish = late.byKey.get(s.nameKey) ?? null;
-          s.kechikishOy = late.month;
-        }
-      }
-    }
-  } catch {
-    /* oy varag'i vaqtincha ishlamasa — default qiymatlar bilan davom etamiz */
   }
 
   cache = { data, ts: Date.now() };

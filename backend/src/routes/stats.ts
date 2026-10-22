@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { prisma } from "../prisma.js";
-import { getAllStats, getStatByName, statsUpdatedAt } from "../services/stats.js";
+import { getAllStats, getStatByName, statsUpdatedAt, getSheetStatus } from "../services/stats.js";
 import { getAllAnalyses, getAnalysisByName } from "../services/analysis.js";
 import { checkHwGate, HW_LIMIT } from "../services/hwGate.js";
 
@@ -39,11 +39,21 @@ statsRouter.post("/hw-gate", async (req: AuthedRequest, res) => {
   }
 });
 
+// Sheet holati — joriy oy varag'i topildimi (adminlarga "Sheet'ni to'g'rilang" ogohlantirishi uchun)
+statsRouter.get("/sheet-status", async (_req, res) => {
+  try {
+    await getAllStats(); // keshlangan — holatni yangilab oladi
+  } catch {
+    /* tarmoq xatosi — oxirgi ma'lum holat qaytadi */
+  }
+  res.json({ sheet: getSheetStatus() });
+});
+
 // Barcha ustozlar statistikasi (reyting / to'liq ko'rish)
 statsRouter.get("/all", async (_req, res) => {
   try {
     const stats = await getAllStats();
-    res.json({ stats, updatedAt: statsUpdatedAt() });
+    res.json({ stats, updatedAt: statsUpdatedAt(), sheet: getSheetStatus() });
   } catch {
     res.status(502).json({ error: "Statistikani yuklab bo'lmadi" });
   }
@@ -98,7 +108,7 @@ statsRouter.post("/refresh", async (req: AuthedRequest, res) => {
   }
   try {
     const stats = await getAllStats(true);
-    res.json({ stats, updatedAt: statsUpdatedAt() });
+    res.json({ stats, updatedAt: statsUpdatedAt(), sheet: getSheetStatus() });
   } catch {
     res.status(502).json({ error: "Statistikani yuklab bo'lmadi" });
   }

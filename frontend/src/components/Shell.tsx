@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { api } from "../api";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth, homePath } from "../auth";
 import { getTheme, toggleTheme, type Theme } from "../theme";
@@ -121,8 +122,31 @@ export default function Shell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="shell-main">{children}</main>
+      <main className="shell-main">
+        {teacher?.isAdmin && <SheetWarning />}
+        {children}
+      </main>
     </div>
+    </div>
+  );
+}
+
+// Adminlar uchun: statistika Sheet'ida joriy oy varag'i topilmasa/bo'sh bo'lsa ogohlantirish.
+// Statistika HAR DOIM joriy oy varag'idan olinadi (backend services/stats.ts).
+type SheetStatus = { ok: boolean; month: string; error: string | null };
+let sheetStatusP: Promise<{ sheet: SheetStatus | null }> | null = null;
+
+function SheetWarning() {
+  const [sheet, setSheet] = useState<SheetStatus | null>(null);
+  useEffect(() => {
+    sheetStatusP ??= api<{ sheet: SheetStatus | null }>("/stats/sheet-status");
+    sheetStatusP.then((r) => setSheet(r.sheet)).catch(() => {});
+  }, []);
+  if (!sheet || sheet.ok) return null;
+  return (
+    <div className="error" style={{ margin: "0 0 16px" }}>
+      ⚠️ <b>Statistika Sheet'ini to'g'rilang:</b> {sheet.error}. Ustozlar statistikasi va uy vazifa
+      nazorati hozir ishlamayapti — Sheet'da "{sheet.month}" nomli varaq bo'lishi va to'ldirilishi kerak.
     </div>
   );
 }

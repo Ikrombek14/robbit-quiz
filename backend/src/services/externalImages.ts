@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import https from "https";
 import type { SlideImage } from "./claude.js";
 import { UPLOADS_DIR } from "../routes/upload.js";
 
@@ -47,33 +48,105 @@ export type FetchedImage =
   | { ok: true; mediaType: SlideImage["mediaType"]; buffer: Buffer }
   | { ok: false; reason: string }; // diagnostika uchun qisqa sabab (xato xabariga kiradi)
 
+// Bitta HTTP javob (redirect'ga ergashilmaydi — chaqiruvchi o'zi boshqaradi)
+type RawImgResp = { status: number; contentType: string; location: string | null; waf: boolean; buffer: Buffer };
+
+class TooLargeError extends Error {}
+
+// IPv4 (oddiy fetch). Tana maxBytes dan oshsa TooLargeError.
+async function getViaIPv4(url: URL, headers: Record<string, string>, maxBytes: number): Promise<RawImgResp> {
+  const res = await fetch(url, { headers, redirect: "manual", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  const len = Number(res.headers.get("content-length"));
+  if (Number.isFinite(len) && len > maxBytes) throw new TooLargeError();
+  const buffer = res.status >= 300 && res.status < 400 ? Buffer.alloc(0) : Buffer.from(await res.arrayBuffer());
+  if (buffer.byteLength > maxBytes) throw new TooLargeError();
+  return {
+    status: res.status,
+    contentType: res.headers.get("content-type") ?? "",
+    location: res.headers.get("location"),
+    waf: res.headers.has("x-amzn-waf-action"),
+    buffer,
+  };
+}
+
+// IPv6 orqali (Wayground/Quizizz AWS WAF serverimizning IPv4 manzilini bot deb bloklaydi —
+// 202 + bo'sh tana; IPv6 manzil esa ochiq. Qarang: routes/import.ts getWayground).
+function getViaIPv6(url: URL, headers: Record<string, string>, maxBytes: number): Promise<RawImgResp> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers, family: 6, timeout: 8_000 }, (res) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on("data", (c: Buffer) => {
+        size += c.byteLength;
+        if (size > maxBytes) { req.destroy(new TooLargeError()); return; }
+        chunks.push(c);
+      });
+      res.on("end", () => {
+        const loc = res.headers.location;
+        resolve({
+          status: res.statusCode ?? 0,
+          contentType: String(res.headers["content-type"] ?? ""),
+          location: typeof loc === "string" ? loc : null,
+          waf: Boolean(res.headers["x-amzn-waf-action"]),
+          buffer: Buffer.concat(chunks),
+        });
+      });
+      res.on("error", reject);
+    });
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", reject);
+  });
+}
+
+// WAF "challenge" javobi: x-amzn-waf-action sarlavhasi yoki 202 + bo'sh tana
+const isWafBlock = (r: RawImgResp) => r.waf || (r.status === 202 && r.buffer.byteLength === 0);
+
+const MAX_REDIRECTS = 5;
+
 // Bitta tashqi rasmni yuklab oladi. Har qanday muammoda (xavfli URL, katta hajm,
 // rasm emas, timeout) ok:false + sabab qaytaradi — chaqiruvchi o'tkazib yuboradi.
+// Redirect'lar qo'lda kuzatiladi: har bir yangi manzil ham safeExternalUrl tekshiruvidan
+// o'tadi (SSRF). Javob WAF bloki bo'lsa (2026-10-24: media.quizizz.com → quizizz.com
+// IPv4'da 202 bo'sh HTML, "rasm emas (text/html)") — o'sha manzil IPv6 orqali qayta so'raladi.
 export async function fetchExternalImage(rawUrl: string, maxBytes: number): Promise<FetchedImage> {
-  const url = safeExternalUrl(rawUrl);
+  let url = safeExternalUrl(rawUrl);
   if (!url) return { ok: false, reason: "xavfli URL" };
   try {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: {
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const headers: Record<string, string> = {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-        Accept: "image/*",
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
         // Ba'zi CDN'lar (hotlink himoyasi) Referer'siz so'rovni rad etadi
         Referer: `${url.origin}/`,
-      },
-    });
-    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
-    const ct = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    const mediaType = MEDIA_BY_CONTENT_TYPE[ct];
-    if (!mediaType) return { ok: false, reason: `rasm emas (${ct || "content-type yo'q"})` };
-    const len = Number(res.headers.get("content-length"));
-    if (Number.isFinite(len) && len > maxBytes) return { ok: false, reason: "hajmi katta" };
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength === 0) return { ok: false, reason: "bo'sh javob" };
-    if (buffer.byteLength > maxBytes) return { ok: false, reason: "hajmi katta" };
-    return { ok: true, mediaType, buffer };
+      };
+      let res = await getViaIPv4(url, headers, maxBytes);
+      if (isWafBlock(res)) {
+        try {
+          const v6 = await getViaIPv6(url, headers, maxBytes);
+          if (!isWafBlock(v6)) res = v6;
+        } catch (e) {
+          if (e instanceof TooLargeError) throw e;
+          /* IPv6 yo'q yoki ulanmadi — IPv4 javobi bilan davom etamiz (pastda "rasm emas" bo'ladi) */
+        }
+      }
+      if (res.status >= 300 && res.status < 400) {
+        if (!res.location) return { ok: false, reason: `HTTP ${res.status} (manzilsiz redirect)` };
+        const next = safeExternalUrl(new URL(res.location, url).toString());
+        if (!next) return { ok: false, reason: "xavfli redirect" };
+        url = next;
+        continue;
+      }
+      if (res.status < 200 || res.status >= 300) return { ok: false, reason: `HTTP ${res.status}` };
+      const ct = res.contentType.split(";")[0].trim().toLowerCase();
+      const mediaType = MEDIA_BY_CONTENT_TYPE[ct];
+      if (!mediaType) return { ok: false, reason: `rasm emas (${ct || "content-type yo'q"})` };
+      if (res.buffer.byteLength === 0) return { ok: false, reason: "bo'sh javob" };
+      return { ok: true, mediaType, buffer: res.buffer };
+    }
+    return { ok: false, reason: "redirect juda ko'p" };
   } catch (e) {
+    if (e instanceof TooLargeError) return { ok: false, reason: "hajmi katta" };
     const name = e instanceof Error ? e.name : "";
     return { ok: false, reason: name === "TimeoutError" || name === "AbortError" ? "timeout" : "tarmoq xatosi" };
   }

@@ -13,15 +13,23 @@ import { shuffleAnswerOptions } from "./questionShuffle.js";
 // keyingi so'rov avtomatik yangisiga o'tadi, kod o'zgartirish shart emas.
 // 2026-09-30 sinov (tekin kalit): 3.8-flash 4s ✅, 3.6-flash 3s ✅, flash-lite 5s ✅,
 // 3.5-flash 36s (doim "band"), flash-latest 503, gemini-3-flash va 2.5-flash 404.
+// 2026-10-24: 3.8-flash 60+ s javob bermay osilib qoldi (3 savolga 63–72 s) — oxirroqqa
+// surildi; 3.6-flash 3 s, flash-lite 4 s.
 // Har modelning kunlik tekin kvotasi ALOHIDA (~20/kun) — ro'yxat qancha uzun bo'lsa, shuncha ko'p quiz.
 const MODEL_CANDIDATES = [
-  "gemini-3.8-flash",
   "gemini-3.6-flash",
   "gemini-flash-lite-latest", // lite — tekin kvotasi kengroq, vision ham bor
+  "gemini-3.8-flash", // ba'zan juda sekin / osilib qoladi
   "gemini-3.5-flash", // ishlaydi, lekin juda sekin (yuqori talab)
   "gemini-flash-latest", // Google'ning "eng so'nggi flash" taxallusi
 ];
 let activeModel: string | null = null; // ishlagani shu yerda saqlanadi
+
+// Vaqt chegaralari: muharrir natijani ko'pi bilan 4 daqiqa kutadi (QuizEditor.tsx) —
+// butun model zanjiri undan oldin tugashi kerak. Bitta model osilib qolsa, keyingisiga o'tamiz.
+const PER_MODEL_TIMEOUT_MS = 70_000;
+const TOTAL_BUDGET_MS = 200_000;
+const SLOW_MS = 40_000; // bundan sekin javob bergan model "faol" deb eslab qolinmaydi
 
 // Xato "model mavjud emas" turidami? (boshqa xatolarda fallback qilmaymiz)
 function isModelUnavailable(status: number, message: string): boolean {
@@ -100,15 +108,37 @@ export async function requestGeminiText(parts: unknown[], generationConfig: Reco
 
   let res: Response | null = null;
   let data: GeminiResponse = {};
+  let timedOut = false; // oxirgi urinish javobsiz qoldimi (osilib qolgan model)
+  const started = Date.now();
   for (const model of candidates) {
-    res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: AbortSignal.timeout(120_000) },
-    );
-    data = (await res.json().catch(() => ({}))) as GeminiResponse;
+    const left = TOTAL_BUDGET_MS - (Date.now() - started);
+    if (left < 10_000) break; // muharrir kutish vaqti tugashidan oldin to'xtaymiz
+    const t0 = Date.now();
+    try {
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: AbortSignal.timeout(Math.min(PER_MODEL_TIMEOUT_MS, left)) },
+      );
+      data = (await res.json().catch(() => ({}))) as GeminiResponse;
+      timedOut = false;
+    } catch (e) {
+      // Osilib qolgan (timeout) yoki tarmoq xatosi — butun so'rovni yiqitmaymiz, keyingi model
+      console.warn(`[gemini] javob bermadi (${model}, ${Math.round((Date.now() - t0) / 1000)} s): ${e instanceof Error ? e.name : e} — keyingi model sinaladi`);
+      if (activeModel === model) activeModel = null;
+      res = null;
+      timedOut = true;
+      continue;
+    }
     if (res.ok) {
-      if (activeModel !== model) console.log(`[gemini] faol model: ${model}`);
-      activeModel = model;
+      const took = Date.now() - t0;
+      if (took > SLOW_MS) {
+        // Javob berdi, lekin juda sekin — keyingi so'rovlar tezroq modeldan boshlansin
+        console.warn(`[gemini] sekin javob (${model}, ${Math.round(took / 1000)} s)`);
+        if (activeModel === model) activeModel = null;
+      } else {
+        if (activeModel !== model) console.log(`[gemini] faol model: ${model}`);
+        activeModel = model;
+      }
       break;
     }
     // Model eskirgan/topilmadi — keyingi kandidatga o'tamiz; boshqa xatolarda to'xtaymiz
@@ -140,6 +170,9 @@ export async function requestGeminiText(parts: unknown[], generationConfig: Reco
     }
     if (res?.status === 503) {
       throw new Error("AI hozir band (barcha modellar). 1–2 daqiqadan keyin qayta urinib ko'ring.");
+    }
+    if (!res || timedOut) {
+      throw new Error("AI hozir javob bermayapti (modellar juda sekin). 1–2 daqiqadan keyin qayta urinib ko'ring.");
     }
     throw new Error(data.error?.message || `Gemini xatosi (${res?.status ?? "ulanish"})`);
   }

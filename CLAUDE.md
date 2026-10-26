@@ -18,8 +18,8 @@ va **bir xil funksiyani ikki marta yozmaslik** uchun:
 - **Deploy = GitHub Actions** (`.github/workflows/deploy.yml`), `master` ga push → avtomatik.
   **Bu ishlaydi** (oxirgi tuzatish: `e30b439`). Deploy mexanizmini o'zboshimchalik bilan
   almashtirmang — foydalanuvchidan so'rang.
-- **Baza = serverdagi LOKAL PostgreSQL**, lekin **port 5435** (5432 EMAS — 5432 ni boshqa
-  narsa egallagan, shu sabab P1000 bo'lardi). Deploy `SHOW port` bilan portni avtomatik
+- **Baza = serverdagi LOKAL PostgreSQL 16**, yangi serverda **port 5432** (eski serverda
+  5435 edi). Deploy `SHOW port` bilan portni avtomatik
   aniqlaydi va Prisma'ni **unix socket** (`?host=/var/run/postgresql`) + `local ... trust`
   orqali ulaydi (parolsiz, port-agnostik). **Neon ishlatilmaydi.**
 - **Admin tizimi:** `ADMIN_EMAILS` (env) dagilar = admin va himoyalangan (panelda huquqini
@@ -33,8 +33,16 @@ va **bir xil funksiyani ikki marta yozmaslik** uchun:
 - **`deploy-direct.ps1`** (repo ildizida, `.gitignore` da) — Posh-SSH orqali qo'lda to'g'ridan
   serverga deploy qiluvchi **ixtiyoriy zaxira** usul (PuTTY shart emas). Ichida maxfiy
   ma'lumotlar bor — **commit qilmang**. Asosiy usul baribir GitHub Actions.
-- Server: `root@167.86.86.68` · App: `/root/apps/robbit-quiz` · Domen: `robbitquiz.uz`
-  · PM2: `robbit-quiz` (fork, 1 instance — game state in-memory).
+- Server: `root@169.58.130.201` (Robbit'ning umumiy yangi serveri) · App: `/root/apps/robbit-quiz`
+  · Domen: `robbitquiz.uz` (DNS: Eskiz, ns1/ns2.eskiz.uz)
+  · **systemd** `robbit-quiz` (PM2 EMAS; bitta protsess — game state in-memory).
+    Loglar: `journalctl -u robbit-quiz`. Port 4000, ufw faqat docker tarmog'iga ochiq.
+  · **TLS = Caddy** (`coach-caddy-1` konteyneri, `/opt/coach/deploy/Caddyfile`) — nginx emas.
+    Caddyfile bind-mount: `sed -i` bilan tahrirlamang (inode o'zgaradi, konteyner ko'rmaydi).
+  · **2026-10-26: yana ko'chirildi** — eski `167.86.86.68` dan server egasi 25-oktabr kechasi
+    robbit-quiz'ni olib tashladi (nginx, sertifikat, baza; zaxirasi u yerda
+    `/root/backups/removed-apps-20261026/robbit-quiz/`). Baza shu dump'dan tiklandi.
+    Eski serverga endi deploy QILINMAYDI.
   · **2026-07-14: server ko'chirildi** — eski `157.173.114.153` butunlay o'chdi (SSH/HTTP javob
     bermaydi), yangi IP `167.86.86.68`, GitHub secret `SERVER_HOST` yangilangan. Eski IP'ga
     deploy urinishlari exit 255 (SSH ulanmaydi) bilan yiqiladi.
@@ -48,7 +56,7 @@ va **bir xil funksiyani ikki marta yozmaslik** uchun:
   ma'lumotni saqlaydi). Lokal dev uchun `npm run prisma:migrate`, prod uchun `prisma:deploy`.
 - **Avtomatik backup:** deploy har safar migratsiyadan OLDIN `pg_dump` oladi →
   `/root/backups/robbit_quiz_<TS>.sql` (oxirgi 30 ta saqlanadi).
-  Tiklash: `sudo -u postgres psql -p 5435 robbit_quiz < /root/backups/<FAYL>.sql`.
+  Tiklash: `sudo -u postgres psql robbit_quiz < /root/backups/<FAYL>.sql`.
 - Yangi migratsiya **faqat additiv** bo'lsin (`ADD COLUMN`, yangi jadval). Ustun/jadval
   o'chirish ma'lumot yo'qotadi — ehtiyot bo'ling.
 - Tarixiy eslatma: dastlabki quizlar 5432→5435 klaster ko'chirishda bir marta yo'qolgan
@@ -82,7 +90,7 @@ Two-package repo: `backend/` (Express + Socket.io + Prisma) and `frontend/` (Rea
 **Dev vs. prod topology.** In dev the frontend runs on :5173 and Vite proxies `/api` and `/uploads` to the backend on :4000; the socket client (`frontend/src/socket.ts`) connects to `hostname:4000` directly. In production a single Express process serves the built frontend as static files from `../public` with an SPA fallback (see `backend/src/index.ts`), so everything is same-origin on one port. Frontend code therefore always calls relative `/api/...` paths.
 
 **Live game state is in-memory, not in the DB.** `backend/src/socket/game.ts` holds all running games in a module-level `Map<pin, GameState>`. This is the single largest and most important file. Consequences:
-- PM2 runs **one** instance in `fork` mode (`ecosystem.config.cjs`) — do not scale to multiple instances or cluster mode; game state would split across processes.
+- Production runs **one** process (systemd `robbit-quiz`; `ecosystem.config.cjs` is a leftover from the PM2 days) — do not scale to multiple instances or cluster mode; game state would split across processes.
 - Only completed games are persisted, via `GameRecord` / `GamePlayerRecord`, for the reports feature.
 - Socket events follow a `host:*` / `player:*` / `test:*` naming convention (e.g. `host:create`, `host:start`, `host:next`, `player:join`, `player:answer`, `test:answer`). Host disconnect has a grace timer so the host can refresh the page mid-game without ending it.
 

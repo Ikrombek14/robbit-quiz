@@ -21,30 +21,12 @@ jobs:
         run: |
           sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
-            echo "=== uptime ==="; uptime
-            echo "=== disk ==="; df -h / | tail -1
-            echo "=== 80/443 tinglovchilar ==="; ss -ltnp | grep -E ":(80|443|4000) " || true
-            echo "=== web-serverlar ==="; for s in nginx apache2 caddy haproxy x-ui xray docker; do printf "%s: " $s; systemctl is-active $s 2>/dev/null || echo "-"; done
-            echo "=== docker ==="; docker ps --format "{{.Names}} {{.Ports}}" 2>/dev/null || true
-            echo "=== nginx -t ==="; nginx -t 2>&1 || true
-            echo "=== sites-enabled / conf.d ==="; ls -la /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>&1
-            echo "=== server_name/listen ==="; grep -rnE "server_name|listen|default_server|ssl_reject_handshake|return 444|ssl_certificate " /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ /etc/nginx/nginx.conf 2>/dev/null
-            echo "=== sertifikatlar ==="; for c in /etc/letsencrypt/live/*/cert.pem; do echo "$c: $(openssl x509 -enddate -noout -in $c 2>/dev/null)"; done
-            echo "=== pm2 ==="; pm2 ls 2>&1 | head -20
-            echo "=== ilova (4000) ==="; curl -s -o /dev/null -m 10 -w "%{http_code}\n" http://127.0.0.1:4000/ || true
-            echo "=== nginx jurnal ==="; journalctl -u nginx --since "5 days ago" --no-pager 2>/dev/null | tail -20
-            echo "=== nginx error.log ==="; tail -20 /var/log/nginx/error.log 2>/dev/null
-            echo "=== /etc/nginx oxirgi o zgarishlar ==="; find /etc/nginx -newermt "-7 days" -type f -printf "%TY-%Tm-%Td %TH:%TM %p\n" 2>/dev/null | sort
-            echo "=== robbit nginx sozlamasi (sites-available) ==="; ls -la /etc/nginx/sites-available/ | grep -i robbit || echo "yoq"
-            echo "=== backuplar ==="; ls -la --time-style=+%Y-%m-%d_%H:%M /root/backups/ 2>&1 | tail -40
-            echo "=== boshqa backup/dump fayllar ==="; find / -xdev \( -name "robbit_quiz*.sql*" -o -name "robbit*.dump" -o -name "robbit-quiz-backup*.zip" \) -size +1k -printf "%TY-%Tm-%Td %s %p\n" 2>/dev/null | sort | tail -20
-            echo "=== postgres klasterlar ==="; pg_lsclusters 2>&1
-            for p in $(pg_lsclusters -h 2>/dev/null | awk "{print \$3}"); do
-              echo "--- port $p bazalar ---"; sudo -u postgres psql -p $p -tAc "SELECT datname FROM pg_database WHERE NOT datistemplate" 2>&1 | tr "\n" " "; echo
-              sudo -u postgres psql -p $p -d robbit_quiz -tAc "SELECT count(*) FROM \"Teacher\"" 2>/dev/null | sed "s/^/  Teacher soni: /"
-              sudo -u postgres psql -p $p -d robbit_quiz -tAc "SELECT count(*) FROM \"Quiz\"" 2>/dev/null | sed "s/^/  Quiz soni: /"
-            done
-            echo "=== app papka ==="; ls -la --time-style=+%Y-%m-%d_%H:%M /root/apps/robbit-quiz/ 2>&1 | head -30
-            echo "uploads fayllar soni: $(ls /root/apps/robbit-quiz/uploads 2>/dev/null | wc -l)"
-            echo "=== postgres jurnal (DROP) ==="; grep -hiE "drop (database|role)|robbit" /var/log/postgresql/*.log 2>/dev/null | tail -15
+            echo "=== removed-apps ==="; ls -la --time-style=+%Y-%m-%d_%H:%M /root/backups/removed-apps-20261026/ 2>&1
+            echo "=== removed-apps ichida robbit ==="; find /root/backups/removed-apps-20261026 -maxdepth 3 -iname "*robbit*" -printf "%TY-%Tm-%Td_%TH:%TM %s %p\n" 2>/dev/null | head -30
+            echo "=== removed-apps dump/sql/arxiv ==="; find /root/backups/removed-apps-20261026 -maxdepth 4 \( -name "*.sql*" -o -name "*.dump" -o -name "*.tar*" -o -name "*.tgz" -o -name "*.zip" \) -printf "%TY-%Tm-%Td_%TH:%TM %s %p\n" 2>/dev/null | head -30
+            for d in /root/apps/robbit-quiz /root/backups/removed-apps-20261026/robbit-quiz; do echo "--- $d/uploads: $(ls $d/uploads 2>/dev/null | wc -l) fayl, $(du -sh $d/uploads 2>/dev/null | cut -f1)"; done
+            echo "=== hozirgi baza ==="; sudo -u postgres psql -p 5435 -d robbit_quiz -tAc "SELECT count(*) FROM \"Teacher\"" 2>&1 | sed "s/^/Teacher: /"
+            sudo -u postgres psql -p 5435 -d robbit_quiz -tAc "SELECT count(*) FROM \"Quiz\"" 2>&1 | sed "s/^/Quiz: /"
+            echo "=== backup 20261024 boshi ==="; head -c 300 /root/backups/robbit_quiz_20261024_061352.sql | grep -E "PostgreSQL|dump" ; grep -c "^COPY" /root/backups/robbit_quiz_20261024_061352.sql
+            echo "=== pm2 ==="; pm2 ls 2>&1 | grep -E "robbit|name"
           '

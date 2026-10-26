@@ -35,4 +35,16 @@ jobs:
             echo "=== nginx jurnal ==="; journalctl -u nginx --since "5 days ago" --no-pager 2>/dev/null | tail -20
             echo "=== nginx error.log ==="; tail -20 /var/log/nginx/error.log 2>/dev/null
             echo "=== /etc/nginx oxirgi o zgarishlar ==="; find /etc/nginx -newermt "-7 days" -type f -printf "%TY-%Tm-%Td %TH:%TM %p\n" 2>/dev/null | sort
+            echo "=== robbit nginx sozlamasi (sites-available) ==="; ls -la /etc/nginx/sites-available/ | grep -i robbit || echo "yoq"
+            echo "=== backuplar ==="; ls -la --time-style=+%Y-%m-%d_%H:%M /root/backups/ 2>&1 | tail -40
+            echo "=== boshqa backup/dump fayllar ==="; find / -xdev \( -name "robbit_quiz*.sql*" -o -name "robbit*.dump" -o -name "robbit-quiz-backup*.zip" \) -size +1k -printf "%TY-%Tm-%Td %s %p\n" 2>/dev/null | sort | tail -20
+            echo "=== postgres klasterlar ==="; pg_lsclusters 2>&1
+            for p in $(pg_lsclusters -h 2>/dev/null | awk "{print \$3}"); do
+              echo "--- port $p bazalar ---"; sudo -u postgres psql -p $p -tAc "SELECT datname FROM pg_database WHERE NOT datistemplate" 2>&1 | tr "\n" " "; echo
+              sudo -u postgres psql -p $p -d robbit_quiz -tAc "SELECT count(*) FROM \"Teacher\"" 2>/dev/null | sed "s/^/  Teacher soni: /"
+              sudo -u postgres psql -p $p -d robbit_quiz -tAc "SELECT count(*) FROM \"Quiz\"" 2>/dev/null | sed "s/^/  Quiz soni: /"
+            done
+            echo "=== app papka ==="; ls -la --time-style=+%Y-%m-%d_%H:%M /root/apps/robbit-quiz/ 2>&1 | head -30
+            echo "uploads fayllar soni: $(ls /root/apps/robbit-quiz/uploads 2>/dev/null | wc -l)"
+            echo "=== postgres jurnal (DROP) ==="; grep -hiE "drop (database|role)|robbit" /var/log/postgresql/*.log 2>/dev/null | tail -15
           '

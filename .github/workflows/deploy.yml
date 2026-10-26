@@ -62,12 +62,16 @@ jobs:
           printf 'NODE_ENV=production\nPORT=4000\nCLIENT_URL=https://robbitquiz.uz\nDATABASE_URL=postgresql://robbit:%s@localhost:5432/robbit_quiz?host=/var/run/postgresql\nJWT_SECRET=%s\nANTHROPIC_API_KEY=%s\nGEMINI_API_KEY=%s\nGOOGLE_CLIENT_ID=%s\nADMIN_EMAILS=teamlead.robbit@gmail.com,ilkhomjon2001@gmail.com\nDASHBOARD_INTERNAL_TOKEN=%s\n' \
             "$DB_PASS_ENC" "$JWT_SECRET" "$ANTHROPIC_API_KEY" "$GEMINI_API_KEY" "$GOOGLE_CLIENT_ID" "$DASHBOARD_INTERNAL_TOKEN" > /tmp/app.env
 
-      - name: sshpass o'rnatish
-        run: sudo apt-get install -y sshpass
+      # 2026-10-26: yangi serverga (169.58.130.201) parol emas, SSH kalit bilan kiriladi
+      # (secret SERVER_SSH_KEY; ochiq kaliti serverdagi authorized_keys'da "github-actions robbit-quiz deploy").
+      - name: SSH kalit
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
 
       - name: Serverga yuborish va o'rnatish
         env:
-          SSHPASS: ${{ secrets.SERVER_PASS }}
           DB_PASS: ${{ secrets.DB_PASS }}
           ADMIN_EMAIL: teamlead.robbit@gmail.com
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
@@ -75,9 +79,9 @@ jobs:
           HOST=${{ secrets.SERVER_HOST }}
           USER=${{ secrets.SERVER_USER }}
           APP=/root/apps/robbit-quiz
-          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=30"
-          SSH="sshpass -e ssh $SSH_OPTS"
-          SCP="sshpass -e scp $SSH_OPTS"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=30"
+          SSH="ssh $SSH_OPTS"
+          SCP="scp $SSH_OPTS"
 
           $SSH $USER@$HOST "mkdir -p $APP"
           $SCP robbit-quiz.tgz $USER@$HOST:/tmp/robbit-quiz.tgz

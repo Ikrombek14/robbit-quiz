@@ -10,6 +10,7 @@ interface TestDetail {
   correct: boolean;
   timeMs: number;
   correctAns: string;
+  open?: boolean; // yozma savol — avtomatik baholanmaydi
 }
 interface PlayerRow {
   nickname: string;
@@ -84,6 +85,9 @@ export default function ReportDetail() {
                   if (det.length === 0) return null;
                   const open = openStudent === i;
                   const totalSec = Math.round(det.reduce((a, d) => a + d.timeMs, 0) / 1000);
+                  // Yozma savollar avtomatik baholanmaydi — test qismi natijasi alohida
+                  const graded = det.filter((d) => !d.open);
+                  const openCount = det.length - graded.length;
                   return (
                     <div className="card" key={i} style={{ marginBottom: 10 }}>
                       <div
@@ -94,7 +98,9 @@ export default function ReportDetail() {
                         <strong>
                           {i + 1}. {p.nickname}{" "}
                           <span className="muted" style={{ fontWeight: 400 }}>
-                            — {p.correctCount}/{p.totalAnswered} to'g'ri · {p.score}/100 ball · {totalSec}s
+                            {openCount > 0
+                              ? `— test qismi: ${graded.filter((d) => d.correct).length}/${graded.length} to'g'ri · ${openCount} ta yozma javob · ${totalSec}s`
+                              : `— ${p.correctCount}/${p.totalAnswered} to'g'ri · ${p.score}/100 ball · ${totalSec}s`}
                           </span>
                         </strong>
                         <span className="material-symbols-outlined">{open ? "expand_less" : "expand_more"}</span>
@@ -108,18 +114,29 @@ export default function ReportDetail() {
                                 padding: "10px 12px",
                                 borderRadius: 10,
                                 marginBottom: 8,
-                                background: d.correct ? "var(--olive-soft)" : "var(--danger-soft)",
+                                background: d.open
+                                  ? "var(--accent-soft)"
+                                  : d.correct
+                                    ? "var(--olive-soft)"
+                                    : "var(--danger-soft)",
                               }}
                             >
                               <div style={{ fontWeight: 600 }}>
-                                {d.correct ? "✅" : "❌"} {d.index + 1}. {d.text}
+                                {d.open ? "📝" : d.correct ? "✅" : "❌"} {d.index + 1}. {d.text}
                               </div>
-                              <div style={{ fontSize: 14, marginTop: 4 }}>
-                                Javobi: <strong>{d.answer}</strong>
-                                {!d.correct && d.correctAns && (
-                                  <span className="muted"> · To'g'ri: {d.correctAns}</span>
-                                )}
-                              </div>
+                              {d.open ? (
+                                <div style={{ fontSize: 14, marginTop: 4 }}>
+                                  <span className="muted">Yozma javob (ustoz baholaydi):</span>
+                                  <div style={{ whiteSpace: "pre-wrap", marginTop: 4, fontWeight: 600 }}>{d.answer}</div>
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 14, marginTop: 4 }}>
+                                  Javobi: <strong>{d.answer}</strong>
+                                  {!d.correct && d.correctAns && (
+                                    <span className="muted"> · To'g'ri: {d.correctAns}</span>
+                                  )}
+                                </div>
+                              )}
                               <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
                                 ⏱ {(d.timeMs / 1000).toFixed(1)}s
                               </div>

@@ -223,7 +223,14 @@ export default function TestRunner({ pin, nickname }: { pin: string; nickname: s
 
         {t === "OPEN" && (
           <>
-            <input value={openText} onChange={(e) => setOpenText(e.target.value)} placeholder="Javobingizni yozing" />
+            <textarea
+              value={openText}
+              onChange={(e) => setOpenText(e.target.value)}
+              placeholder="Javobingizni yozing"
+              rows={6}
+              maxLength={5000}
+              style={{ resize: "vertical" }}
+            />
             <button className="btn btn-lg btn-block" disabled={!openText.trim()} onClick={() => submit(openText.trim())}>Keyingi →</button>
           </>
         )}

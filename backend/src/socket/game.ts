@@ -47,6 +47,7 @@ interface TestDetail {
   correct: boolean; // to'g'ri/xato
   timeMs: number; // shu savolga sarflangan vaqt (ms)
   correctAns: string; // to'g'ri javob (taqqoslash uchun)
+  open?: boolean; // yozma savol (qabul qilinadigan javob yo'q) — ustoz o'zi baholaydi
 }
 interface GameSettings {
   questionTimer: boolean; // savol taymeri yoqilganmi
@@ -341,7 +342,7 @@ function answerToText(s: LoadedSlide, answer: any): string {
   const d = s.data ?? {};
   const opts = d.options ?? [];
   const optText = (id: any) => opts[Number(id)]?.text ?? String(id);
-  if (s.type === "OPEN") return String(answer ?? "").trim() || "(bo'sh)";
+  if (s.type === "OPEN") return String(answer ?? "").trim().slice(0, 5000) || "(bo'sh)";
   if (s.type === "FILL_BLANK") {
     const arr = Array.isArray(answer) ? answer : [answer];
     const t = arr.map((x) => String(x ?? "").trim()).filter(Boolean).join(" | ");
@@ -1159,6 +1160,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         correct,
         timeMs,
         correctAns: correctToText(s),
+        open: s.type === "OPEN" && !(s.data?.answers?.length),
       });
       if (correct) player.correctCount += 1;
       player.totalAnswered += 1;

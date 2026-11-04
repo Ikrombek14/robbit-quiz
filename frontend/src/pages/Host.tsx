@@ -189,6 +189,8 @@ export default function Host() {
   const [testCounts, setTestCounts] = useState<Record<TestSection, string>>({ test: "", yozma: "", amaliy: "" });
   // bankda har bo'limda nechta savol bor (host:create javobidan)
   const [sectionSizes, setSectionSizes] = useState<Record<TestSection, number>>({ test: 0, yozma: 0, amaliy: 0 });
+  // imtihon rejimi (bo'limlardan tasodifiy tanlov) shu akkauntga ruxsat etilganmi — server aytadi
+  const [examSections, setExamSections] = useState(false);
 
   // Yo'qlama eslatmalari
   const ADMIN_SIGNIN = "https://admin.robbit.uz/signin";
@@ -206,6 +208,7 @@ export default function Host() {
       setPin(r.pin ?? "");
       setTitle(r.title ?? "");
       if (r.settings) setSettings(r.settings);
+      setExamSections(r.examSections === true);
       if (r.sectionSizes) setSectionSizes(r.sectionSizes);
       setPhase("lobby");
     });
@@ -217,6 +220,9 @@ export default function Host() {
     setTitle(r.title ?? "");
     if (r.settings) setSettings(r.settings);
     if (r.mode) setMode(r.mode);
+    // sahifa yangilansa ham imtihon bo'lim maydonlari yo'qolmasin (aks holda test hamma savol bilan boshlanadi)
+    setExamSections(r.examSections === true);
+    if (r.sectionSizes) setSectionSizes(r.sectionSizes);
     if (r.players) setPlayers(r.players as PlayerRow[]);
     if (r.practiceEndsAt) setPracticeEndsAt(toLocalEnds(r.practiceEndsAt, r.now)); // amaliyot taymeri davom etsa, tiklaymiz
     if (r.status === "ended") setPhase("ended");
@@ -659,7 +665,7 @@ export default function Host() {
                 </button>
               </div>
 
-              {mode === "TEST" &&
+              {mode === "TEST" && examSections &&
                 (["test", "yozma", "amaliy"] as TestSection[])
                   .filter((sec) => sectionSizes[sec] > 0)
                   .map((sec) => (

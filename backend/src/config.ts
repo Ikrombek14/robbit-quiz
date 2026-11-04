@@ -9,6 +9,10 @@ export const config = {
   // Claude'dan foydalana oladigan akkauntlar (vergul bilan; "*" = hamma). Qolganlar Gemini'da.
   claudeEmails: (process.env.CLAUDE_EMAILS ?? "ikrombekmurodov7@gmail.com")
     .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+  // Imtihon rejimi (TEST'da har o'quvchiga bo'limlardan tasodifiy N ta savol) faqat shu
+  // akkauntlarga (vergul bilan; "*" = hamma). Qolgan ustozlarda TEST oddiy ishlaydi.
+  examEmails: (process.env.EXAM_EMAILS ?? "ikrombekmurodov7@gmail.com")
+    .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
   // Google Gemini (aistudio.google.com) — TEKIN reja bilan ishlaydi.
   // AI savol generatsiyasi sukut bo'yicha shu orqali ketadi.
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",

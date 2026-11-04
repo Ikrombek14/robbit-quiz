@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { prisma } from "../prisma.js";
 import { verifyToken } from "../auth.js";
+import { config } from "../config.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -111,6 +112,7 @@ interface GameState {
   recordId: string | null; // hisobotga yozilgan GameRecord id (qayta saqlashda dublikat bo'lmasin)
   settings: GameSettings;
   banned: Set<string>; // kick qilingan o'quvchilar (nickKey) — qayta kira olmasin
+  examSections: boolean; // imtihon rejimi (bo'limlardan tasodifiy tanlov) shu host uchun ruxsat etilganmi
 }
 
 const games = new Map<string, GameState>();
@@ -241,6 +243,12 @@ function sectionPlan(game: GameState) {
     const want = Math.round(Number(counts[sec] ?? (sec === "test" ? legacy : 0)) || 0);
     return { sec, indices, take: want > 0 ? Math.min(want, indices.length) : indices.length, limited: want > 0 };
   });
+}
+// Bankda har bo'limda nechta savol bor (POLL'siz savollar) — host sozlamasi uchun
+function sectionSizesOf(slides: LoadedSlide[]): Record<Section, number> {
+  const sizes: Record<Section, number> = { test: 0, yozma: 0, amaliy: 0 };
+  for (const s of slides) if (s.kind === "QUESTION" && s.type !== "POLL") sizes[sectionOf(s)]++;
+  return sizes;
 }
 function selectionActive(game: GameState): boolean {
   return sectionPlan(game).some((p) => p.limited);
@@ -727,6 +735,7 @@ function serializeGame(game: GameState) {
     hostLostAt: game.hostLostAt,
     settings: game.settings,
     banned: [...game.banned],
+    examSections: game.examSections,
   };
 }
 
@@ -770,6 +779,7 @@ function restoreGame(sg: any): void {
     recordId: typeof sg.recordId === "string" ? sg.recordId : null,
     settings: { ...defaultSettings(), ...(sg.settings ?? {}) }, // eski snapshot'da yangi maydonlar bo'lmasligi mumkin
     banned: new Set(Array.isArray(sg.banned) ? sg.banned : []),
+    examSections: sg.examSections === true,
   };
   games.set(game.pin, game);
 
@@ -879,6 +889,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       }
       return { id: s.id, kind: s.kind, type: s.type, data: parsed, timeLimit: s.timeLimit, points: s.points };
     });
+    // Imtihon rejimi faqat ruxsat etilgan akkauntlarga (host qiluvchi ustoz bo'yicha)
+    const host = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { email: true } });
+    const hostEmail = (host?.email ?? "").toLowerCase();
+    const examSections = config.examEmails.includes("*") || (!!hostEmail && config.examEmails.includes(hostEmail));
     const pin = genPin();
     games.set(pin, {
       pin,
@@ -904,14 +918,19 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       recordId: null,
       settings: defaultSettings(),
       banned: new Set(),
+      examSections,
     });
     socket.join(pin);
     socket.data.role = "host";
     socket.data.pin = pin;
-    // TEST sozlamasi uchun: bankda har bo'limda nechta savol bor (POLL'siz savollar)
-    const sectionSizes: Record<string, number> = { test: 0, yozma: 0, amaliy: 0 };
-    for (const s of slides) if (s.kind === "QUESTION" && s.type !== "POLL") sectionSizes[sectionOf(s)]++;
-    cb?.({ pin, title: quiz.title, total: slides.length, settings: defaultSettings(), sectionSizes });
+    cb?.({
+      pin,
+      title: quiz.title,
+      total: slides.length,
+      settings: defaultSettings(),
+      examSections,
+      sectionSizes: examSections ? sectionSizesOf(slides) : undefined,
+    });
   });
 
   // Lobby'da sozlamalarni yangilash
@@ -968,6 +987,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         game.mode === "LIVE" && (game.status === "active" || game.status === "reveal") ? publicSlide(game) : null,
       practiceEndsAt: game.practiceEndsAt > Date.now() ? game.practiceEndsAt : 0,
       now: Date.now(), // mijoz soat farqini hisoblashi uchun
+      // Sahifa yangilansa ham imtihon sozlamalari (bo'lim maydonlari) qayta ko'rinsin
+      examSections: game.examSections,
+      sectionSizes: game.examSections ? sectionSizesOf(game.slides) : undefined,
     });
     if (game.mode === "TEST" && game.status === "active") emitTestProgress(game);
   });
@@ -1188,7 +1210,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     if (!game || game.hostSocketId !== socket.id) return;
     game.mode = data?.mode === "TEST" ? "TEST" : "LIVE";
     const num = (v: unknown) => Math.min(Math.max(Math.round(Number(v) || 0), 0), 500);
-    const isTest = game.mode === "TEST";
+    // Tasodifiy tanlov faqat imtihon rejimi ruxsat etilgan hostda; boshqalarda — oddiy TEST
+    const isTest = game.mode === "TEST" && game.examSections;
     game.settings.testQuestionCount = isTest ? num(data?.testCount) : 0;
     game.settings.testSectionCounts = {};
     if (isTest && data?.testCounts && typeof data.testCounts === "object") {

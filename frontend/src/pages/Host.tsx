@@ -60,6 +60,12 @@ interface TypingBoardRow {
   wpm: number;
   acc: number;
 }
+type TestSection = "test" | "yozma" | "amaliy";
+const SECTION_LABELS: Record<TestSection, string> = {
+  test: "Test savollari",
+  yozma: "Yozma savollar",
+  amaliy: "Amaliy topshiriqlar",
+};
 interface TestProgRow {
   id: string;
   nickname: string;
@@ -174,9 +180,15 @@ export default function Host() {
 
   // rejim: jonli (host boshqaradi) yoki test (mustaqil)
   const [mode, setMode] = useState<"LIVE" | "TEST">("LIVE");
-  const [testProg, setTestProg] = useState<{ total: number; pool?: number; written?: number; players: TestProgRow[] }>({ total: 0, players: [] });
-  // TEST: har o'quvchiga nechta tasodifiy savol ("" = hammasi, bir xil tartibda)
-  const [testCount, setTestCount] = useState("");
+  const [testProg, setTestProg] = useState<{
+    total: number;
+    sections?: { sec: TestSection; take: number; size: number }[];
+    players: TestProgRow[];
+  }>({ total: 0, players: [] });
+  // TEST: har o'quvchiga har bo'limdan nechta tasodifiy savol ("" = hammasi)
+  const [testCounts, setTestCounts] = useState<Record<TestSection, string>>({ test: "", yozma: "", amaliy: "" });
+  // bankda har bo'limda nechta savol bor (host:create javobidan)
+  const [sectionSizes, setSectionSizes] = useState<Record<TestSection, number>>({ test: 0, yozma: 0, amaliy: 0 });
 
   // Yo'qlama eslatmalari
   const ADMIN_SIGNIN = "https://admin.robbit.uz/signin";
@@ -194,6 +206,7 @@ export default function Host() {
       setPin(r.pin ?? "");
       setTitle(r.title ?? "");
       if (r.settings) setSettings(r.settings);
+      if (r.sectionSizes) setSectionSizes(r.sectionSizes);
       setPhase("lobby");
     });
   }
@@ -491,7 +504,14 @@ export default function Host() {
 
   function startGame() {
     unlockAudio();
-    socket.emit("host:start", { pin, mode, testCount: mode === "TEST" ? Number(testCount) || 0 : 0 });
+    socket.emit("host:start", {
+      pin,
+      mode,
+      testCounts:
+        mode === "TEST"
+          ? { test: Number(testCounts.test) || 0, yozma: Number(testCounts.yozma) || 0, amaliy: Number(testCounts.amaliy) || 0 }
+          : {},
+    });
     if (mode === "TEST") setPhase("active"); // test'da slide:show kelmaydi
     // 3-eslatma: 40 daqiqadan keyin ota-onalar guruhiga video eslatmasi
     if (!reminder3Timer.current) {
@@ -639,28 +659,35 @@ export default function Host() {
                 </button>
               </div>
 
-              {mode === "TEST" && (
-              <div className="setting-row">
-                <div className="setting-info">
-                  <div className="setting-name">Har o'quvchiga savollar soni</div>
-                  <div className="setting-desc">
-                    Masalan 30 — har o'quvchiga test savollaridan 30 tasi tasodifiy tanlanib,
-                    aralash tartibda beriladi. Yozma savollar hammaga, oxirida. Bo'sh qoldirsangiz —
-                    hammaga barcha savollar.
-                  </div>
-                </div>
-                <input
-                  className="setting-select"
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  placeholder="Hammasi"
-                  value={testCount}
-                  onChange={(e) => setTestCount(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                  style={{ width: 110 }}
-                />
-              </div>
-              )}
+              {mode === "TEST" &&
+                (["test", "yozma", "amaliy"] as TestSection[])
+                  .filter((sec) => sectionSizes[sec] > 0)
+                  .map((sec) => (
+                    <div className="setting-row" key={sec}>
+                      <div className="setting-info">
+                        <div className="setting-name">
+                          {SECTION_LABELS[sec]} — har o'quvchiga nechta
+                        </div>
+                        <div className="setting-desc">
+                          Bankda {sectionSizes[sec]} ta. Son yozsangiz, har o'quvchiga shuncha tasodifiy
+                          savol tushadi (bir mavzuning a/b variantidan faqat bittasi). Bo'sh — hammasi.
+                        </div>
+                      </div>
+                      <input
+                        className="setting-select"
+                        type="number"
+                        min={1}
+                        max={sectionSizes[sec]}
+                        inputMode="numeric"
+                        placeholder="Hammasi"
+                        value={testCounts[sec]}
+                        onChange={(e) =>
+                          setTestCounts((c) => ({ ...c, [sec]: e.target.value.replace(/\D/g, "").slice(0, 3) }))
+                        }
+                        style={{ width: 110 }}
+                      />
+                    </div>
+                  ))}
 
               {mode === "LIVE" && (
               <div className="setting-row">
@@ -772,8 +799,8 @@ export default function Host() {
             <div className="tm-stat">
               <div className="tm-num">{testProg.total}</div>
               <div className="tm-lbl">
-                {testProg.pool
-                  ? `savol (test: ${testProg.pool} tadan tasodifiy${testProg.written ? ` + ${testProg.written} yozma` : ""})`
+                {testProg.sections?.length
+                  ? `savol (${testProg.sections.map((s) => `${s.sec} ${s.take}/${s.size}`).join(" · ")})`
                   : "savol"}
               </div>
             </div>

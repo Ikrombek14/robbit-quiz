@@ -83,6 +83,12 @@ excelRouter.post("/import", requireAuth, requireCanCreate, upload.single("file")
     const timeLimit = clampTime(r[8]);
     const imageUrl = String(r[9] ?? "").trim();
     const explanation = String(r[10] ?? "").trim();
+    // Ixtiyoriy (bizning qo'shimcha ustunlar): imtihon bo'limi va turkum —
+    // TEST rejimida "har bo'limdan N ta, bir turkumdan bittadan" tanlash uchun
+    const sectionRaw = String(r[11] ?? "").trim().toLowerCase();
+    const section = ["test", "yozma", "amaliy"].includes(sectionRaw) ? sectionRaw : undefined;
+    const group = String(r[12] ?? "").trim().slice(0, 40) || undefined;
+    const extra = { ...(section ? { section } : {}), ...(group ? { group } : {}) };
 
     const base: any = {
       kind: "QUESTION",
@@ -96,13 +102,13 @@ excelRouter.post("/import", requireAuth, requireCanCreate, upload.single("file")
       // Fill-in-the-Blank → variantlar qabul qilinadigan javoblar; Open-Ended → bo'sh (baholanmaydi)
       slides.push({
         ...base,
-        data: { text, imageUrl, answers: options },
+        data: { text, imageUrl, answers: options, ...extra },
       });
       summary.written++;
     } else if (type === "POLL") {
       slides.push({
         ...base,
-        data: { text, imageUrl, options: options.map((o) => ({ text: o, isCorrect: false })) },
+        data: { text, imageUrl, options: options.map((o) => ({ text: o, isCorrect: false })), ...extra },
       });
       summary.poll++;
     } else {
@@ -114,7 +120,7 @@ excelRouter.post("/import", requireAuth, requireCanCreate, upload.single("file")
       const opts = options.map((o, idx) => ({ text: o, isCorrect: correctSet.has(idx) }));
       // Hech bo'lmaganda bitta to'g'ri javob bo'lsin
       if (!opts.some((o) => o.isCorrect)) opts[0].isCorrect = true;
-      slides.push({ ...base, data: { text, imageUrl, options: opts } });
+      slides.push({ ...base, data: { text, imageUrl, options: opts, ...extra } });
       if (type === "MULTIPLE") summary.multiple++;
       else summary.single++;
     }

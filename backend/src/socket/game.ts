@@ -51,6 +51,7 @@ interface TestDetail {
   timeMs: number; // shu savolga sarflangan vaqt (ms)
   correctAns: string; // to'g'ri javob (taqqoslash uchun)
   open?: boolean; // yozma savol (qabul qilinadigan javob yo'q) — ustoz o'zi baholaydi
+  section?: string; // imtihon bo'limi: test | yozma | amaliy
 }
 interface GameSettings {
   questionTimer: boolean; // savol taymeri yoqilganmi
@@ -61,6 +62,8 @@ interface GameSettings {
   // TEST rejimi: har o'quvchiga savollar to'plamidan shuncha tasodifiy savol (tartibi ham
   // tasodifiy). 0 = hammaga barcha savollar bir xil tartibda.
   testQuestionCount: number;
+  // TEST rejimi: bo'lim bo'yicha savollar soni (test/yozma/amaliy). Berilmagan bo'lim — hammasi.
+  testSectionCounts?: Partial<Record<"test" | "yozma" | "amaliy", number>>;
 }
 const defaultSettings = (): GameSettings => ({
   questionTimer: true,
@@ -205,32 +208,78 @@ function testScore(p: GamePlayer, total: number): number {
 function playerQuestions(game: GameState, p: GamePlayer): number[] {
   return p.testOrder && p.testOrder.length > 0 ? p.testOrder : game.questionIndices;
 }
+// OPEN savolning qabul qilinadigan javoblari (tahrirlagich bo'sh qator [""] qoldirishi mumkin)
+function acceptedAnswers(s: LoadedSlide | undefined): string[] {
+  return (s?.data?.answers ?? []).map((a: unknown) => String(a ?? "").trim()).filter(Boolean);
+}
 // Yozma savol: qabul qilinadigan javobi yo'q OPEN — ustoz o'zi baholaydi
 function isWrittenSlide(s: LoadedSlide | undefined): boolean {
-  return s?.type === "OPEN" && !(s.data?.answers?.length);
+  return s?.type === "OPEN" && acceptedAnswers(s).length === 0;
 }
-// Tasodifiy tanlov faqat TEST savollaridan; yozma savollar har o'quvchiga doim, oxirida
-// (imtihon: avval test, keyin yozma qism)
-function splitTestPool(game: GameState) {
-  const pool = game.questionIndices.filter((i) => !isWrittenSlide(game.slides[i]));
-  const written = game.questionIndices.filter((i) => isWrittenSlide(game.slides[i]));
-  return { pool, written };
+
+// ----- Imtihon bo'limlari: har o'quvchiga har bo'limdan N ta tasodifiy savol -----
+// Tartib: avval test, keyin yozma, keyin amaliy (qog'oz imtihondagidek A → B).
+const SECTIONS = ["test", "yozma", "amaliy"] as const;
+type Section = (typeof SECTIONS)[number];
+// Bo'lim slayd data'sida (Excel import "Bo'lim" ustuni) bo'lsa — o'sha, aks holda turidan
+function sectionOf(s: LoadedSlide | undefined): Section {
+  const v = String(s?.data?.section ?? "").trim().toLowerCase();
+  if ((SECTIONS as readonly string[]).includes(v)) return v as Section;
+  return isWrittenSlide(s) ? "yozma" : "test";
 }
-// testQuestionCount > 0 bo'lsa o'quvchiga test savollaridan tasodifiy N ta savol
-// tasodifiy tartibda tushadi. Boshqa o'quvchida aynan shu to'plam+tartib bo'lmasligi
-// tekshiriladi (50 tadan 30 ta — takrorlanish ehtimoli amalda nol, baribir kafolat).
+// Turkum (masalan "A1-01"): bitta mavzuning a/b variantlari — bir o'quvchiga ikkalasi tushmasin
+function groupOf(s: LoadedSlide | undefined): string {
+  return String(s?.data?.group ?? "").trim();
+}
+// Bo'limlar bo'yicha savollar va har biridan nechtasi olinadi (count yo'q/0 = hammasi)
+function sectionPlan(game: GameState) {
+  const counts = game.settings.testSectionCounts ?? {};
+  // Eski sozlama: testQuestionCount = test bo'limi soni
+  const legacy = Math.round(Number(game.settings.testQuestionCount) || 0);
+  return SECTIONS.map((sec) => {
+    const indices = game.questionIndices.filter((i) => sectionOf(game.slides[i]) === sec);
+    const want = Math.round(Number(counts[sec] ?? (sec === "test" ? legacy : 0)) || 0);
+    return { sec, indices, take: want > 0 ? Math.min(want, indices.length) : indices.length, limited: want > 0 };
+  });
+}
+function selectionActive(game: GameState): boolean {
+  return sectionPlan(game).some((p) => p.limited);
+}
+// count ta savolni tasodifiy tanlaydi; avval har turkumdan bittadan, yetmasa qolganidan
+function pickWithGroups(game: GameState, indices: number[], count: number): number[] {
+  const mixed = shuffle(indices);
+  const chosen: number[] = [];
+  const used = new Set<string>();
+  for (const i of mixed) {
+    if (chosen.length >= count) break;
+    const g = groupOf(game.slides[i]);
+    if (g && used.has(g)) continue;
+    if (g) used.add(g);
+    chosen.push(i);
+  }
+  for (const i of mixed) {
+    if (chosen.length >= count) break;
+    if (!chosen.includes(i)) chosen.push(i);
+  }
+  return chosen;
+}
+// Tanlov yoqilgan bo'lsa (biror bo'limga son berilgan) o'quvchiga o'z to'plami tushadi:
+// test — tasodifiy tartibda, yozma/amaliy — tanlanganlari asl tartibida. Boshqa o'quvchida
+// aynan shu to'plam+tartib bo'lmasligi tekshiriladi.
 function assignTestOrder(game: GameState, p: GamePlayer) {
-  const n = Math.round(Number(game.settings.testQuestionCount) || 0);
-  if (n <= 0 || game.questionIndices.length === 0) {
+  if (game.questionIndices.length === 0 || !selectionActive(game)) {
     p.testOrder = [];
     return;
   }
-  const { pool, written } = splitTestPool(game);
-  const size = Math.min(n, pool.length);
+  const plan = sectionPlan(game);
   const taken = new Set(
     [...game.players.values()].filter((o) => o !== p && o.testOrder?.length).map((o) => o.testOrder!.join(",")),
   );
-  const pick = () => [...shuffle(pool).slice(0, size), ...written];
+  const pick = () =>
+    plan.flatMap(({ sec, indices, take }) => {
+      const sel = pickWithGroups(game, indices, take);
+      return sec === "test" ? sel : sel.sort((a, b) => a - b);
+    });
   let order = pick();
   for (let i = 0; i < 20 && taken.has(order.join(",")); i++) order = pick();
   p.testOrder = order;
@@ -426,7 +475,7 @@ function correctToText(s: LoadedSlide): string {
 // TEST rejimi — faqat to'g'ri/noto'g'ri (tezlik hisobga olinmaydi)
 function checkTestCorrect(s: LoadedSlide, answer: any): boolean {
   // Ochiq savol (qabul qilinadigan javoblar yo'q) — javob yozilgan bo'lsa hisobga olinadi
-  if (s.type === "OPEN" && (!(s.data?.answers) || s.data.answers.length === 0)) {
+  if (isWrittenSlide(s)) {
     return String(answer ?? "").trim().length > 0;
   }
   return scoreAnswer(s, answer, 0, 1).correct;
@@ -574,13 +623,14 @@ function revealCurrent(game: GameState) {
 }
 
 function emitTestProgress(game: GameState) {
-  const n = Math.round(Number(game.settings.testQuestionCount) || 0);
-  const { pool, written } = splitTestPool(game);
-  const total = n > 0 ? Math.min(n, pool.length) + written.length : game.questionIndices.length;
+  const plan = sectionPlan(game);
+  const total = plan.reduce((a, p) => a + p.take, 0);
   IO().to(game.hostSocketId).emit("test:progress", {
     total,
-    pool: n > 0 ? pool.length : 0, // test savollari to'plami (tasodifiy tanlovda)
-    written: written.length, // yozma savollar (har o'quvchiga doim)
+    // bo'limlar: har o'quvchiga nechta / bankda nechta (tasodifiy tanlov yoqilganda)
+    sections: selectionActive(game)
+      ? plan.filter((p) => p.indices.length > 0).map((p) => ({ sec: p.sec, take: p.take, size: p.indices.length }))
+      : [],
     players: [...game.players.values()].map((p) => {
       const pt = playerQuestions(game, p).length;
       return {
@@ -858,7 +908,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     socket.join(pin);
     socket.data.role = "host";
     socket.data.pin = pin;
-    cb?.({ pin, title: quiz.title, total: slides.length, settings: defaultSettings() });
+    // TEST sozlamasi uchun: bankda har bo'limda nechta savol bor (POLL'siz savollar)
+    const sectionSizes: Record<string, number> = { test: 0, yozma: 0, amaliy: 0 };
+    for (const s of slides) if (s.kind === "QUESTION" && s.type !== "POLL") sectionSizes[sectionOf(s)]++;
+    cb?.({ pin, title: quiz.title, total: slides.length, settings: defaultSettings(), sectionSizes });
   });
 
   // Lobby'da sozlamalarni yangilash
@@ -1128,12 +1181,22 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     },
   );
 
-  socket.on("host:start", (data: { pin: string; mode?: "LIVE" | "TEST"; testCount?: number }) => {
+  socket.on(
+    "host:start",
+    (data: { pin: string; mode?: "LIVE" | "TEST"; testCount?: number; testCounts?: Record<string, number> }) => {
     const game = games.get(data?.pin);
     if (!game || game.hostSocketId !== socket.id) return;
     game.mode = data?.mode === "TEST" ? "TEST" : "LIVE";
-    const tc = Math.round(Number(data?.testCount) || 0);
-    game.settings.testQuestionCount = game.mode === "TEST" && tc > 0 ? Math.min(tc, 500) : 0;
+    const num = (v: unknown) => Math.min(Math.max(Math.round(Number(v) || 0), 0), 500);
+    const isTest = game.mode === "TEST";
+    game.settings.testQuestionCount = isTest ? num(data?.testCount) : 0;
+    game.settings.testSectionCounts = {};
+    if (isTest && data?.testCounts && typeof data.testCounts === "object") {
+      for (const sec of SECTIONS) {
+        const n = num(data.testCounts[sec]);
+        if (n > 0) game.settings.testSectionCounts[sec] = n;
+      }
+    }
 
     if (game.mode === "TEST") {
       // Faqat baholanadigan savollar (POLL'siz)
@@ -1219,7 +1282,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         correct,
         timeMs,
         correctAns: correctToText(s),
-        open: s.type === "OPEN" && !(s.data?.answers?.length),
+        open: isWrittenSlide(s),
+        section: sectionOf(s),
       });
       if (correct) player.correctCount += 1;
       player.totalAnswered += 1;

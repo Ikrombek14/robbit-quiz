@@ -11,6 +11,7 @@ interface TestDetail {
   timeMs: number;
   correctAns: string;
   open?: boolean; // yozma savol — avtomatik baholanmaydi
+  section?: string; // test | yozma | amaliy
 }
 interface PlayerRow {
   nickname: string;
@@ -126,8 +127,21 @@ export default function ReportDetail() {
                               </div>
                               {d.open ? (
                                 <div style={{ fontSize: 14, marginTop: 4 }}>
-                                  <span className="muted">Yozma javob (ustoz baholaydi):</span>
-                                  <div style={{ whiteSpace: "pre-wrap", marginTop: 4, fontWeight: 600 }}>{d.answer}</div>
+                                  <span className="muted">
+                                    {d.section === "amaliy" ? "Amaliy topshiriq" : "Yozma javob"} (ustoz baholaydi):
+                                  </span>
+                                  <div style={{ whiteSpace: "pre-wrap", marginTop: 4, fontWeight: 600, wordBreak: "break-word" }}>
+                                    {/* O'quvchi yozgan havolalar bosiladigan bo'ladi (amaliy ish linki) */}
+                                    {d.answer.split(/(https?:\/\/\S+)/g).map((part, k) =>
+                                      /^https?:\/\//.test(part) ? (
+                                        <a key={k} href={part} target="_blank" rel="noopener noreferrer">
+                                          {part}
+                                        </a>
+                                      ) : (
+                                        part
+                                      ),
+                                    )}
+                                  </div>
                                 </div>
                               ) : (
                                 <div style={{ fontSize: 14, marginTop: 4 }}>

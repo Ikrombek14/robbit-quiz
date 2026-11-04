@@ -64,6 +64,7 @@ interface TestProgRow {
   id: string;
   nickname: string;
   answered: number;
+  total?: number; // shu o'quvchiga tushgan savollar soni (tasodifiy tanlovda)
   score: number;
   correct: number;
   finished: boolean;
@@ -173,7 +174,9 @@ export default function Host() {
 
   // rejim: jonli (host boshqaradi) yoki test (mustaqil)
   const [mode, setMode] = useState<"LIVE" | "TEST">("LIVE");
-  const [testProg, setTestProg] = useState<{ total: number; players: TestProgRow[] }>({ total: 0, players: [] });
+  const [testProg, setTestProg] = useState<{ total: number; pool?: number; written?: number; players: TestProgRow[] }>({ total: 0, players: [] });
+  // TEST: har o'quvchiga nechta tasodifiy savol ("" = hammasi, bir xil tartibda)
+  const [testCount, setTestCount] = useState("");
 
   // Yo'qlama eslatmalari
   const ADMIN_SIGNIN = "https://admin.robbit.uz/signin";
@@ -488,7 +491,7 @@ export default function Host() {
 
   function startGame() {
     unlockAudio();
-    socket.emit("host:start", { pin, mode });
+    socket.emit("host:start", { pin, mode, testCount: mode === "TEST" ? Number(testCount) || 0 : 0 });
     if (mode === "TEST") setPhase("active"); // test'da slide:show kelmaydi
     // 3-eslatma: 40 daqiqadan keyin ota-onalar guruhiga video eslatmasi
     if (!reminder3Timer.current) {
@@ -636,6 +639,29 @@ export default function Host() {
                 </button>
               </div>
 
+              {mode === "TEST" && (
+              <div className="setting-row">
+                <div className="setting-info">
+                  <div className="setting-name">Har o'quvchiga savollar soni</div>
+                  <div className="setting-desc">
+                    Masalan 30 — har o'quvchiga test savollaridan 30 tasi tasodifiy tanlanib,
+                    aralash tartibda beriladi. Yozma savollar hammaga, oxirida. Bo'sh qoldirsangiz —
+                    hammaga barcha savollar.
+                  </div>
+                </div>
+                <input
+                  className="setting-select"
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  placeholder="Hammasi"
+                  value={testCount}
+                  onChange={(e) => setTestCount(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                  style={{ width: 110 }}
+                />
+              </div>
+              )}
+
               {mode === "LIVE" && (
               <div className="setting-row">
                 <div className="setting-info">
@@ -743,7 +769,14 @@ export default function Host() {
           <div className="tm-stats">
             <div className="tm-stat"><div className="tm-num">{testProg.players.length}</div><div className="tm-lbl">o'quvchi</div></div>
             <div className="tm-stat"><div className="tm-num">{finishedCount}</div><div className="tm-lbl">tugatdi</div></div>
-            <div className="tm-stat"><div className="tm-num">{testProg.total}</div><div className="tm-lbl">savol</div></div>
+            <div className="tm-stat">
+              <div className="tm-num">{testProg.total}</div>
+              <div className="tm-lbl">
+                {testProg.pool
+                  ? `savol (test: ${testProg.pool} tadan tasodifiy${testProg.written ? ` + ${testProg.written} yozma` : ""})`
+                  : "savol"}
+              </div>
+            </div>
           </div>
 
           <div className="tm-table">
@@ -753,7 +786,8 @@ export default function Host() {
             {rows.length === 0 && <div className="muted" style={{ padding: 16 }}>O'quvchilar testni boshlamoqda…</div>}
             {rows.map((p, i) => {
               const name = settings.anonymous ? `O'quvchi ${i + 1}` : p.nickname;
-              const prog = testProg.total ? Math.round((p.answered / testProg.total) * 100) : 0;
+              const pTotal = p.total ?? testProg.total;
+              const prog = pTotal ? Math.round((p.answered / pTotal) * 100) : 0;
               const fl = flags[p.nickname] ?? 0;
               return (
                 <div className={`tm-row ${p.finished ? "fin" : ""}`} key={i}>
@@ -776,7 +810,7 @@ export default function Host() {
                   </span>
                   <span className="tm-prog">
                     <span className="tm-bar"><span style={{ width: `${prog}%` }} /></span>
-                    <span className="tm-prog-txt">{p.answered}/{testProg.total}</span>
+                    <span className="tm-prog-txt">{p.answered}/{pTotal}</span>
                   </span>
                   <span>{p.correct}</span>
                   <span className="tm-score">{p.finished ? <strong>{p.score}</strong> : <span className="muted">{p.score}</span>}</span>

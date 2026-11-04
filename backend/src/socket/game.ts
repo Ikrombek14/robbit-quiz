@@ -39,6 +39,9 @@ interface GamePlayer {
   finishedAt: number; // TEST rejimi: tugatgan vaqti (ms)
   qStartedAt: number; // TEST rejimi: joriy savol boshlangan vaqt (vaqt o'lchash uchun)
   testDetails: TestDetail[]; // TEST rejimi: har savol bo'yicha tafsilot (hisobot uchun)
+  // TEST rejimi: shu o'quvchiga tushgan savollar (slayd indekslari, tasodifiy tanlov va
+  // tartib). Bo'sh = hamma uchun umumiy game.questionIndices (eski xulq).
+  testOrder?: number[];
 }
 interface TestDetail {
   index: number; // savol tartib raqami (test ichida)
@@ -55,6 +58,9 @@ interface GameSettings {
   serious: boolean; // jiddiy rejim (gamifikatsiyasiz)
   antiCheat: boolean; // fullscreen/tab tark etishni kuzatish
   disableRightClick: boolean; // o'ng tugmani o'chirish
+  // TEST rejimi: har o'quvchiga savollar to'plamidan shuncha tasodifiy savol (tartibi ham
+  // tasodifiy). 0 = hammaga barcha savollar bir xil tartibda.
+  testQuestionCount: number;
 }
 const defaultSettings = (): GameSettings => ({
   questionTimer: true,
@@ -62,6 +68,7 @@ const defaultSettings = (): GameSettings => ({
   serious: false,
   antiCheat: false,
   disableRightClick: false,
+  testQuestionCount: 0,
 });
 // O'quvchiga yuboriladigan sozlamalar (xulq-atvorga ta'sir qiluvchi)
 function clientSettings(game: GameState) {
@@ -194,13 +201,49 @@ function typingBoard(game: GameState) {
 function testScore(p: GamePlayer, total: number): number {
   return total > 0 ? Math.round((p.correctCount / total) * 100) : 0;
 }
+// O'quvchining savollari: o'ziga tanlangan to'plam yoki umumiy ro'yxat
+function playerQuestions(game: GameState, p: GamePlayer): number[] {
+  return p.testOrder && p.testOrder.length > 0 ? p.testOrder : game.questionIndices;
+}
+// Yozma savol: qabul qilinadigan javobi yo'q OPEN — ustoz o'zi baholaydi
+function isWrittenSlide(s: LoadedSlide | undefined): boolean {
+  return s?.type === "OPEN" && !(s.data?.answers?.length);
+}
+// Tasodifiy tanlov faqat TEST savollaridan; yozma savollar har o'quvchiga doim, oxirida
+// (imtihon: avval test, keyin yozma qism)
+function splitTestPool(game: GameState) {
+  const pool = game.questionIndices.filter((i) => !isWrittenSlide(game.slides[i]));
+  const written = game.questionIndices.filter((i) => isWrittenSlide(game.slides[i]));
+  return { pool, written };
+}
+// testQuestionCount > 0 bo'lsa o'quvchiga test savollaridan tasodifiy N ta savol
+// tasodifiy tartibda tushadi. Boshqa o'quvchida aynan shu to'plam+tartib bo'lmasligi
+// tekshiriladi (50 tadan 30 ta — takrorlanish ehtimoli amalda nol, baribir kafolat).
+function assignTestOrder(game: GameState, p: GamePlayer) {
+  const n = Math.round(Number(game.settings.testQuestionCount) || 0);
+  if (n <= 0 || game.questionIndices.length === 0) {
+    p.testOrder = [];
+    return;
+  }
+  const { pool, written } = splitTestPool(game);
+  const size = Math.min(n, pool.length);
+  const taken = new Set(
+    [...game.players.values()].filter((o) => o !== p && o.testOrder?.length).map((o) => o.testOrder!.join(",")),
+  );
+  const pick = () => [...shuffle(pool).slice(0, size), ...written];
+  let order = pick();
+  for (let i = 0; i < 20 && taken.has(order.join(",")); i++) order = pick();
+  p.testOrder = order;
+}
 // Ball bo'yicha kamayish tartibida; teng bo'lsa, oldin tugatgan yuqorida
 function testLeaderboard(game: GameState) {
-  const total = game.questionIndices.length;
   return [...game.players.values()]
-    .map((p) => ({ p, score: testScore(p, total) }))
+    .map((p) => {
+      const total = playerQuestions(game, p).length;
+      return { p, total, score: testScore(p, total) };
+    })
     .sort((a, b) => b.score - a.score || (a.p.finishedAt || Infinity) - (b.p.finishedAt || Infinity))
-    .map(({ p, score }) => ({
+    .map(({ p, total, score }) => ({
       nickname: p.nickname,
       score,
       lastGain: 0,
@@ -213,12 +256,13 @@ function finalLeaderboard(game: GameState) {
   return game.mode === "TEST" ? testLeaderboard(game) : leaderboard(game);
 }
 function testState(game: GameState, player: GamePlayer) {
-  const total = game.questionIndices.length;
+  const qs = playerQuestions(game, player);
+  const total = qs.length;
   if (player.testIndex >= total) {
     // O'quvchiga faqat o'z natijasi — reyting/boshqalar ma'lumoti yuborilmaydi (faqat ustozga)
     return { done: true, correct: player.correctCount, total, score: testScore(player, total) };
   }
-  return { done: false, index: player.testIndex, total, slide: buildSlide(game, game.questionIndices[player.testIndex], total) };
+  return { done: false, index: player.testIndex, total, slide: buildSlide(game, qs[player.testIndex], total) };
 }
 
 function buildSlide(game: GameState, idx: number, total?: number) {
@@ -530,19 +574,27 @@ function revealCurrent(game: GameState) {
 }
 
 function emitTestProgress(game: GameState) {
-  const total = game.questionIndices.length;
+  const n = Math.round(Number(game.settings.testQuestionCount) || 0);
+  const { pool, written } = splitTestPool(game);
+  const total = n > 0 ? Math.min(n, pool.length) + written.length : game.questionIndices.length;
   IO().to(game.hostSocketId).emit("test:progress", {
     total,
-    players: [...game.players.values()].map((p) => ({
-      id: p.playerId,
-      nickname: p.nickname,
-      answered: Math.min(p.testIndex, total),
-      score: testScore(p, total),
-      correct: p.correctCount,
-      finished: p.finished,
-      flags: p.flags,
-      connected: p.connected,
-    })),
+    pool: n > 0 ? pool.length : 0, // test savollari to'plami (tasodifiy tanlovda)
+    written: written.length, // yozma savollar (har o'quvchiga doim)
+    players: [...game.players.values()].map((p) => {
+      const pt = playerQuestions(game, p).length;
+      return {
+        id: p.playerId,
+        nickname: p.nickname,
+        answered: Math.min(p.testIndex, pt),
+        total: pt,
+        score: testScore(p, pt),
+        correct: p.correctCount,
+        finished: p.finished,
+        flags: p.flags,
+        connected: p.connected,
+      };
+    }),
   });
 }
 
@@ -666,7 +718,7 @@ function restoreGame(sg: any): void {
     stats,
     saved: sg.saved === true,
     recordId: typeof sg.recordId === "string" ? sg.recordId : null,
-    settings: sg.settings ?? defaultSettings(),
+    settings: { ...defaultSettings(), ...(sg.settings ?? {}) }, // eski snapshot'da yangi maydonlar bo'lmasligi mumkin
     banned: new Set(Array.isArray(sg.banned) ? sg.banned : []),
   };
   games.set(game.pin, game);
@@ -970,8 +1022,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     // Kech qo'shilgan o'quvchini darhol jonli o'yinga/testga tushiramiz
     if (game.status !== "lobby") {
       if (game.mode === "TEST") {
+        // Kech qo'shilgan yangi o'quvchiga ham o'z tasodifiy savollari (qaytganniki saqlanadi)
+        if (!existing) assignTestOrder(game, player);
         player.qStartedAt = Date.now();
-        socket.emit("test:begin", { total: game.questionIndices.length });
+        socket.emit("test:begin", { total: playerQuestions(game, player).length });
         emitTestProgress(game);
       } else {
         socket.emit("slide:show", publicSlide(game));
@@ -1023,7 +1077,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     // Amaliyot taymeri davom etayotgan bo'lsa, qaytgan o'quvchiga ham ko'rsatamiz
     if (game.practiceEndsAt > Date.now()) socket.emit("practice:timer", { endsAt: game.practiceEndsAt, now: Date.now() });
     if (game.status === "active") {
-      if (game.mode === "TEST") socket.emit("test:begin", { total: game.questionIndices.length });
+      if (game.mode === "TEST") socket.emit("test:begin", { total: playerQuestions(game, player).length });
       else {
         socket.emit("slide:show", publicSlide(game));
         if (player.answeredCurrent) socket.emit("answer:locked");
@@ -1074,10 +1128,12 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     },
   );
 
-  socket.on("host:start", (data: { pin: string; mode?: "LIVE" | "TEST" }) => {
+  socket.on("host:start", (data: { pin: string; mode?: "LIVE" | "TEST"; testCount?: number }) => {
     const game = games.get(data?.pin);
     if (!game || game.hostSocketId !== socket.id) return;
     game.mode = data?.mode === "TEST" ? "TEST" : "LIVE";
+    const tc = Math.round(Number(data?.testCount) || 0);
+    game.settings.testQuestionCount = game.mode === "TEST" && tc > 0 ? Math.min(tc, 500) : 0;
 
     if (game.mode === "TEST") {
       // Faqat baholanadigan savollar (POLL'siz)
@@ -1097,8 +1153,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         p.answeredIndices = [];
         p.testDetails = [];
         p.qStartedAt = Date.now();
+        assignTestOrder(game, p);
       });
-      io.to(game.pin).emit("test:begin", { total: game.questionIndices.length });
+      // Har o'quvchiga o'z savollari soni (tasodifiy tanlovda hammada bir xil N ta)
+      game.players.forEach((p) => io.to(p.socketId).emit("test:begin", { total: playerQuestions(game, p).length }));
       emitTestProgress(game);
       return;
     }
@@ -1148,9 +1206,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       cb?.({ error: "Test tugagan" });
       return;
     }
-    const total = game.questionIndices.length;
+    const qs = playerQuestions(game, player);
+    const total = qs.length;
     if (player.testIndex < total) {
-      const s = game.slides[game.questionIndices[player.testIndex]];
+      const s = game.slides[qs[player.testIndex]];
       const correct = checkTestCorrect(s, data.answer);
       const timeMs = player.qStartedAt ? Math.max(0, Date.now() - player.qStartedAt) : 0;
       player.testDetails.push({

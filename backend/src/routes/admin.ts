@@ -5,6 +5,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../auth.js";
 import { computeApproved, isAdminEmail, findApprovedByNameKey } from "../lib/approval.js";
 import { HW_UNLOCK_HOURS } from "../services/hwGate.js";
+import { auditNote } from "../lib/audit.js";
 
 // Foydalanuvchilar (saytga kirgan ustoz accountlari) ustidan admin nazorati.
 // Faqat admin: ustoz huquqini (approved) berish/olib tashlash va admin huquqini boshqarish.
@@ -56,6 +57,32 @@ async function isSuperAdminReq(teacherId?: string): Promise<boolean> {
   const t = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { email: true } });
   return !!t && isAdminEmail(t.email);
 }
+
+// ---- Audit: har bir /users/:id amalida KIMGA nisbatan qilingani va yuborilgan qiymatlar ----
+// O'chirishdan OLDIN yuklanadi — o'chirilgan accountning ismi ham log'da qoladi. Parollar yashiriladi.
+const AUDIT_ACTIONS: Record<string, string> = {
+  "teacher-request": "admin.user.teacherRequest",
+  "bind-roster": "admin.user.bindRoster",
+  "stats-name": "admin.user.statsName",
+  "hw-unlock": "admin.user.hwUnlock",
+  password: "admin.user.passwordReset",
+};
+adminRouter.param("id", async (req, res, next, id) => {
+  if (req.method !== "GET") {
+    const t = await prisma.teacher.findUnique({ where: { id: String(id) }, select: { name: true, email: true } });
+    const sub = req.path.split("/")[3] ?? ""; // /users/:id/<sub>
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries((req.body ?? {}) as Record<string, unknown>)) body[k] = /pass/i.test(k) ? "***" : v;
+    auditNote(res, {
+      action: AUDIT_ACTIONS[sub] ?? (req.method === "DELETE" ? "admin.user.delete" : "admin.user.update"),
+      entity: "Teacher",
+      entityId: String(id),
+      summary: (t ? `${t.name} <${t.email}>` : String(id)) + (Object.keys(body).length ? ` — ${JSON.stringify(body)}` : ""),
+      details: { target: t ?? null, body },
+    });
+  }
+  next();
+});
 
 // ---- Ro'yxat ----
 // Default: o'quvchilar (huquqsiz, so'rovsiz oddiy accountlar) ko'rsatilmaydi —

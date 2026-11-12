@@ -7,6 +7,7 @@ import { config } from "../config.js";
 import { signToken, requireAuth, type AuthedRequest } from "../auth.js";
 import { computeApproved, isAdminEmail, findApprovedByNameKey } from "../lib/approval.js";
 import { nameKey } from "../lib/nameKey.js";
+import { auditNote } from "../lib/audit.js";
 
 // Emailni qisman yashirish: "ilkhomjon2001@gmail.com" → "ilk***@gmail.com".
 // Dublikat account xabari begonaga ko'rsatilishi mumkin — to'liq emailni oshkor qilmaymiz.
@@ -85,6 +86,7 @@ authRouter.post("/google", async (req, res) => {
         teacher = await prisma.teacher.update({ where: { id: teacher.id }, data: updates });
       }
     }
+    auditNote(res, { actorId: teacher.id });
     const token = signToken(teacher.id);
     res.json({ token, teacher: publicTeacher(teacher) });
   } catch {
@@ -125,6 +127,7 @@ authRouter.post("/register", async (req, res) => {
     }
   }
   const teacher = await prisma.teacher.create({ data: { email, password: hash, name, isAdmin, approved } });
+  auditNote(res, { actorId: teacher.id });
   const token = signToken(teacher.id);
   res.json({ token, teacher: publicTeacher(teacher) });
 });
@@ -156,6 +159,7 @@ authRouter.post("/login", async (req, res) => {
   if (teacher.isAdmin !== isAdmin || teacher.approved !== approved) {
     t = await prisma.teacher.update({ where: { id: teacher.id }, data: { isAdmin, approved } });
   }
+  auditNote(res, { actorId: t.id });
   const token = signToken(t.id);
   res.json({ token, teacher: publicTeacher(t) });
 });

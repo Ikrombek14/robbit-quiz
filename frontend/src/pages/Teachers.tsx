@@ -59,6 +59,19 @@ function PlatBadge({ r }: { r: RosterTeacher }) {
   );
 }
 
+interface ImportPreview {
+  summary: { added: number; updated: number; unchanged: number; skipped: number };
+  changes: Array<{
+    row: number; fileName: string; rosterName?: string; type: "new" | "update"; fuzzy?: boolean;
+    fields: Record<string, [string | null, string | null]>;
+  }>;
+  warnings: string[];
+  missing: Array<{ name: string; branch: string | null }>;
+}
+const FIELD_LABEL: Record<string, string> = {
+  name: "Ism", branch: "Filial", category: "Toifa", phone: "Tel", username: "Username", status: "Status",
+};
+
 export default function Teachers() {
   const { teacher } = useAuth();
   // Roster mutatsiyalari (import/qo'shish/tahrir/o'chirish) — faqat super admin
@@ -81,6 +94,12 @@ export default function Teachers() {
   const [saving, setSaving] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Import preview: fayl avval dryRun bilan tekshiriladi, admin o'zgarishlarni ko'rib tasdiqlaydi
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<"branch" | "full">("branch");
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -156,20 +175,55 @@ export default function Teachers() {
     URL.revokeObjectURL(url);
   }
 
-  // ---- Import ----
+  // ---- Import (2 bosqich: tekshirish → tasdiqlash) ----
+  async function runImport(f: File, mode: "branch" | "full", dryRun: boolean): Promise<ImportPreview> {
+    const fd = new FormData();
+    fd.append("file", f, f.name);
+    return api<ImportPreview>(`/teachers/import?mode=${mode}${dryRun ? "&dryRun=1" : ""}`, { method: "POST", body: fd });
+  }
+
+  async function loadPreview(f: File, mode: "branch" | "full") {
+    setPreviewBusy(true);
+    try {
+      setPreview(await runImport(f, mode, true));
+    } catch (err) {
+      setImportFile(null);
+      setPreview(null);
+      setMsg(err instanceof Error ? err.message : "Import xatosi");
+      setTimeout(() => setMsg(""), 6000);
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
   async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (fileRef.current) fileRef.current.value = "";
     if (!f) return;
-    setMsg("Import qilinmoqda…");
+    setImportFile(f);
+    setPreview(null);
+    await loadPreview(f, importMode);
+  }
+
+  async function changeImportMode(m: "branch" | "full") {
+    setImportMode(m);
+    if (importFile) await loadPreview(importFile, m);
+  }
+
+  function closeImport() { setImportFile(null); setPreview(null); }
+
+  async function confirmImport() {
+    if (!importFile) return;
+    setPreviewBusy(true);
     try {
-      const fd = new FormData();
-      fd.append("file", f, f.name);
-      const r = await api<{ summary: { added: number; updated: number; skipped: number } }>("/teachers/import", { method: "POST", body: fd });
+      const r = await runImport(importFile, importMode, false);
       setMsg(`✅ Import: ${r.summary.added} yangi, ${r.summary.updated} yangilandi${r.summary.skipped ? `, ${r.summary.skipped} o'tkazildi` : ""}`);
+      closeImport();
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Import xatosi");
+    } finally {
+      setPreviewBusy(false);
     }
     setTimeout(() => setMsg(""), 6000);
   }
@@ -374,6 +428,88 @@ export default function Teachers() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Import preview — nima o'zgarishini ko'rsatib, tasdiqlatadi */}
+      {importFile && (
+        <div className="modal-overlay" onClick={() => !previewBusy && closeImport()}>
+          <div className="card" style={{ maxWidth: 760, width: "100%", maxHeight: "88vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div className="between">
+              <h3 style={{ margin: 0 }}>Importni tekshirish</h3>
+              <button className="btn btn-ghost" disabled={previewBusy} onClick={closeImport}>✕</button>
+            </div>
+            <p className="muted text-sm" style={{ marginTop: 4 }}>{importFile.name}</p>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button className={`chip ${importMode === "branch" ? "on" : ""}`} disabled={previewBusy} onClick={() => changeImportMode("branch")}>
+                Faqat filial
+              </button>
+              <button className={`chip ${importMode === "full" ? "on" : ""}`} disabled={previewBusy} onClick={() => changeImportMode("full")}>
+                Barcha ustunlar (filial, toifa, tel, username, status)
+              </button>
+            </div>
+            <p className="muted text-sm">
+              Bo'sh katak mavjud qiymatni o'chirmaydi. Faylda yo'q ustozlar ro'yxatdan o'chirilmaydi. Har bir o'zgarish audit log'ga yoziladi.
+            </p>
+            {previewBusy && !preview ? (
+              <p className="muted">Tekshirilmoqda…</p>
+            ) : preview ? (
+              <>
+                <div className="row" style={{ gap: 14, flexWrap: "wrap", fontWeight: 700 }}>
+                  <span style={{ color: "#16a34a" }}>+{preview.summary.added} yangi</span>
+                  <span style={{ color: "#d97706" }}>{preview.summary.updated} o'zgaradi</span>
+                  <span className="muted">{preview.summary.unchanged} o'zgarishsiz</span>
+                  {preview.summary.skipped > 0 && <span className="muted">{preview.summary.skipped} o'tkazildi</span>}
+                </div>
+                {preview.warnings.length > 0 && (
+                  <div className="card" style={{ background: "var(--surface-low)", marginTop: 10, padding: 10 }}>
+                    {preview.warnings.map((w, i) => <div key={i} className="text-sm">⚠ {w}</div>)}
+                  </div>
+                )}
+                {preview.changes.length > 0 && (
+                  <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+                    {preview.changes.map((c) => (
+                      <div key={c.row} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px" }}>
+                        <div style={{ fontWeight: 700 }}>
+                          {c.type === "new" ? <span style={{ color: "#16a34a" }}>YANGI · </span> : null}
+                          {c.rosterName ?? c.fileName}
+                          {c.fuzzy && (
+                            <span className="cat-badge t2" style={{ marginLeft: 6, fontSize: 11 }} title="Ism aniq mos kelmadi — tekshirib oling">
+                              faylda: {c.fileName}
+                            </span>
+                          )}
+                          <span className="muted text-sm" style={{ fontWeight: 400 }}> · {c.row}-qator</span>
+                        </div>
+                        {Object.entries(c.fields).map(([f, [from, to]]) => (
+                          <div key={f} className="text-sm">
+                            <span className="muted">{FIELD_LABEL[f] ?? f}:</span>{" "}
+                            {c.type === "update" && <><s className="muted">{from ?? "—"}</s> → </>}
+                            <b>{to ?? "—"}</b>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {preview.missing.length > 0 && (
+                  <details style={{ marginTop: 10 }}>
+                    <summary className="text-sm">Ro'yxatda bor, lekin faylda yo'q: {preview.missing.length} ta (o'chirilmaydi)</summary>
+                    <div className="text-sm muted" style={{ marginTop: 6 }}>
+                      {preview.missing.map((m) => `${m.name}${m.branch ? ` (${m.branch})` : ""}`).join(", ")}
+                    </div>
+                  </details>
+                )}
+                <div className="spacer" />
+                <button
+                  className="btn btn-block"
+                  disabled={previewBusy || preview.changes.length === 0}
+                  onClick={confirmImport}
+                >
+                  {previewBusy ? "Bajarilmoqda…" : preview.changes.length === 0 ? "O'zgarish yo'q" : `Tasdiqlash — ${preview.changes.length} ta o'zgarishni saqlash`}
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
       )}
 

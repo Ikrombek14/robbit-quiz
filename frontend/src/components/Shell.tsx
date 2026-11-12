@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth, homePath } from "../auth";
 import { getTheme, toggleTheme, type Theme } from "../theme";
 
-type NavRole = { isAdmin?: boolean; approved?: boolean; canCreate?: boolean; officeAdmin?: boolean; teacherRequestPending?: boolean };
+type NavRole = { isAdmin?: boolean; approved?: boolean; canCreate?: boolean; officeAdmin?: boolean; teacherRequestPending?: boolean; isSuperAdmin?: boolean };
 
 interface NavItem {
   key: string;
@@ -19,6 +19,8 @@ interface NavItem {
 const canApproved = (t: NavRole | null) => !!(t?.isAdmin || t?.approved);
 // faqat admin ko'radi
 const isAdmin = (t: NavRole | null) => !!t?.isAdmin;
+// faqat super admin (ADMIN_EMAILS) — Audit log
+const isSuper = (t: NavRole | null) => !!t?.isSuperAdmin;
 // "slayd qilish" ruxsati bo'lganlar (admin yoki canCreate) ko'radi
 const canCreateNav = (t: NavRole | null) => !!(t?.isAdmin || t?.canCreate);
 // Ustoz yoki markaz admini (officeAdmin, ma'lumot ko'ruvchi) — pending ko'rmaydi:
@@ -45,6 +47,7 @@ const NAV: NavItem[] = [
   { key: "tier-applications", label: "Toifa arizalari", icon: "assignment_turned_in", path: "/tier-applications", mobileHide: true, show: isAdmin },
   { key: "bulk", label: "Ommaviy import", icon: "cloud_download", path: "/bulk-import", mobileHide: true, show: canCreateNav },
   { key: "backup", label: "Zaxira", icon: "archive", path: "/backup", mobileHide: true, show: isAdmin },
+  { key: "audit", label: "Audit log", icon: "history", path: "/audit", mobileHide: true, show: isSuper },
   { key: "settings", label: "Sozlamalar", icon: "settings", path: "/settings", mobileHide: false, show: canPanel },
 ];
 

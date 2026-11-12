@@ -27,6 +27,7 @@ import Settings from "./pages/Settings";
 import BulkImport from "./pages/BulkImport";
 import StudentProfile from "./pages/StudentProfile";
 import Backup from "./pages/Backup";
+import AuditLog from "./pages/AuditLog";
 import TierApplication from "./pages/TierApplication";
 import TierApplicationsAdmin from "./pages/TierApplicationsAdmin";
 import Shell from "./components/Shell";
@@ -133,6 +134,7 @@ export default function App() {
       <Route path="/teachers" element={<Protected staff><Teachers /></Protected>} />
       <Route path="/users" element={<Protected admin><Users /></Protected>} />
       <Route path="/backup" element={<Protected admin><Backup /></Protected>} />
+      <Route path="/audit" element={<Protected admin><AuditLog /></Protected>} />
       <Route path="/stats" element={<Protected staff><Stats /></Protected>} />
       <Route path="/stats/tahlil" element={<Protected><StatsAnalysis /></Protected>} />
       <Route path="/tier-application" element={<Protected><TierApplication /></Protected>} />

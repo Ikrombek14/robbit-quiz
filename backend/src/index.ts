@@ -27,6 +27,8 @@ import { newCurriculumRouter } from "./routes/newCurriculum.js";
 import { guideRouter } from "./routes/guide.js";
 import { searchRouter } from "./routes/search.js";
 import { teachersRouter } from "./routes/teachers.js";
+import { auditRouter } from "./routes/audit.js";
+import { auditMiddleware } from "./lib/audit.js";
 import { adminRouter } from "./routes/admin.js";
 import { backupRouter } from "./routes/backup.js";
 import { statsRouter } from "./routes/stats.js";
@@ -61,6 +63,8 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "1mb" }));
+// Audit log — barcha o'zgartiruvchi API so'rovlari (javobdan keyin yoziladi)
+app.use(auditMiddleware);
 
 // ---- Rate limiting (brute-force / xarajat / DoS himoyasi) ----
 const authLimiter = rateLimit({
@@ -150,6 +154,7 @@ app.use("/api/guide", guideRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/teachers", teachersRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/audit", auditRouter);
 app.use("/api/backup", backupRouter);
 app.use("/api/stats", statsRouter);
 app.use("/api/profile", profileRouter);

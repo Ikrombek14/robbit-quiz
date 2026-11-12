@@ -5,7 +5,8 @@ import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireSuperAdmin, type AuthedRequest } from "../auth.js";
 import { nameKey } from "../lib/nameKey.js";
-import { nameMatch } from "../services/stats.js";
+import { nameMatch, resolveByName } from "../services/stats.js";
+import { auditNote, diffFields } from "../lib/audit.js";
 import { resyncAllApproved } from "../lib/approval.js";
 
 export const teachersRouter = Router();
@@ -53,6 +54,21 @@ teachersRouter.get("/", async (req: AuthedRequest, res) => {
   res.json({ teachers: teachers.map((t) => ({ ...t, usage: usageFor(t) })) });
 });
 
+// Audit uchun roster maydonlari
+const ROSTER_FIELDS = ["name", "branch", "category", "phone", "username", "status"] as const;
+type RosterField = (typeof ROSTER_FIELDS)[number];
+type RosterFields = Record<RosterField, string | null>;
+const FIELD_LABEL: Record<string, string> = {
+  name: "Ism", branch: "Filial", category: "Toifa", phone: "Tel", username: "Username", status: "Status",
+};
+function pickRoster(t: Partial<RosterFields> | null | undefined): RosterFields | null {
+  if (!t) return null;
+  return {
+    name: t.name ?? null, branch: t.branch ?? null, category: t.category ?? null,
+    phone: t.phone ?? null, username: t.username ?? null, status: t.status ?? null,
+  };
+}
+
 const rosterSchema = z.object({
   name: z.string().min(1),
   branch: z.string().nullable().optional(),
@@ -84,6 +100,11 @@ teachersRouter.post("/", requireSuperAdmin, async (req, res) => {
       order: d.order ?? 0, nameKey: key,
     },
   });
+  auditNote(res, {
+    action: "roster.create", entity: "RosterTeacher", entityId: t.id,
+    summary: `Ro'yxatga qo'shildi: ${t.name}${t.branch ? ` (${t.branch})` : ""}`,
+    details: { after: pickRoster(t) },
+  });
   await resyncAllApproved();
   res.json({ teacher: t });
 });
@@ -96,14 +117,24 @@ teachersRouter.put("/:id", requireSuperAdmin, async (req, res) => {
     return;
   }
   const d = parsed.data;
+  const before = await prisma.rosterTeacher.findUnique({ where: { id: String(req.params.id) } });
   try {
     const t = await prisma.rosterTeacher.update({
       where: { id: String(req.params.id) },
       data: {
         name: d.name.trim(), branch: d.branch ?? null, category: d.category ?? null,
         phone: d.phone ?? null, username: d.username ?? null, status: d.status ?? null,
-        order: d.order ?? 0, nameKey: nameKey(d.name),
+        // order formada yuborilmaydi — yuborilmasa eskisi qoladi (avval 0 ga tushib, ro'yxat boshiga sakrardi)
+        order: d.order ?? before?.order ?? 0, nameKey: nameKey(d.name),
       },
+    });
+    const changes = diffFields(pickRoster(before), pickRoster(t), [...ROSTER_FIELDS]);
+    auditNote(res, {
+      action: "roster.update", entity: "RosterTeacher", entityId: t.id,
+      summary: `Tahrirlandi: ${t.name}` + (Object.keys(changes).length
+        ? " — " + Object.entries(changes).map(([f, [a, b]]) => `${FIELD_LABEL[f] ?? f}: ${a ?? "—"} → ${b ?? "—"}`).join("; ")
+        : " (o'zgarish yo'q)"),
+      details: { changes },
     });
     await resyncAllApproved();
     res.json({ teacher: t });
@@ -115,7 +146,12 @@ teachersRouter.put("/:id", requireSuperAdmin, async (req, res) => {
 // ---- O'chirish (admin) ----
 teachersRouter.delete("/:id", requireSuperAdmin, async (req, res) => {
   try {
-    await prisma.rosterTeacher.delete({ where: { id: String(req.params.id) } });
+    const t = await prisma.rosterTeacher.delete({ where: { id: String(req.params.id) } });
+    auditNote(res, {
+      action: "roster.delete", entity: "RosterTeacher", entityId: t.id,
+      summary: `Ro'yxatdan o'chirildi: ${t.name}${t.branch ? ` (${t.branch})` : ""}`,
+      details: { before: pickRoster(t) },
+    });
     await resyncAllApproved();
     res.json({ ok: true });
   } catch {
@@ -131,13 +167,34 @@ function findCol(header: any[], ...needles: string[]): number {
   });
 }
 
-// ---- CSV import (admin) ----
+// ---- CSV / XLSX import (admin) ----
+// Xavfsiz import (bir marta noto'g'ri fayl butun ro'yxat filiallarini aralashtirib yuborgan):
+//  - ?dryRun=1 — hech narsa yozilmaydi, faqat nima o'zgarishi qaytadi (UI tasdiqlatadi).
+//  - ?mode=branch — mavjud ustozlarda FAQAT filial yangilanadi (toifa/tel/status tegilmaydi).
+//    mode=full (default) — fayldagi barcha ustunlar yangilanadi.
+//  - Faylda bo'lmagan ustun yoki BO'SH katak mavjud qiymatni o'chirmaydi.
+//  - Ism aniq mos kelmasa — YAGONA yumshoq moslik (o'/g' imlosi, ism tartibi, Ikrom~Ikromjon)
+//    qidiriladi, shunda bitta ustoz ikkinchi marta qo'shilib ketmaydi. Preview'da belgilanadi.
+//  - Ro'yxatdagi, lekin faylda yo'q ustozlar O'CHIRILMAYDI — faqat ro'yxati qaytadi.
+//  - Barcha o'zgarishlar audit log'ga yoziladi (oldin → keyin).
+type ImportChange = {
+  row: number; // Excel'dagi qator raqami
+  fileName: string;
+  rosterName?: string; // mos kelgan ro'yxatdagi ism (yangi bo'lsa yo'q)
+  type: "new" | "update";
+  fuzzy?: boolean; // ism aniq emas, yumshoq moslik bilan topildi
+  fields: Record<string, [string | null, string | null]>;
+};
+
 teachersRouter.post("/import", requireSuperAdmin, upload.single("file"), async (req, res) => {
-  const file = (req as any).file as { buffer: Buffer } | undefined;
+  const file = (req as any).file as { buffer: Buffer; originalname?: string } | undefined;
   if (!file) {
     res.status(400).json({ error: "Fayl yuborilmadi" });
     return;
   }
+  const dryRun = req.query.dryRun === "1";
+  const mode: "full" | "branch" = req.query.mode === "branch" ? "branch" : "full";
+
   let rows: any[][];
   try {
     const wb = XLSX.read(file.buffer, { type: "buffer", raw: false });
@@ -153,47 +210,127 @@ teachersRouter.post("/import", requireSuperAdmin, upload.single("file"), async (
   if (headerIdx === -1) headerIdx = 0;
   const header = rows[headerIdx] ?? [];
 
-  const cName = findCol(header, "ism-familiya", "ism familiya", "ism");
-  const cBranch = findCol(header, "filial");
-  const cCat = findCol(header, "toifa");
-  const cPhone = findCol(header, "tel");
-  const cUser = findCol(header, "username");
-  const cStatus = findCol(header, "status");
+  const cols: Record<RosterField, number> = {
+    name: findCol(header, "ism-familiya", "ism familiya", "ism"),
+    branch: findCol(header, "filial"),
+    category: findCol(header, "toifa"),
+    phone: findCol(header, "tel"),
+    username: findCol(header, "username"),
+    status: findCol(header, "status"),
+  };
 
-  if (cName === -1) {
-    res.status(400).json({ error: "CSV'da 'Ism-familiya' ustuni topilmadi" });
+  if (cols.name === -1) {
+    res.status(400).json({ error: "Faylda 'Ism-familiya' ustuni topilmadi" });
+    return;
+  }
+  if (mode === "branch" && cols.branch === -1) {
+    res.status(400).json({ error: "Faylda 'Filial' ustuni topilmadi" });
     return;
   }
 
-  let added = 0, updated = 0, skipped = 0;
+  const roster = await prisma.rosterTeacher.findMany();
+  const claimed = new Map<string, number>(); // rosterId (yoki new:<key>) -> fayl qatori
+  const changes: ImportChange[] = [];
+  const warnings: string[] = [];
+  const writes: Array<{ id?: string; data: any }> = [];
+  let unchanged = 0, skipped = 0;
+
+  const cell = (r: any[], c: number): string | null => (c >= 0 ? String(r[c] ?? "").trim() || null : null);
+
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
-    const name = String(r[cName] ?? "").trim();
-    if (!name) { skipped++; continue; }
+    const rowNo = i + 1;
+    const name = String(r[cols.name] ?? "").trim().replace(/\s+/g, " ");
     const key = nameKey(name);
-    if (!key) { skipped++; continue; }
-    const data = {
-      name,
-      branch: cBranch >= 0 ? String(r[cBranch] ?? "").trim() || null : null,
-      category: cCat >= 0 ? String(r[cCat] ?? "").trim() || null : null,
-      phone: cPhone >= 0 ? String(r[cPhone] ?? "").trim() || null : null,
-      username: cUser >= 0 ? String(r[cUser] ?? "").trim() || null : null,
-      status: cStatus >= 0 ? String(r[cStatus] ?? "").trim() || null : null,
-      order: i - headerIdx,
-      nameKey: key,
-    };
-    const existing = await prisma.rosterTeacher.findUnique({ where: { nameKey: key } });
+    if (!name || !key) { skipped++; continue; }
+
+    let existing = roster.find((t) => t.nameKey === key) ?? null;
+    let fuzzy = false;
+    if (!existing) {
+      existing = resolveByName(roster, name);
+      fuzzy = !!existing;
+    }
+
     if (existing) {
-      await prisma.rosterTeacher.update({ where: { id: existing.id }, data });
-      updated++;
+      const prevRow = claimed.get(existing.id);
+      if (prevRow) {
+        warnings.push(`${rowNo}-qator "${name}" — ${prevRow}-qator bilan bir xil ustozga ("${existing.name}") tushdi, o'tkazib yuborildi`);
+        skipped++;
+        continue;
+      }
+      claimed.set(existing.id, rowNo);
+
+      // branch rejimida faqat filial; bo'sh katak — tegilmaydi
+      const fields: RosterField[] = mode === "branch" ? ["branch"] : ["branch", "category", "phone", "username", "status"];
+      const data: Record<string, string> = {};
+      const diff: Record<string, [string | null, string | null]> = {};
+      for (const f of fields) {
+        const v = cell(r, cols[f]);
+        if (v == null) continue;
+        const old = (existing[f] as string | null) ?? null;
+        if (old !== v) { data[f] = v; diff[f] = [old, v]; }
+      }
+      if (Object.keys(diff).length === 0) { unchanged++; continue; }
+      changes.push({ row: rowNo, fileName: name, rosterName: existing.name, type: "update", fuzzy, fields: diff });
+      writes.push({ id: existing.id, data });
     } else {
-      await prisma.rosterTeacher.create({ data });
-      added++;
+      const newKey = `new:${key}`;
+      const prevRow = claimed.get(newKey);
+      if (prevRow) {
+        warnings.push(`${rowNo}-qator "${name}" faylda takrorlangan (${prevRow}-qator), o'tkazib yuborildi`);
+        skipped++;
+        continue;
+      }
+      claimed.set(newKey, rowNo);
+      const data = {
+        name,
+        branch: cell(r, cols.branch),
+        category: cell(r, cols.category),
+        phone: cell(r, cols.phone),
+        username: cell(r, cols.username),
+        status: cell(r, cols.status),
+        order: roster.length + writes.length + 1, // ro'yxat oxiriga
+        nameKey: key,
+      };
+      const diff: Record<string, [string | null, string | null]> = {};
+      for (const f of ROSTER_FIELDS) if (data[f]) diff[f] = [null, data[f]];
+      changes.push({ row: rowNo, fileName: name, type: "new", fields: diff });
+      writes.push({ data });
     }
   }
 
+  // Ro'yxatda bor, lekin faylda yo'q — o'chirilmaydi, faqat ma'lumot uchun
+  const missing = roster.filter((t) => !claimed.has(t.id)).map((t) => ({ name: t.name, branch: t.branch }));
+
+  const summary = {
+    added: changes.filter((c) => c.type === "new").length,
+    updated: changes.filter((c) => c.type === "update").length,
+    unchanged,
+    skipped,
+  };
+
+  if (dryRun) {
+    res.json({ ok: true, dryRun: true, mode, summary, changes, warnings, missing });
+    return;
+  }
+
+  // Hammasi yoki hech biri — yarim yo'lda xato bo'lsa ro'yxat aralash holda qolmasin
+  await prisma.$transaction(
+    writes.map((w) => (w.id
+      ? prisma.rosterTeacher.update({ where: { id: w.id }, data: w.data })
+      : prisma.rosterTeacher.create({ data: w.data }))),
+  );
+
+  auditNote(res, {
+    action: "roster.import",
+    entity: "RosterTeacher",
+    summary: `Import (${mode === "branch" ? "faqat filial" : "to'liq"}, ${file.originalname ?? "fayl"}): ` +
+      `${summary.added} yangi, ${summary.updated} yangilandi, ${summary.unchanged} o'zgarishsiz`,
+    details: { mode, file: file.originalname ?? null, summary, changes, warnings },
+  });
+
   await resyncAllApproved();
-  res.json({ ok: true, summary: { added, updated, skipped } });
+  res.json({ ok: true, mode, summary, changes, warnings, missing });
 });
 
 // ---- CSV export (admin) ----

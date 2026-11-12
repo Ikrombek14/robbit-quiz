@@ -285,3 +285,27 @@ model Workshop {
   quizId      String?  // biriktrilgan slayd (ixtiyoriy)
   createdAt   DateTime @default(now())
 }
+
+// Audit log — saytdagi har bir o'zgartiruvchi harakat (POST/PUT/PATCH/DELETE) kim
+// tomonidan, qachon, nimaga qilingani. Roster/foydalanuvchi o'zgarishlarida "oldin → keyin"
+// tafsiloti ham saqlanadi (details). Faqat qo'shiladi — tahrirlanmaydi, o'chirilmaydi.
+model AuditLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  actorId    String? // Teacher.id (login bo'lmagan so'rovlarda null)
+  actorEmail String?
+  actorName  String?
+  action     String // masalan "roster.update", "roster.import", "admin.user.admin" yoki "POST /api/quizzes"
+  method     String
+  path       String
+  status     Int
+  entity     String? // "RosterTeacher", "Teacher", "Quiz" ...
+  entityId   String?
+  summary    String? // odam o'qiydigan qisqa tavsif
+  details    Json? // oldin/keyin farqlari va h.k.
+  ip         String?
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([action])
+}

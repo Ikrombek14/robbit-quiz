@@ -1,4 +1,5 @@
 import { nameKey, looseNameKey } from "../lib/nameKey.js";
+import { prisma } from "../prisma.js";
 
 // Ustozlar statistikasi — Google Sheet'dan (CSV export) jonli olinadi va keshlanadi.
 // Manba jadval ikki qatorli sarlavhaga ega; ma'lumot 3-qatordan boshlanadi.
@@ -116,7 +117,28 @@ async function fetchMonthSheet(month: string): Promise<{ rows: string[][] } | { 
   return { rows };
 }
 
+// Filial — saytning BARCHA bo'limlarida bitta manbadan: ustozlar ro'yxati (roster,
+// admin /teachers da boshqaradi). Sheet'dagi filial faqat roster'da topilmaganda
+// ishlatiladi. Sabab (2026-11): HollyHop kaliti eskirib, Sheet'ning "Filial" ustunida
+// boshqa ustozlarning eski filiallari qolib ketdi — statistika bir filial, tahlil va
+// ro'yxat boshqa filialni ko'rsatardi. Roster har chaqiruvda o'qiladi (60 qator,
+// arzon) — admin filialni tuzatsa statistika darhol ko'rsatadi.
 export async function getAllStats(force = false): Promise<TeacherStat[]> {
+  const stats = await loadSheetStats(force);
+  let roster: { name: string; nameKey: string; branch: string | null }[];
+  try {
+    roster = await prisma.rosterTeacher.findMany({ select: { name: true, nameKey: true, branch: true } });
+  } catch {
+    return stats; // baza vaqtincha ishlamasa — Sheet'dagi filial
+  }
+  const withBranch = roster.filter((r) => r.branch?.trim());
+  return stats.map((s) => {
+    const r = resolveByName(withBranch, s.name);
+    return r ? { ...s, branch: r.branch!.trim() } : s;
+  });
+}
+
+async function loadSheetStats(force = false): Promise<TeacherStat[]> {
   if (!force && cache && Date.now() - cache.ts < TTL_MS) return cache.data;
 
   const month = currentMonth();

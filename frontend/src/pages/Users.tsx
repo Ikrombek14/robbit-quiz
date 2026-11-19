@@ -83,7 +83,8 @@ export default function Users() {
   async function load() {
     setLoading(true);
     try {
-      const r = await api<{ users: AppUser[] }>("/admin/users");
+      // all=1 — hamma accountlar: ustozlar, xodimlar, yangi ro'yxatdan o'tgan va huquqsizlar ham
+      const r = await api<{ users: AppUser[] }>("/admin/users?all=1");
       setRows(r.users);
     } finally {
       setLoading(false);
@@ -95,7 +96,7 @@ export default function Users() {
     const needle = q.trim().toLowerCase();
     return rows.filter((u) => {
       if (filter === "approved" && !u.approved) return false;
-      if (filter === "pending" && u.approved) return false;
+      if (filter === "pending" && (u.approved || u.isAdmin || u.officeAdmin)) return false;
       if (filter === "admin" && !u.isAdmin) return false;
       if (needle && !`${u.name} ${u.email}`.toLowerCase().includes(needle)) return false;
       return true;
@@ -286,7 +287,13 @@ export default function Users() {
     all: rows.length,
     approved: rows.filter((u) => u.approved).length,
     admin: rows.filter((u) => u.isAdmin).length,
+    pending: rows.filter((u) => !u.approved && !u.isAdmin && !u.officeAdmin).length,
   }), [rows]);
+
+  // So'nggi 7 kunda ro'yxatdan o'tgan va hali huquq berilmagan — "yangi" belgisi
+  const isNew = (u: AppUser) =>
+    !u.approved && !u.isAdmin && !u.officeAdmin &&
+    Date.now() - new Date(u.createdAt).getTime() < 7 * 24 * 3600_000;
 
   // Dublikat akkauntlar: bir xil ism bilan bir nechta account (odatda emaildagi
   // xato tufayli, masalan gmail.com / gmai.com) — adminga ogohlantirib ko'rsatamiz
@@ -306,8 +313,7 @@ export default function Users() {
         <div>
           <h1 style={{ fontSize: 28, marginBottom: 2 }}>Foydalanuvchilar</h1>
           <p className="muted" style={{ marginTop: 0 }}>
-            Saytga kirgan accountlar · {counts.all} ta · {counts.approved} ustoz · {counts.admin} admin
-            <span className="text-sm"> · o'quvchilar bu ro'yxatda ko'rsatilmaydi</span>
+            Saytga kirgan accountlar · {counts.all} ta · {counts.approved} ustoz · {counts.admin} admin · {counts.pending} huquqsiz
           </p>
         </div>
       </div>
@@ -362,7 +368,7 @@ export default function Users() {
         <div className="chip-row">
           <button className={`chip ${filter === "all" ? "on" : ""}`} onClick={() => setFilter("all")}>Barchasi</button>
           <button className={`chip ${filter === "approved" ? "on" : ""}`} onClick={() => setFilter("approved")}>Ustozlar</button>
-          <button className={`chip ${filter === "pending" ? "on" : ""}`} onClick={() => setFilter("pending")}>Huquqsiz</button>
+          <button className={`chip ${filter === "pending" ? "on" : ""}`} onClick={() => setFilter("pending")}>Huquqsiz ({counts.pending})</button>
           <button className={`chip ${filter === "admin" ? "on" : ""}`} onClick={() => setFilter("admin")}>Adminlar</button>
         </div>
       </div>
@@ -394,6 +400,12 @@ export default function Users() {
                   <span style={{ overflow: "hidden" }}>
                     <span>
                       {u.name}{isMe ? <span className="muted text-sm"> (siz)</span> : null}
+                      {isNew(u) && (
+                        <span className="cat-badge t3" style={{ marginLeft: 6, fontSize: 11 }}
+                          title={`Yangi ro'yxatdan o'tgan: ${new Date(u.createdAt).toLocaleDateString("uz-UZ")}`}>
+                          🆕 yangi
+                        </span>
+                      )}
                       {isDup(u) && (
                         <span className="cat-badge t2" style={{ marginLeft: 6, fontSize: 11 }}
                           title="Bu ism bilan bir nechta account bor — email xato yozilgan bo'lishi mumkin">

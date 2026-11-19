@@ -98,6 +98,7 @@ adminRouter.get("/users", async (req, res) => {
             { approved: true },
             { isAdmin: true },
             { canCreate: true },
+            { officeAdmin: true }, // markaz admini — ustoz emas, lekin xodim (ro'yxatda ko'rinishi shart)
             { accessOverride: { not: null } },
             { teacherRequestAt: { not: null } },
           ],

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
+import { GrantList, type OAuthGrantView } from "../components/ConnectedApps";
 import type { AppUser } from "../types";
 
 // Ustoz huquqining manbasini tushuntiruvchi yorliq
@@ -79,6 +80,36 @@ export default function Users() {
   const [statsUser, setStatsUser] = useState<AppUser | null>(null);
   const [statNames, setStatNames] = useState<string[] | null>(null); // null = hali yuklanmagan
   const [statQ, setStatQ] = useState("");
+  // Ulangan ilovalar (MCP/OAuth ruxsatlari) oynasi. null = yuklanmoqda; "off" = MCP o'chiq
+  const [appsUser, setAppsUser] = useState<AppUser | null>(null);
+  const [appsGrants, setAppsGrants] = useState<OAuthGrantView[] | null | "off">(null);
+  const [appsBusy, setAppsBusy] = useState<string | null>(null);
+
+  async function openApps(u: AppUser) {
+    setAppsUser(u);
+    setAppsGrants(null);
+    try {
+      const r = await api<{ grants: OAuthGrantView[] }>(`/oauth/admin/users/${u.id}/grants`);
+      setAppsGrants(r.grants);
+    } catch {
+      setAppsGrants("off");
+    }
+  }
+
+  async function revokeApp(g: OAuthGrantView) {
+    if (!appsUser) return;
+    if (!confirm(`"${appsUser.name}" uchun "${g.clientName}" ruxsatini bekor qilasizmi?`)) return;
+    setAppsBusy(g.id);
+    try {
+      await api(`/oauth/admin/grants/${g.id}`, { method: "DELETE" });
+      await openApps(appsUser);
+      setMsg(`${appsUser.name}: "${g.clientName}" ruxsati bekor qilindi`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Xatolik");
+    } finally {
+      setAppsBusy(null);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -440,6 +471,19 @@ export default function Users() {
                       >
                         📈 Faoliyat tahlili
                       </button>
+                      {/* Claude kabi ilovalarga (MCP) bergan ruxsatlari — admin bekor qila oladi */}
+                      {(u.approved || u.isAdmin) && (
+                        <button
+                          style={{
+                            background: "none", border: "none", padding: 0,
+                            color: "var(--primary)", cursor: "pointer", fontSize: 13, textDecoration: "underline",
+                          }}
+                          onClick={() => openApps(u)}
+                          title="Claude kabi ulangan ilovalar va ularning ruxsatlari"
+                        >
+                          🔌 Ilovalar
+                        </button>
+                      )}
                       {/* Statistika jadvalidagi nom bilan qo'lda bog'lash — Sheet'da
                           boshqacha yozilgan ustozlar statistikasi ko'rinishi uchun */}
                       {(u.approved || u.isAdmin) && (
@@ -767,6 +811,44 @@ export default function Users() {
           </div>
         );
       })()}
+
+      {/* ---- Ulangan ilovalar oynasi ---- */}
+      {appsUser && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+          }}
+          onClick={() => setAppsUser(null)}
+        >
+          <div
+            className="card"
+            style={{ maxWidth: 560, width: "100%", maxHeight: "80vh", overflow: "auto", margin: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="between" style={{ alignItems: "flex-start" }}>
+              <div>
+                <h3 style={{ margin: 0 }}>🔌 Ulangan ilovalar</h3>
+                <p className="muted text-sm" style={{ margin: "4px 0 0" }}>
+                  <b>{appsUser.name}</b> ({appsUser.email})
+                </p>
+              </div>
+              <button className="icon-btn" onClick={() => setAppsUser(null)} title="Yopish">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              {appsGrants === null ? (
+                <p className="muted text-sm">Yuklanmoqda…</p>
+              ) : appsGrants === "off" ? (
+                <p className="muted text-sm">Ilovalar bilan ulanish (MCP) serverda o'chirilgan.</p>
+              ) : (
+                <GrantList grants={appsGrants} onRevoke={revokeApp} busyId={appsBusy} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   );
 }

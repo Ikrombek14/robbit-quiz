@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../auth";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { safeNext, useAuth } from "../auth";
 import GoogleButton from "../components/GoogleButton";
 
 export default function AdminLogin() {
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  // Masalan Claude ulanishi: /admin?next=/oauth/consent?req=... — kirgandan keyin o'sha yerga qaytamiz
+  const next = safeNext(useLocation().search) ?? "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -17,7 +19,7 @@ export default function AdminLogin() {
     setBusy(true);
     try {
       await login(email, password);
-      navigate("/dashboard");
+      navigate(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Xatolik");
     } finally {
@@ -29,7 +31,7 @@ export default function AdminLogin() {
     setError("");
     try {
       await loginWithGoogle(credential);
-      navigate("/dashboard");
+      navigate(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google kirish xatosi");
     }

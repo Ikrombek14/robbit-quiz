@@ -11,6 +11,14 @@ export function homePath(t: { isAdmin?: boolean; approved?: boolean; officeAdmin
   return "/profile";
 }
 
+// Login'dan keyin qaytiladigan sahifa (?next=...). Faqat SAYT ICHIDAGI yo'l qabul qilinadi —
+// "//evil.com" yoki "https://..." kabi tashqi manzilga yo'naltirib bo'lmaydi (open redirect himoyasi).
+export function safeNext(search: string): string | null {
+  const next = new URLSearchParams(search).get("next");
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return null;
+  return next;
+}
+
 interface AuthContextValue {
   teacher: Teacher | null;
   loading: boolean;

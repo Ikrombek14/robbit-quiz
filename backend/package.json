@@ -10,10 +10,12 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@prisma/client": "^6.2.0",
     "adm-zip": "^0.5.18",
     "bcryptjs": "^2.4.3",
@@ -38,9 +40,12 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.10.5",
+    "@types/supertest": "^6.0.3",
     "prisma": "^6.2.0",
+    "supertest": "^7.1.4",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
   },
   "allowScripts": {
     "@prisma/client@6.19.3": true,

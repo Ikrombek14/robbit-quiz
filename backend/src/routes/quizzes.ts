@@ -2,34 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireCanCreate, type AuthedRequest } from "../auth.js";
+import { isAdminUser, isLinkedQuiz, maxRemovable } from "../lib/quizAccess.js";
+import { parseSlide } from "../lib/slides.js";
 
 export const quizRouter = Router();
 quizRouter.use(requireAuth);
-
-// Joriy foydalanuvchi admin'mi? (admin barcha o'qituvchilarning quizlarini ko'radi/boshqaradi)
-async function isAdminUser(teacherId?: string): Promise<boolean> {
-  if (!teacherId) return false;
-  const t = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { isAdmin: true } });
-  return t?.isAdmin === true;
-}
-
-// Quiz biror o'quv dasturga (O'quv dastur, Yangi o'quv dastur, Qo'shimcha darslar,
-// Workshoplar) biriktirilganmi — bunday slaydlar umumiy hisoblanadi.
-async function isLinkedQuiz(id: string): Promise<boolean> {
-  const [a, b, c, d] = await Promise.all([
-    prisma.lessonPlan.findFirst({ where: { quizId: id }, select: { id: true } }),
-    prisma.workshop.findFirst({ where: { quizId: id }, select: { id: true } }),
-    prisma.extraLesson.findFirst({ where: { quizId: id }, select: { id: true } }),
-    prisma.newCurriculumLesson.findFirst({ where: { quizId: id }, select: { id: true } }),
-  ]);
-  return Boolean(a || b || c || d);
-}
-
-// Boshqaning slaydini tahrirlayotgan slaydchi bir saqlashda ko'pi bilan shuncha
-// sahifani o'chira oladi — slaydni "bo'shatib" qo'yishdan himoya.
-function maxRemovable(oldCount: number): number {
-  return Math.max(2, Math.floor(oldCount * 0.2));
-}
 
 const slideSchema = z.object({
   kind: z.enum(["CONTENT", "QUESTION"]),
@@ -61,34 +38,6 @@ function buildSlideCreate(slides: SlideInput[]) {
   }));
 }
 
-interface SlideRow {
-  id: string;
-  order: number;
-  kind: string;
-  type: string | null;
-  data: string;
-  notes: string | null;
-  timeLimit: number;
-  points: number;
-}
-
-function parseSlide(s: SlideRow) {
-  let data: unknown = {};
-  try {
-    data = JSON.parse(s.data);
-  } catch {
-    data = {};
-  }
-  return {
-    id: s.id,
-    kind: s.kind,
-    type: s.type,
-    data,
-    notes: s.notes,
-    timeLimit: s.timeLimit,
-    points: s.points,
-  };
-}
 
 // Ro'yxat — admin barcha o'qituvchilarning loyihalarini ko'radi (egasi bilan)
 quizRouter.get("/", async (req: AuthedRequest, res) => {

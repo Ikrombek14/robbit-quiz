@@ -30,6 +30,7 @@ import Backup from "./pages/Backup";
 import AuditLog from "./pages/AuditLog";
 import TierApplication from "./pages/TierApplication";
 import TierApplicationsAdmin from "./pages/TierApplicationsAdmin";
+import OAuthConsent from "./pages/OAuthConsent";
 import Shell from "./components/Shell";
 import HomeworkReminder from "./components/HomeworkReminder";
 
@@ -116,6 +117,8 @@ export default function App() {
       <Route path="/admin" element={<AdminLogin />} />
       <Route path="/login" element={<AdminLogin />} />
       <Route path="/register" element={<Register />} />
+      {/* Claude kabi ilovaga (MCP) ruxsat berish — login'ni sahifaning o'zi tekshiradi */}
+      <Route path="/oauth/consent" element={<OAuthConsent />} />
 
       <Route path="/profile" element={<Protected student><StudentProfile /></Protected>} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />

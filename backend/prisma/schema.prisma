@@ -51,6 +51,7 @@ model Teacher {
   folders   Folder[]
   certificates      TeacherCertificate[]
   tierApplications  TierApplication[]
+  oauthGrants       OAuthGrant[]
 }
 
 // Ustoz profiliga yuklagan sertifikatlar (til, texnik kurslar va h.k.) — toifa
@@ -308,4 +309,89 @@ model AuditLog {
   @@index([createdAt])
   @@index([actorId, createdAt])
   @@index([action])
+}
+
+// ---- MCP / OAuth 2.1 (Claude kabi tashqi ilovalar ustoz nomidan ishlashi uchun) ----
+// Barcha maxfiy qiymatlar (client secret, so'rov havolasi, code, tokenlar) bazada faqat
+// SHA-256 HASH ko'rinishida saqlanadi — baza sizib chiqsa ham ulardan foydalanib bo'lmaydi.
+
+// Ro'yxatdan o'tgan OAuth client (Dynamic Client Registration orqali, masalan claude.ai).
+model OAuthClient {
+  id              String       @id // client_id
+  name            String?
+  redirectUris    String // JSON: string[]
+  metadata        Json // client metadata (secret'siz)
+  secretHash      String? // confidential client bo'lsa
+  secretExpiresAt Int? // unix soniya, 0/null = muddatsiz
+  createdAt       DateTime     @default(now())
+  grants          OAuthGrant[]
+}
+
+// /oauth/authorize'dan ruxsat sahifasigacha bo'lgan oraliq so'rov (10 daqiqa yashaydi).
+model OAuthAuthRequest {
+  id            String    @id // so'rov tokenining hash'i (havolada token o'zi turadi)
+  clientId      String
+  redirectUri   String
+  codeChallenge String
+  state         String?
+  scopes        String // so'ralgan scope'lar, bo'sh joy bilan
+  resource      String?
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+// Ustoz bergan ruxsat (foydalanuvchi ↔ client). Bekor qilinsa barcha tokenlari ham bekor.
+model OAuthGrant {
+  id         String       @id @default(cuid())
+  teacherId  String
+  teacher    Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  clientId   String
+  client     OAuthClient  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scopes     String // berilgan scope'lar, bo'sh joy bilan
+  createdAt  DateTime     @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  revokedBy  String? // bekor qilgan Teacher.id (o'zi yoki admin)
+  codes      OAuthCode[]
+  tokens     OAuthToken[]
+
+  @@index([teacherId])
+  @@index([clientId])
+}
+
+// Bir martalik authorization code (5 daqiqa).
+model OAuthCode {
+  id            String     @id // code hash'i
+  grantId       String
+  grant         OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  clientId      String
+  redirectUri   String
+  codeChallenge String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime   @default(now())
+
+  @@index([grantId])
+}
+
+// Access (1 soat) va refresh (30 kun) tokenlar. family — refresh rotation zanjiri:
+// ishlatilgan refresh qayta kelsa (o'g'irlangan bo'lishi mumkin) butun zanjir bekor qilinadi.
+model OAuthToken {
+  id        String     @id @default(cuid())
+  tokenHash String     @unique
+  kind      String // ACCESS | REFRESH
+  grantId   String
+  grant     OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  family    String
+  expiresAt DateTime
+  usedAt    DateTime? // REFRESH: almashtirilgan (rotation) vaqti
+  revokedAt DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([grantId])
+  @@index([family])
+  @@index([expiresAt])
 }

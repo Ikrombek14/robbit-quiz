@@ -35,6 +35,9 @@ import { statsRouter } from "./routes/stats.js";
 import { profileRouter } from "./routes/profile.js";
 import { tierApplicationsRouter } from "./routes/tierApplications.js";
 import { hwBlockGuard } from "./services/hwGate.js";
+import { oauthRouter, startOAuthCleanup } from "./mcp/oauthRoutes.js";
+import { mcpRouter } from "./mcp/server.js";
+import { oauthConsentRouter } from "./routes/oauthConsent.js";
 import { startStatsScheduler } from "./services/stats.js";
 
 const app = express();
@@ -133,9 +136,20 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "robbit-quiz-backend" });
 });
 
+// MCP server + OAuth 2.1 (Claude kabi ilovalar ustoz nomidan ishlashi). MCP_ENABLED=true
+// bo'lmasa umuman ulanmaydi — /mcp, /oauth/*, /.well-known/oauth-*, /api/oauth → 404.
+// SPA fallback'dan OLDIN turishi shart (aks holda GET /.well-known/... index.html qaytarardi).
+if (config.mcp.enabled) {
+  app.use(oauthRouter());
+  app.use(mcpRouter());
+  startOAuthCleanup();
+  console.log(`🔌 MCP yoqilgan: ${config.mcp.issuerUrl}/mcp`);
+}
+
 // API marshrutlari
 // Tekshirilmagan uy vazifa bloki (3-ogohlantirishdan keyin) — barcha himoyalangan API uchun
 app.use("/api", hwBlockGuard);
+if (config.mcp.enabled) app.use("/api/oauth", oauthConsentRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/quizzes", quizRouter);
 app.use("/api/folders", folderRouter);

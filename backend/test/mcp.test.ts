@@ -70,7 +70,7 @@ describe("O'qish tool'lari", () => {
     const { tools } = await client.listTools();
     const read = ["get_quiz", "get_slide", "list_folders", "list_quizzes"];
     expect(tools.map((x) => x.name).sort()).toEqual(
-      [...read, "add_slide", "cancel_action", "confirm_action", "create_quiz", "update_slide"].sort(),
+      [...read, "add_slide", "cancel_action", "change_slide_type", "confirm_action", "create_quiz", "edit_slide_items", "reorder_slides", "update_slide"].sort(),
     );
     for (const tool of tools) {
       expect(tool.annotations?.readOnlyHint).toBe(read.includes(tool.name));

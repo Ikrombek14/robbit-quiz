@@ -1,11 +1,15 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { slideInputShape, slideChangesShape, slideInputSchema, LIMITS } from "../../lib/slideValidate.js";
+import { slideInputShape, slideChangesShape, slideInputSchema, LIMITS, QTYPES } from "../../lib/slideValidate.js";
+import { itemOpSchema, typeExtraShape, MAX_ITEM_OPS } from "../../lib/slideItems.js";
 import { guard, ok, run, McpToolError, type McpContext } from "../context.js";
 import {
   proposeCreateQuiz,
   proposeAddSlide,
   proposeUpdateSlide,
+  proposeEditItems,
+  proposeChangeType,
+  proposeReorder,
   confirmAction,
   cancelAction,
   writeRateLimited,
@@ -101,6 +105,91 @@ export function registerWriteTools(server: McpServer, ctx: McpContext): void {
         const me = await guard(ctx, "quiz:write");
         limitProposals(ctx);
         return ok(await proposeUpdateSlide(ctx, me, args));
+      }),
+  );
+
+  server.registerTool(
+    "edit_slide_items",
+    {
+      title: "Variant/juftlik/elementlarni nuqtaviy tahrirlash (tasdiq bilan)",
+      description:
+        "Butun ro'yxatni qayta yozmasdan bitta yoki bir nechta variant (SINGLE/MULTIPLE/DROPDOWN/POLL), juftlik (MATCH), " +
+        "tartib elementi (REORDER) yoki bo'sh joy (FILL_BLANK) ustida amallarni TAKLIF qiladi. Amallar: " +
+        "add {text|left,right|answers, correct?, position?}, update {itemId, ...}, remove {itemId}, move {itemId, position}. " +
+        "itemId'lar get_slide natijasidagi items[].itemId — ular FAQAT shu quizVersion uchun amal qiladi; barcha amallar " +
+        "ASL ro'yxatdagi itemId'larga ishora qiladi (oldingi move keyingisini adashtirmaydi). REORDER'da ro'yxat tartibi = " +
+        "to'g'ri javob tartibi. SINGLE/DROPDOWN'da bitta variantga correct:true bersangiz, qolganlari avtomatik noto'g'ri bo'ladi. " +
+        "FILL_BLANK'da bo'sh joy qo'shsangiz/olib tashlasangiz, text bilan savol matnidagi ___ sonini ham moslang. " +
+        `Hammasi atomar: bitta amal xato bo'lsa, hech biri saqlanmaydi. Ko'pi bilan ${MAX_ITEM_OPS} ta amal. ` +
+        READ_FIRST + " " + CONFIRM_RULE,
+      inputSchema: {
+        quizId: z.string().min(1).max(100),
+        quizVersion: z.number().int().min(1).describe("get_slide'dagi quizVersion"),
+        slideId: z.string().min(1).max(100),
+        operations: z.array(itemOpSchema).min(1).max(MAX_ITEM_OPS),
+        text: z.string().max(LIMITS.text).optional().describe("Ixtiyoriy: savol matnini ham shu amal bilan o'zgartirish"),
+      },
+      annotations: PROPOSE,
+    },
+    (args) =>
+      run(async () => {
+        const me = await guard(ctx, "quiz:write");
+        limitProposals(ctx);
+        return ok(await proposeEditItems(ctx, me, args));
+      }),
+  );
+
+  server.registerTool(
+    "change_slide_type",
+    {
+      title: "Savol turini almashtirish (tasdiq bilan)",
+      description:
+        "Savol turini almashtirishni TAKLIF qiladi. Savol matni, rasm, vaqt, ball va izoh saqlanadi; variantli turlar o'zaro " +
+        "almashtirilganda variant matnlari ham saqlanadi. Mos kelmaydigan ma'lumot (masalan juftliklar) preview'da " +
+        "\"YO'QOLADI\" deb ko'rsatiladi — buni foydalanuvchiga albatta ayting. Yangi turga kerakli, eski slayddan olib " +
+        "bo'lmaydigan maydonlar extra'da beriladi (TRUE_FALSE — statementIsTrue, MATCH — pairs, FILL_BLANK — blanks + text ___ bilan, " +
+        "variantlarni to'liq almashtirish — options, saqlanadigan variantlardan to'g'rilari — correct). " +
+        "Kontent slaydni savolga aylantirib bo'lmaydi. " + READ_FIRST + " " + CONFIRM_RULE,
+      inputSchema: {
+        quizId: z.string().min(1).max(100),
+        quizVersion: z.number().int().min(1),
+        slideId: z.string().min(1).max(100),
+        newType: z.enum(QTYPES),
+        extra: z.object(typeExtraShape).optional(),
+      },
+      annotations: { ...PROPOSE, destructiveHint: true },
+    },
+    (args) =>
+      run(async () => {
+        const me = await guard(ctx, "quiz:write");
+        limitProposals(ctx);
+        return ok(await proposeChangeType(ctx, me, args));
+      }),
+  );
+
+  server.registerTool(
+    "reorder_slides",
+    {
+      title: "Slaydlar tartibini o'zgartirish (tasdiq bilan)",
+      description:
+        "Slaydlar tartibini o'zgartirishni TAKLIF qiladi. Ikki usul (bittasini tanlang): " +
+        "1) slideId + position — bitta slaydni shu o'ringa (1 dan) ko'chirish; " +
+        "2) order — quizdagi BARCHA slayd id'lari yangi tartibda (har biri aynan bir marta). " +
+        "Slayd id'lari o'zgarmaydi. " + READ_FIRST + " " + CONFIRM_RULE,
+      inputSchema: {
+        quizId: z.string().min(1).max(100),
+        quizVersion: z.number().int().min(1),
+        slideId: z.string().min(1).max(100).optional(),
+        position: z.number().int().min(1).max(LIMITS.maxSlidesPerQuiz).optional(),
+        order: z.array(z.string().min(1).max(100)).max(LIMITS.maxSlidesPerQuiz).optional(),
+      },
+      annotations: PROPOSE,
+    },
+    (args) =>
+      run(async () => {
+        const me = await guard(ctx, "quiz:write");
+        limitProposals(ctx);
+        return ok(await proposeReorder(ctx, me, args));
       }),
   );
 

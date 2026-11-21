@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { prisma } from "../../prisma.js";
 import { quizAccess } from "../../lib/quizAccess.js";
 import { parseSlide } from "../../lib/slides.js";
+import { listItems } from "../../lib/slideItems.js";
 import { guard, ok, run, McpToolError, type McpContext } from "../context.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -200,7 +201,17 @@ export function registerReadTools(server: McpServer, ctx: McpContext): void {
         }
         const p = parseSlide(slides[idx]);
         const q = await prisma.quiz.findUnique({ where: { id: args.quizId }, select: { version: true } });
-        return ok({ quizId: args.quizId, quizVersion: q?.version, position: idx + 1, slideCount: slides.length, ...p, data: slimData(p.data) });
+        // items — edit_slide_items uchun itemId'lar (FAQAT shu quizVersion uchun amal qiladi)
+        const items = listItems({ kind: p.kind as "QUESTION" | "CONTENT", type: p.type as any, data: p.data, notes: p.notes, timeLimit: p.timeLimit, points: p.points });
+        return ok({
+          quizId: args.quizId,
+          quizVersion: q?.version,
+          position: idx + 1,
+          slideCount: slides.length,
+          ...p,
+          data: slimData(p.data),
+          ...(items ? { items, itemsNote: `itemId'lar faqat quizVersion=${q?.version} uchun amal qiladi` } : {}),
+        });
       }),
   );
 }

@@ -8,10 +8,14 @@ import {
   insertSlide,
   updateSlideRow,
   createQuizWithSlides,
+  reorderSlides,
   VersionConflictError,
   QuizNotFoundError,
 } from "../lib/quizWrite.js";
+import { applyItemOps, changeType, type ItemOp, type TypeExtra } from "../lib/slideItems.js";
 import {
+  TYPE_LABELS,
+  type QType,
   buildSlide,
   applyChanges,
   describeSlide,
@@ -37,7 +41,16 @@ import { randomToken, sha256, maskToken } from "./security.js";
 export const ACTION_TTL_MS = 10 * 60 * 1000;
 export const MAX_PENDING = 20;
 
-export type ActionTool = "create_quiz" | "add_slide" | "update_slide";
+export type ActionTool = "create_quiz" | "add_slide" | "update_slide" | "edit_slide_items" | "change_slide_type" | "reorder_slides";
+
+// Bitta slaydni o'zgartiradigan amallar: tasdiqda yangi holat saqlangan parametrlardan QAYTA
+// hisoblanadi (versiya o'zgarmagani uchun natija taklifdagi bilan aynan bir xil bo'ladi).
+type SlideTool = "update_slide" | "edit_slide_items" | "change_slide_type";
+function computeSlide(tool: SlideTool, current: BuiltSlide, p: any): BuiltSlide {
+  if (tool === "update_slide") return applyChanges(current, p.changes).slide;
+  if (tool === "edit_slide_items") return applyItemOps(current, p.operations, p.text).slide;
+  return changeType(current, p.newType, p.extra ?? {}).slide;
+}
 
 export const CONFLICT_MESSAGE =
   "Quiz siz tasdiqlaguningizcha boshqa joyda o'zgartirildi, avval get_quiz bilan yangisini o'qing.";
@@ -251,6 +264,139 @@ export async function proposeUpdateSlide(
   });
 }
 
+async function slideOf(quizId: string, slideId: string) {
+  const slides = await prisma.slide.findMany({ where: { quizId }, orderBy: { order: "asc" } });
+  const idx = slides.findIndex((s) => s.id === slideId);
+  if (idx < 0) throw new McpToolError("Slayd topilmadi — get_quiz bilan yangi ro'yxatni oling.");
+  return { idx, row: slides[idx] };
+}
+
+export async function proposeEditItems(
+  ctx: McpContext,
+  me: McpUser,
+  args: { quizId: string; quizVersion: number; slideId: string; operations: ItemOp[]; text?: string },
+) {
+  const quiz = await editableQuiz(me, args.quizId, args.quizVersion);
+  const { idx, row } = await slideOf(quiz.id, args.slideId);
+  const r = wrapValidation(() => applyItemOps(slideRowToBuilt(row), args.operations, args.text));
+  const w = liveWarning(quiz.id);
+  const preview = [
+    `Quiz: «${quiz.title}», ${idx + 1}-slayd`,
+    "Amallar:",
+    ...r.lines.map((l) => `• ${l}`),
+    "",
+    "Oldin:",
+    ...r.before.map((l) => `  ${l}`),
+    "Keyin:",
+    ...r.after.map((l) => `  ${l}`),
+  ].join("\n");
+  return savePending(ctx, {
+    tool: "edit_slide_items",
+    params: { quizId: quiz.id, slideId: args.slideId, operations: args.operations, text: args.text },
+    quizId: quiz.id,
+    quizVersion: quiz.version,
+    summary: `«${quiz.title}» quizining ${idx + 1}-slaydida ${args.operations.length} ta element amali`,
+    preview,
+    diff: { operations: r.lines, before: r.before, after: r.after },
+    warnings: w ? [w] : [],
+  });
+}
+
+export async function proposeChangeType(
+  ctx: McpContext,
+  me: McpUser,
+  args: { quizId: string; quizVersion: number; slideId: string; newType: QType; extra?: TypeExtra },
+) {
+  const quiz = await editableQuiz(me, args.quizId, args.quizVersion);
+  const { idx, row } = await slideOf(quiz.id, args.slideId);
+  const current = slideRowToBuilt(row);
+  const r = wrapValidation(() => changeType(current, args.newType, args.extra ?? {}));
+  const w = liveWarning(quiz.id);
+  const from = current.type ? `${TYPE_LABELS[current.type as QType]} (${current.type})` : "?";
+  const to = `${TYPE_LABELS[args.newType]} (${args.newType})`;
+  const preview = [
+    `Quiz: «${quiz.title}», ${idx + 1}-slayd`,
+    `Tur: ${from} → ${to}`,
+    `✅ Saqlanadi: ${r.kept.join(", ")}`,
+    r.lost.length ? `❌ YO'QOLADI: ${r.lost.join(", ")}` : "❌ Yo'qoladigan ma'lumot yo'q",
+    "",
+    "Natija:",
+    describeSlide(r.slide),
+  ].join("\n");
+  return savePending(ctx, {
+    tool: "change_slide_type",
+    params: { quizId: quiz.id, slideId: args.slideId, newType: args.newType, extra: args.extra ?? {} },
+    quizId: quiz.id,
+    quizVersion: quiz.version,
+    summary: `«${quiz.title}» quizining ${idx + 1}-slayd turi: ${current.type} → ${args.newType}`,
+    preview,
+    diff: { fromType: current.type, toType: args.newType, kept: r.kept, lost: r.lost },
+    warnings: w ? [w] : [],
+  });
+}
+
+function headline(row: { kind: string; data: string }): string {
+  try {
+    const d = JSON.parse(row.data);
+    if (row.kind === "QUESTION") return String(d.text ?? "").slice(0, 60) || "(savol)";
+    const t = Array.isArray(d.elements) ? d.elements.find((e: any) => e?.type === "text")?.text : d.title;
+    return String(t ?? "").slice(0, 60) || "(kontent slayd)";
+  } catch {
+    return "(slayd)";
+  }
+}
+
+export async function proposeReorder(
+  ctx: McpContext,
+  me: McpUser,
+  args: { quizId: string; quizVersion: number; slideId?: string; position?: number; order?: string[] },
+) {
+  const quiz = await editableQuiz(me, args.quizId, args.quizVersion);
+  const rows = await prisma.slide.findMany({ where: { quizId: quiz.id }, orderBy: { order: "asc" }, select: { id: true, kind: true, data: true } });
+  const ids = rows.map((r) => r.id);
+  let next: string[];
+  if (args.order) {
+    if (args.slideId || args.position !== undefined) throw new McpToolError("order bilan birga slideId/position berilmaydi — bittasini tanlang.");
+    const set = new Set(args.order);
+    const missing = ids.filter((id) => !set.has(id));
+    const unknown = args.order.filter((id) => !ids.includes(id));
+    if (set.size !== args.order.length) throw new McpToolError("order'da takrorlangan slayd bor.");
+    if (missing.length || unknown.length) {
+      throw new McpToolError(
+        `order quizdagi BARCHA slaydlarni aynan bir martadan sanashi kerak (${ids.length} ta).` +
+          (missing.length ? ` Yetishmaydi: ${missing.length} ta.` : "") + (unknown.length ? ` Noma'lum id: ${unknown.join(", ")}.` : ""),
+      );
+    }
+    next = args.order;
+  } else {
+    if (!args.slideId || args.position === undefined) throw new McpToolError("slideId + position yoki to'liq order bering.");
+    const from = ids.indexOf(args.slideId);
+    if (from < 0) throw new McpToolError("Slayd topilmadi — get_quiz bilan yangi ro'yxatni oling.");
+    next = [...ids];
+    next.splice(from, 1);
+    next.splice(Math.min(Math.max(args.position - 1, 0), next.length), 0, args.slideId);
+  }
+  const moved = next.map((id, i) => ({ id, from: ids.indexOf(id) + 1, to: i + 1 })).filter((m) => m.from !== m.to);
+  if (moved.length === 0) throw new McpToolError("Tartib o'zgarmaydi — hozirgi tartib bilan bir xil.");
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const w = liveWarning(quiz.id);
+  const preview = [
+    `Quiz: «${quiz.title}» — slaydlar tartibi`,
+    "O'rni o'zgaradiganlar:",
+    ...moved.map((m) => `• «${headline(byId.get(m.id)!)}»: ${m.from} → ${m.to}`),
+  ].join("\n");
+  return savePending(ctx, {
+    tool: "reorder_slides",
+    params: { quizId: quiz.id, order: next },
+    quizId: quiz.id,
+    quizVersion: quiz.version,
+    summary: `«${quiz.title}» quizida ${moved.length} ta slayd o'rni o'zgaradi`,
+    preview,
+    diff: { moved },
+    warnings: w ? [w] : [],
+  });
+}
+
 // ---------- Tasdiq / bekor qilish ----------
 async function expireStale(teacherId?: string): Promise<void> {
   const stale = await prisma.mcpPendingAction.findMany({
@@ -350,12 +496,17 @@ export async function confirmAction(ctx: McpContext, me: McpUser, actionId: stri
           insertSlide(tx, a.quizId!, slide, p.position),
         );
         result = { slideId: w.result.id, position: w.result.position, quizVersion: w.version };
+      } else if (a.tool === "reorder_slides") {
+        const w = await writeQuiz(a.quizId!, { expectedVersion: a.quizVersion!, source: "mcp", actor, summary: a.summary }, (tx) =>
+          reorderSlides(tx, a.quizId!, p.order as string[]),
+        );
+        result = { quizVersion: w.version };
       } else {
         // Yangi holat tranzaksiyadan TASHQARIDA hisoblanadi (rasm yuklash qulfni ushlab turmasin).
         // Versiya tranzaksiya ichida tekshiriladi: shu orada quiz o'zgarsa — konflikt, hech narsa yozilmaydi.
         const row = await prisma.slide.findFirst({ where: { id: p.slideId, quizId: a.quizId! } });
         if (!row) throw new McpToolError("Slayd topilmadi — get_quiz bilan yangi ro'yxatni oling.");
-        const { slide } = wrapValidation(() => applyChanges(slideRowToBuilt(row), p.changes));
+        const slide = wrapValidation(() => computeSlide(a.tool as SlideTool, slideRowToBuilt(row), p));
         await localizeOrFail([slide]);
         const w = await writeQuiz(a.quizId!, { expectedVersion: a.quizVersion!, source: "mcp", actor, summary: a.summary }, async (tx) => {
           const still = await tx.slide.findFirst({ where: { id: row.id, quizId: a.quizId! }, select: { id: true } });

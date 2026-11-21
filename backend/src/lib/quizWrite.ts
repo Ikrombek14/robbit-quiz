@@ -154,12 +154,24 @@ export async function updateSlideRow(tx: Prisma.TransactionClient, slideId: stri
   await tx.slide.update({
     where: { id: slideId },
     data: {
+      type: slide.type ?? null, // change_slide_type uchun
       data: JSON.stringify(slide.data ?? {}),
       notes: slide.notes ?? null,
       timeLimit: slide.timeLimit,
       points: slide.points,
     },
   });
+}
+
+/** Slaydlar tartibini berilgan id ketma-ketligiga keltiradi (id'lar o'zgarmaydi). */
+export async function reorderSlides(tx: Prisma.TransactionClient, quizId: string, orderedIds: string[]): Promise<void> {
+  const rows = await tx.slide.findMany({ where: { quizId }, select: { id: true, order: true } });
+  const ids = new Set(rows.map((r) => r.id));
+  if (rows.length !== orderedIds.length || orderedIds.some((id) => !ids.has(id))) throw new QuizNotFoundError();
+  const cur = new Map(rows.map((r) => [r.id, r.order]));
+  for (let i = 0; i < orderedIds.length; i++) {
+    if (cur.get(orderedIds[i]) !== i) await tx.slide.update({ where: { id: orderedIds[i] }, data: { order: i } });
+  }
 }
 
 /** Yangi quiz (tarix kerak emas — oldingi holat yo'q). */

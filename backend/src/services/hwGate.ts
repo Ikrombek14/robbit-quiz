@@ -74,23 +74,32 @@ export async function checkHwGate(teacherId: string, fresh = false): Promise<{ l
 // Socket (jonli o'yin) ga tegilmaydi — boshlangan dars uzilmaydi.
 const OPEN_PREFIXES = ["/auth", "/public", "/stats/hw-gate"];
 
-export async function hwBlockGuard(req: Request, res: Response, next: NextFunction): Promise<void> {
-  if (OPEN_PREFIXES.some((p) => req.path.startsWith(p))) return next();
-  const header = req.headers.authorization;
-  const teacherId = header?.startsWith("Bearer ") ? verifyToken(header.slice(7)) : null;
-  if (!teacherId) return next(); // avtorizatsiyani requireAuth o'zi tekshiradi
+// Blok xabari — REST (hwBlockGuard) va MCP bir xil matnni ko'rsatsin
+export const HW_BLOCKED_MESSAGE = "Platforma yopilgan: tekshirilmagan uy vazifalar juda ko'p";
+
+// Ustoz hozir uy vazifa bloki ostidami (3+ ogohlantirish, admin ochib qo'ymagan).
+// Adminlar va ofis admini bloklanmaydi. Baza xatosida blok qo'llanmaydi (false).
+export async function isHwBlocked(teacherId: string): Promise<boolean> {
   try {
     const t = await prisma.teacher.findUnique({
       where: { id: teacherId },
       select: { isAdmin: true, officeAdmin: true, hwStrikes: true, hwUnlockUntil: true },
     });
     const unlocked = !!t?.hwUnlockUntil && t.hwUnlockUntil > new Date();
-    if (t && !t.isAdmin && !t.officeAdmin && t.hwStrikes >= 3 && !unlocked) {
-      res.status(403).json({ error: "Platforma yopilgan: tekshirilmagan uy vazifalar juda ko'p", code: "HW_BLOCKED" });
-      return;
-    }
+    return !!t && !t.isAdmin && !t.officeAdmin && t.hwStrikes >= 3 && !unlocked;
   } catch {
-    /* baza xatosi — blokni qo'llamaymiz, so'rov odatdagidek davom etadi */
+    return false; /* baza xatosi — blokni qo'llamaymiz, so'rov odatdagidek davom etadi */
+  }
+}
+
+export async function hwBlockGuard(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (OPEN_PREFIXES.some((p) => req.path.startsWith(p))) return next();
+  const header = req.headers.authorization;
+  const teacherId = header?.startsWith("Bearer ") ? verifyToken(header.slice(7)) : null;
+  if (!teacherId) return next(); // avtorizatsiyani requireAuth o'zi tekshiradi
+  if (await isHwBlocked(teacherId)) {
+    res.status(403).json({ error: HW_BLOCKED_MESSAGE, code: "HW_BLOCKED" });
+    return;
   }
   next();
 }

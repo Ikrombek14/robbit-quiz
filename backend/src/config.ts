@@ -21,6 +21,20 @@ export const config = {
   dashboardUrl: (process.env.DASHBOARD_INTERNAL_URL ?? "https://dashboard.robbitonline.uz").replace(/\/$/, ""),
   dashboardToken: process.env.DASHBOARD_INTERNAL_TOKEN ?? "",
   production: process.env.NODE_ENV === "production",
+  // MCP server (Claude kabi ilovalar ustoz nomidan ishlashi) — default O'CHIQ.
+  // O'chiq bo'lsa /mcp, /oauth/*, /.well-known/oauth-* va /api/oauth umuman ulanmaydi (404).
+  mcp: {
+    enabled: process.env.MCP_ENABLED === "true",
+    // Tashqi (ommaviy) manzil — token/metadata'dagi issuer va resource shundan quriladi
+    issuerUrl: (process.env.MCP_ISSUER_URL ?? "https://robbitquiz.uz").replace(/\/$/, ""),
+    // Ruxsat etilgan redirect_uri'lar (vergul bilan, ANIQ moslik). Boshqa manzil bilan
+    // client ro'yxatdan o'tolmaydi. Dev'da qo'shimcha http://localhost|127.0.0.1 (istalgan port).
+    allowedRedirects: (
+      process.env.MCP_ALLOWED_REDIRECTS ??
+      "https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback"
+    )
+      .split(",").map((s) => s.trim()).filter(Boolean),
+  },
   adminEmails: (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean),
   // Robbit ERP (admin.robbit.uz) integratsiyasi — server-to-server, faqat o'qish
   erp: {

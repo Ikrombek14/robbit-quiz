@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import Shell from "../components/Shell";
+import ConnectedAppsCard from "../components/ConnectedApps";
 import type { TeacherCertificate } from "../types";
 
 interface ProfileData {
@@ -229,6 +230,8 @@ export default function Settings() {
           </button>
         </form>
       </div>
+
+      <ConnectedAppsCard />
     </Shell>
   );
 }

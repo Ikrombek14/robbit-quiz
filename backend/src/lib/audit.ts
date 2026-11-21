@@ -92,6 +92,52 @@ async function writeAudit(req: AuthedRequest, res: Response, path: string): Prom
   });
 }
 
+/**
+ * HTTP so'rov middleware'idan tashqaridagi hodisa uchun audit yozuvi (masalan /oauth/*,
+ * MCP — ular /api ostida emas). Fire-and-forget: xato asosiy ishni buzmaydi.
+ * Token/maxfiy qiymatlarni `details`ga YOZMANG.
+ */
+export function writeAuditEvent(ev: {
+  actorId?: string | null;
+  action: string;
+  method?: string;
+  path: string;
+  status?: number;
+  entity?: string;
+  entityId?: string;
+  summary?: string;
+  details?: unknown;
+  ip?: string | null;
+}): void {
+  void (async () => {
+    let actorEmail: string | null = null;
+    let actorName: string | null = null;
+    if (ev.actorId) {
+      const t = await prisma.teacher.findUnique({ where: { id: ev.actorId }, select: { email: true, name: true } });
+      actorEmail = t?.email ?? null;
+      actorName = t?.name ?? null;
+    }
+    await prisma.auditLog.create({
+      data: {
+        actorId: ev.actorId ?? null,
+        actorEmail,
+        actorName,
+        action: ev.action,
+        method: ev.method ?? "POST",
+        path: ev.path.slice(0, 500),
+        status: ev.status ?? 200,
+        entity: ev.entity ?? null,
+        entityId: ev.entityId ?? null,
+        summary: ev.summary?.slice(0, 1000) ?? null,
+        details: ev.details === undefined ? Prisma.JsonNull : (ev.details as Prisma.InputJsonValue),
+        ip: ev.ip ?? null,
+      },
+    });
+  })().catch((e) => {
+    console.error("[audit] yozib bo'lmadi:", e instanceof Error ? e.message : e);
+  });
+}
+
 /** Ikki obyekt orasidagi farq: faqat o'zgargan maydonlar { field: [oldin, keyin] }. */
 export function diffFields<T extends Record<string, unknown>>(
   before: T | null | undefined,

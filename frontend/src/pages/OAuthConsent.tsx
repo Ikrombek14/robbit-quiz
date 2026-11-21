@@ -92,7 +92,8 @@ export default function OAuthConsent() {
             )}
 
             <p className="muted text-sm" style={{ marginTop: 0 }}>
-              Har bir qo'shish, o'zgartirish yoki o'chirish amali siz tasdiqlagandan keyingina bajariladi.
+              Har bir qo'shish yoki o'zgartirish amali siz suhbatda tasdiqlagandan keyingina bajariladi.
+              Ilova hech narsani o'chira olmaydi — o'chirish faqat platformaning o'zida.
               Ruxsatni istalgan vaqtda <b>Sozlamalar → Ulangan ilovalar</b> bo'limida bekor qilishingiz mumkin.
               Qaytish manzili: <code>{info.client.redirectHost}</code>
             </p>

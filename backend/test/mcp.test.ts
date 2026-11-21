@@ -63,13 +63,28 @@ describe("/mcp autentifikatsiya", () => {
 });
 
 describe("O'qish tool'lari", () => {
-  it("tool'lar ro'yxati va readOnlyHint annotatsiyasi", async () => {
+  it("tool'lar ro'yxati: o'qish tool'lari readOnlyHint, o'chirish tool'i yo'q", async () => {
     const t = await makeTeacher({ canCreate: true });
     const c = await connect(app, t.jwt);
     const client = await mcpClient(c.tokens!.access_token);
     const { tools } = await client.listTools();
+    const read = ["get_quiz", "get_slide", "list_folders", "list_quizzes"];
+    expect(tools.map((x) => x.name).sort()).toEqual(
+      [...read, "add_slide", "cancel_action", "confirm_action", "create_quiz", "update_slide"].sort(),
+    );
+    for (const tool of tools) {
+      expect(tool.annotations?.readOnlyHint).toBe(read.includes(tool.name));
+      expect(tool.name).not.toMatch(/delete/);
+    }
+    await client.close();
+  });
+
+  it("faqat o'qish ruxsatli ulanishda yozuvchi tool'lar ko'rinmaydi", async () => {
+    const t = await makeTeacher({ canCreate: false });
+    const c = await connect(app, t.jwt);
+    const client = await mcpClient(c.tokens!.access_token);
+    const { tools } = await client.listTools();
     expect(tools.map((x) => x.name).sort()).toEqual(["get_quiz", "get_slide", "list_folders", "list_quizzes"]);
-    for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
     await client.close();
   });
 

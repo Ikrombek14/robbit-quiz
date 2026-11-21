@@ -137,7 +137,11 @@ model Quiz {
   sourceId    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Har bir yozuvda (muharrir, MCP, tarixdan tiklash) +1 — bir vaqtda tahrirlash konfliktini
+  // aniqlash uchun: eski versiya bilan saqlash urinishi rad etiladi (409).
+  version     Int      @default(1)
   slides      Slide[]
+  revisions   QuizRevision[]
 
   @@index([teacherId])
   @@index([createdAt])
@@ -393,5 +397,46 @@ model OAuthToken {
 
   @@index([grantId])
   @@index([family])
+  @@index([expiresAt])
+}
+
+// Quiz versiyalar tarixi: har bir yozuvdan OLDINGI to'liq holat (oxirgi 20 tasi saqlanadi).
+// Soft delete o'rniga — o'chirilgan slayd ham shu yerdan tiklanadi.
+model QuizRevision {
+  id        String   @id @default(cuid())
+  quizId    String
+  quiz      Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  version   Int // shu holat qaysi versiya edi
+  snapshot  Json // { title, description, shuffle, slides: [{kind,type,data,notes,timeLimit,points}] }
+  source    String // editor | mcp | restore
+  actorId   String?
+  actorName String?
+  summary   String?
+  createdAt DateTime @default(now())
+
+  @@index([quizId, createdAt])
+}
+
+// MCP orqali taklif qilingan, foydalanuvchi tasdig'ini kutayotgan yozuvchi amal.
+// actionId'ning o'zi saqlanmaydi (hash). Parametrlar serverda — tasdiqda o'zgartirib bo'lmaydi.
+model McpPendingAction {
+  id          String    @id @default(cuid())
+  actionHash  String    @unique
+  teacherId   String
+  grantId     String
+  clientId    String
+  tool        String // create_quiz | add_slide | update_slide
+  params      Json
+  quizId      String?
+  quizVersion Int? // taklif paytidagi versiya — tasdiqda solishtiriladi
+  summary     String
+  preview     String // foydalanuvchiga ko'rsatilgan o'zbekcha matn
+  status      String    @default("PENDING") // PENDING | EXECUTED | CANCELLED | EXPIRED | FAILED
+  result      Json?
+  expiresAt   DateTime
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([teacherId, status])
   @@index([expiresAt])
 }

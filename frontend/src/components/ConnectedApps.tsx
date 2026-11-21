@@ -41,8 +41,18 @@ export function GrantList({ grants, onRevoke, busyId }: { grants: OAuthGrantView
 }
 
 // Sozlamalar sahifasidagi karta — o'zining ruxsatlari
+interface PendingView {
+  id: string;
+  clientName: string;
+  summary: string;
+  preview: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export default function ConnectedAppsCard() {
   const [grants, setGrants] = useState<OAuthGrantView[] | null>(null);
+  const [pending, setPending] = useState<PendingView[]>([]);
   const [disabled, setDisabled] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -51,8 +61,25 @@ export default function ConnectedAppsCard() {
     api<{ grants: OAuthGrantView[] }>("/oauth/grants")
       .then((r) => setGrants(r.grants))
       .catch(() => setDisabled(true)); // MCP o'chiq (404) — kartani ko'rsatmaymiz
+    api<{ pending: PendingView[] }>("/oauth/pending")
+      .then((r) => setPending(r.pending))
+      .catch(() => setPending([]));
   }
   useEffect(load, []);
+
+  async function cancelPending(p: PendingView) {
+    if (!confirm(`"${p.summary}" taklifini bekor qilasizmi? Claude uni endi tasdiqlay olmaydi.`)) return;
+    setBusyId(p.id);
+    setErr("");
+    try {
+      await api(`/oauth/pending/${p.id}`, { method: "DELETE" });
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Xatolik");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function revoke(g: OAuthGrantView) {
     if (!confirm(`"${g.clientName}" ilovasining ruxsatini bekor qilasizmi? U endi akkauntingizdan foydalana olmaydi.`)) return;
@@ -77,6 +104,36 @@ export default function ConnectedAppsCard() {
       </p>
       {err && <div className="error">{err}</div>}
       {grants === null ? <p className="muted text-sm">Yuklanmoqda…</p> : <GrantList grants={grants} onRevoke={revoke} busyId={busyId} />}
+
+      {pending.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 16, margin: "16px 0 6px" }}>⏳ Kutilayotgan tasdiqlar</h3>
+          <p className="muted text-sm" style={{ marginTop: 0 }}>
+            Claude taklif qilgan, lekin hali tasdiqlanmagan amallar. Tasdiq suhbatning o'zida beriladi; bu yerdan bekor qilish mumkin.
+          </p>
+          <div style={{ display: "grid", gap: 8 }}>
+            {pending.map((p) => (
+              <div key={p.id} style={{ padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 12 }}>
+                <div className="between" style={{ gap: 10, alignItems: "flex-start" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <b>{p.summary}</b>
+                    <div className="muted text-sm" style={{ marginTop: 2 }}>
+                      {p.clientName} · muddati: {new Date(p.expiresAt).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })} gacha
+                    </div>
+                  </div>
+                  <button className="btn btn-ghost" style={{ flexShrink: 0, padding: "6px 12px", fontSize: 14 }} disabled={busyId === p.id} onClick={() => cancelPending(p)}>
+                    {busyId === p.id ? "…" : "Bekor qilish"}
+                  </button>
+                </div>
+                <details style={{ marginTop: 6 }}>
+                  <summary className="muted text-sm" style={{ cursor: "pointer" }}>Batafsil</summary>
+                  <pre className="text-sm" style={{ whiteSpace: "pre-wrap", margin: "6px 0 0", fontFamily: "inherit" }}>{p.preview}</pre>
+                </details>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

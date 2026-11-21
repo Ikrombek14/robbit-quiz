@@ -6,6 +6,7 @@ import { auditNote } from "../lib/audit.js";
 import { CODE_TTL_MS, revokeGrant } from "../mcp/provider.js";
 import { randomToken, sha256 } from "../mcp/security.js";
 import { SCOPES, SCOPE_LABELS, parseScopes, allowedScopes, loadScopeSubject, type Scope } from "../mcp/scopes.js";
+import { cancelActionById, expirePendingActions } from "../mcp/actions.js";
 
 // Ruxsat (consent) sahifasi va "Ulangan ilovalar" API'si — SPA chaqiradi (JWT bilan).
 // So'rov tokeni yo'lga (path) emas, query/body'ga qo'yiladi: audit log yo'lni yozadi,
@@ -157,6 +158,40 @@ oauthConsentRouter.delete("/grants/:id", async (req: AuthedRequest, res) => {
   }
   await revokeGrant(id, req.teacherId!);
   auditNote(res, { action: "oauth.grant.revoke", entity: "OAuthGrant", entityId: id, summary: `${g.client.name ?? "Ilova"} ruxsati bekor qilindi` });
+  res.json({ ok: true });
+});
+
+// ---- Kutilayotgan tasdiqlar (MCP takliflari) ----
+oauthConsentRouter.get("/pending", async (req: AuthedRequest, res) => {
+  await expirePendingActions(req.teacherId!);
+  const rows = await prisma.mcpPendingAction.findMany({
+    where: { teacherId: req.teacherId, status: "PENDING" },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  const names = new Map(
+    (await prisma.oAuthClient.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.clientId))] } }, select: { id: true, name: true } })).map(
+      (c) => [c.id, c.name ?? "MCP ilova"],
+    ),
+  );
+  res.json({
+    pending: rows.map((r) => ({
+      id: r.id,
+      clientName: names.get(r.clientId) ?? "MCP ilova",
+      summary: r.summary,
+      preview: r.preview,
+      createdAt: r.createdAt,
+      expiresAt: r.expiresAt,
+    })),
+  });
+});
+
+oauthConsentRouter.delete("/pending/:id", async (req: AuthedRequest, res) => {
+  const ok = await cancelActionById(req.teacherId!, String(req.params.id));
+  if (!ok) {
+    res.status(404).json({ error: "Kutilayotgan amal topilmadi (allaqachon bajarilgan, bekor qilingan yoki muddati o'tgan)" });
+    return;
+  }
   res.json({ ok: true });
 });
 

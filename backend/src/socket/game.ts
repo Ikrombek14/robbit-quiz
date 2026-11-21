@@ -824,6 +824,13 @@ async function saveGameSnapshotAsync(): Promise<void> {
 
 // index.ts shutdown() dan SIGTERM/SIGINT kelganda chaqiriladi (jarayon o'lishidan oldin).
 // Bu yerda SINXRON yozamiz — jarayon o'lishidan oldin kafolatlangan flush kerak.
+// Quiz hozir jonli dars yoki TEST sessiyasida ochiqmi (MCP ogohlantirishi uchun).
+// Faqat o'qiydi — o'yin holatiga tegmaydi.
+export function isQuizInLiveGame(quizId: string): boolean {
+  for (const g of games.values()) if (g.quizId === quizId && g.status !== "ended") return true;
+  return false;
+}
+
 export function saveGameSnapshot(): void {
   try {
     const list = [...games.values()].filter((g) => g.status !== "ended").map(serializeGame);

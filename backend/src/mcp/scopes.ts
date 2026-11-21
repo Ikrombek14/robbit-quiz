@@ -1,14 +1,15 @@
 import { prisma } from "../prisma.js";
 
-// OAuth scope'lari (MCP orqali beriladigan ruxsatlar)
-export const SCOPES = ["quiz:read", "quiz:write", "slide:delete"] as const;
+// OAuth scope'lari (MCP orqali beriladigan ruxsatlar).
+// O'chirish ATAYLAB yo'q: slaydni faqat platformaning o'zida (muharrir) o'chirish mumkin.
+// (1-bosqichda e'lon qilingan "slide:delete" endi tan olinmaydi — eski grant'lardan jim tushadi.)
+export const SCOPES = ["quiz:read", "quiz:write"] as const;
 export type Scope = (typeof SCOPES)[number];
 
 // Ruxsat sahifasi va "Ulangan ilovalar" uchun o'zbekcha nomlar
 export const SCOPE_LABELS: Record<Scope, string> = {
   "quiz:read": "Quizlar va slaydlarni ko'rish",
-  "quiz:write": "Quiz va slayd yaratish, slaydlarni tahrirlash",
-  "slide:delete": "Slayd o'chirish",
+  "quiz:write": "Quiz va slayd yaratish, slaydlarni tahrirlash (har bir amal siz tasdiqlagandan keyin)",
 };
 
 export function parseScopes(s: string | string[] | undefined | null): Scope[] {
@@ -26,7 +27,7 @@ export interface ScopeSubject {
  * Foydalanuvchi HOZIR qaysi scope'larni ola oladi:
  *  - ustoz (approved) yoki admin bo'lmasa — hech qaysi (MCP faqat markaz ustozlari uchun);
  *  - quiz:read — barcha ustozlarga;
- *  - quiz:write / slide:delete — faqat admin yoki "slayd qilish" (canCreate) ruxsati borlarga.
+ *  - quiz:write — faqat admin yoki "slayd qilish" (canCreate) ruxsati borlarga.
  * Har tool chaqiruvida qayta hisoblanadi — admin canCreate'ni olsa, darhol ta'sir qiladi.
  */
 export function allowedScopes(t: ScopeSubject | null | undefined): Scope[] {

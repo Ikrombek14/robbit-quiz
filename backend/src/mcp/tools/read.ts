@@ -164,6 +164,8 @@ export function registerReadTools(server: McpServer, ctx: McpContext): void {
           shuffle: quiz.shuffle,
           folder: quiz.folder,
           updatedAt: quiz.updatedAt,
+          // Yozuvchi tool'lar (add_slide, update_slide) shu versiyani talab qiladi
+          version: quiz.version,
           canEdit: access.edit && me.scopes.includes("quiz:write"),
           slideCount: quiz.slides.length,
           slides: quiz.slides.map((s, i) => {
@@ -197,7 +199,8 @@ export function registerReadTools(server: McpServer, ctx: McpContext): void {
           throw new McpToolError("Slayd topilmadi — quiz muharrirda saqlangan bo'lishi mumkin. get_quiz bilan yangi ro'yxatni oling.");
         }
         const p = parseSlide(slides[idx]);
-        return ok({ quizId: args.quizId, position: idx + 1, slideCount: slides.length, ...p, data: slimData(p.data) });
+        const q = await prisma.quiz.findUnique({ where: { id: args.quizId }, select: { version: true } });
+        return ok({ quizId: args.quizId, quizVersion: q?.version, position: idx + 1, slideCount: slides.length, ...p, data: slimData(p.data) });
       }),
   );
 }

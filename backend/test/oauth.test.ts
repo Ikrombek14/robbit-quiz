@@ -16,7 +16,7 @@ describe("OAuth metadata", () => {
     expect(as.body.authorization_endpoint).toBe("http://localhost:4000/oauth/authorize");
     expect(as.body.registration_endpoint).toBe("http://localhost:4000/oauth/register");
     expect(as.body.code_challenge_methods_supported).toEqual(["S256"]);
-    expect(as.body.scopes_supported).toEqual(["quiz:read", "quiz:write", "slide:delete"]);
+    expect(as.body.scopes_supported).toEqual(["quiz:read", "quiz:write"]);
 
     for (const p of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"]) {
       const pr = await request(app).get(p);
@@ -58,7 +58,7 @@ describe("Authorization code + PKCE", () => {
     expect(c.back.searchParams.get("state")).toBe("st-123");
     expect(c.tokens!.token_type).toBe("Bearer");
     expect(c.tokens!.expires_in).toBe(3600);
-    expect(c.tokens!.scope).toBe("quiz:read quiz:write slide:delete");
+    expect(c.tokens!.scope).toBe("quiz:read quiz:write");
     const stored = await prisma.oAuthToken.findMany();
     expect(stored).toHaveLength(2);
     expect(stored.map((s) => s.tokenHash)).toContain(sha256(c.tokens!.access_token));

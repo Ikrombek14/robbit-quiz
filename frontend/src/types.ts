@@ -133,6 +133,8 @@ export interface Quiz {
   mine?: boolean; // tahrirlash mumkin (admin, egasi yoki o'quv dasturdagi slayd uchun slaydchi)
   canDelete?: boolean; // butun slaydni o'chirish — faqat admin
   limitedRemove?: boolean; // boshqaning slaydi: bir saqlashda sahifa o'chirish cheklangan
+  version?: number; // har yozuvda +1 — saqlashda yuboriladi (boshqa joyda o'zgargan bo'lsa 409)
+  canRestore?: boolean; // versiyalar tarixidan tiklash — egasi va admin
   slides: Slide[];
 }
 

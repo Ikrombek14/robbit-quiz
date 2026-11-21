@@ -7,6 +7,7 @@ import { metadataHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/
 import type { OAuthMetadata, OAuthProtectedResourceMetadata } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { config } from "../config.js";
 import { oauthProvider, checkClientSecret, cleanupOAuth } from "./provider.js";
+import { expirePendingActions } from "./actions.js";
 import { SCOPES } from "./scopes.js";
 import { mcpResourceUrl } from "./security.js";
 
@@ -65,19 +66,28 @@ export function oauthRouter(): Router {
   router.use("/.well-known/oauth-protected-resource", metadataHandler(protectedResourceMetadata()));
   router.use("/.well-known/oauth-authorization-server", metadataHandler(oauthMetadata()));
 
-  router.use("/oauth/authorize", authorizationHandler({ provider: oauthProvider }));
-  router.use("/oauth/register", clientRegistrationHandler({ clientsStore: oauthProvider.clientsStore }));
-  router.use("/oauth/token", urlencoded, verifyClientSecret, tokenHandler({ provider: oauthProvider }));
-  router.use("/oauth/revoke", urlencoded, verifyClientSecret, revocationHandler({ provider: oauthProvider }));
+  // SDK'ning IP bo'yicha tezlik chegaralari (masalan ro'yxatdan o'tish — soatiga 20) prod'da
+  // ishlaydi; faqat avtomatik testlarda (bitta IP'dan yuzlab ulanish) o'chiriladi.
+  const rl = process.env.NODE_ENV === "test" ? { rateLimit: false as const } : {};
+  router.use("/oauth/authorize", authorizationHandler({ provider: oauthProvider, ...rl }));
+  router.use("/oauth/register", clientRegistrationHandler({ clientsStore: oauthProvider.clientsStore, ...rl }));
+  router.use("/oauth/token", urlencoded, verifyClientSecret, tokenHandler({ provider: oauthProvider, ...rl }));
+  router.use("/oauth/revoke", urlencoded, verifyClientSecret, revocationHandler({ provider: oauthProvider, ...rl }));
 
   return router;
 }
 
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+let expireTimer: ReturnType<typeof setInterval> | null = null;
 export function startOAuthCleanup(): void {
   if (cleanupTimer) return;
   cleanupTimer = setInterval(() => {
     cleanupOAuth().catch((e) => console.error("[oauth] tozalash xatosi:", e instanceof Error ? e.message : e));
   }, 60 * 60 * 1000);
   cleanupTimer.unref();
+  // Tasdiqlanmay qolgan MCP takliflari — muddati o'tganini belgilab, audit'ga yozamiz
+  expireTimer = setInterval(() => {
+    expirePendingActions().catch((e) => console.error("[mcp] muddat tozalash xatosi:", e instanceof Error ? e.message : e));
+  }, 5 * 60 * 1000);
+  expireTimer.unref();
 }

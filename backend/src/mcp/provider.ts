@@ -166,9 +166,10 @@ export const oauthProvider: OAuthServerProvider = {
     if (params.resource && !sameResource(params.resource.href, mcpResourceUrl())) {
       throw new InvalidTargetError("Noma'lum resurs");
     }
-    const requested = params.scopes && params.scopes.length > 0 ? params.scopes : [...SCOPES];
-    const unknown = requested.filter((s) => !(SCOPES as readonly string[]).includes(s));
-    if (unknown.length > 0) throw new InvalidScopeError(`Noma'lum scope: ${unknown.join(", ")}`);
+    // Noma'lum scope'lar (masalan endi yo'q "slide:delete") jim tashlab yuboriladi — client eski
+    // metadata'ni keshlagan bo'lsa ham ulanish buzilmasin. Bitta ham ma'lumi bo'lmasa — hammasi.
+    const known = parseScopes(params.scopes ?? []);
+    const requested: string[] = known.length > 0 ? known : [...SCOPES];
 
     const reqToken = randomToken("rqq");
     await prisma.oAuthAuthRequest.create({

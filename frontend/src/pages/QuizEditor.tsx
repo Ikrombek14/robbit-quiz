@@ -8,6 +8,7 @@ import { SLIDE_TEMPLATES, buildTemplateData, newContentSlideFromTemplate } from 
 import { pdfToPngBlobs } from "../pdf";
 import SlideScene from "../components/SlideScene";
 import SlideCanvasEditor from "../components/SlideCanvasEditor";
+import RevisionHistory from "../components/RevisionHistory";
 import Preview from "./Preview";
 
 // AI taklif qilgan savol (backend services/claude.ts bilan bir xil shakl)
@@ -67,6 +68,10 @@ export default function QuizEditor() {
   const [shuffle, setShuffle] = useState(false);
   // Boshqaning (o'quv dasturdagi) slaydi — sahifa o'chirish cheklangan, eslatma ko'rsatiladi
   const [limitedRemove, setLimitedRemove] = useState(false);
+  // Quiz versiyasi — saqlashda yuboriladi; shu orada boshqa joyda (Claude/MCP) o'zgargan bo'lsa server 409 qaytaradi
+  const [version, setVersion] = useState<number | undefined>(undefined);
+  const [canRestore, setCanRestore] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [slides, setSlides] = useState<Slide[]>([]);
   const [selected, setSelected] = useState(0);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -111,6 +116,8 @@ export default function QuizEditor() {
         setShuffle(r.quiz.shuffle);
         setSlides(r.quiz.slides);
         setLimitedRemove(r.quiz.limitedRemove === true);
+        setVersion(r.quiz.version);
+        setCanRestore(r.quiz.canRestore === true);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Xatolik"))
       .finally(() => setLoading(false));
@@ -391,9 +398,10 @@ export default function QuizEditor() {
           }).catch(() => {});
         }
       } else {
+        // version — boshqa joyda o'zgargan bo'lsa server rad etadi (409) va ish shu sahifada qoladi
         await api(`/quizzes/${id}`, {
           method: "PUT",
-          body: JSON.stringify({ title, description, shuffle, slides }),
+          body: JSON.stringify({ title, description, shuffle, slides, version }),
         });
       }
       // Saqlangach kutubxonaga o'tamiz
@@ -434,6 +442,11 @@ export default function QuizEditor() {
           <button className="btn btn-ghost" disabled={slides.length === 0} onClick={() => setShowPreview(true)}>
             <span className="material-symbols-outlined">play_arrow</span> Ko'rish
           </button>
+          {!isNew && canRestore && (
+            <button className="btn btn-ghost" onClick={() => setHistoryOpen(true)} title="Oldingi versiyalar va ularga qaytarish">
+              <span className="material-symbols-outlined">history</span> Tarix
+            </button>
+          )}
           <button className="btn" onClick={save} disabled={saving}>
             <span className="material-symbols-outlined">save</span> {saving ? "Saqlanmoqda…" : "Saqlash"}
           </button>
@@ -446,6 +459,7 @@ export default function QuizEditor() {
         </div>
       )}
       {error && <div className="error" style={{ margin: 16 }}>{error}</div>}
+      {historyOpen && id && <RevisionHistory quizId={id} onClose={() => setHistoryOpen(false)} />}
 
       <div className={`gs-editor ${tplOpen ? "with-tpl" : ""}`}>
         <input ref={fileRef} type="file" accept="application/pdf" onChange={importPdf} style={{ display: "none" }} />

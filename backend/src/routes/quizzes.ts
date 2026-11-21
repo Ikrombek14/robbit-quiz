@@ -4,6 +4,8 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireCanCreate, type AuthedRequest } from "../auth.js";
 import { isAdminUser, isLinkedQuiz, maxRemovable } from "../lib/quizAccess.js";
 import { parseSlide } from "../lib/slides.js";
+import { auditNote } from "../lib/audit.js";
+import { writeQuiz, replaceSlides, VersionConflictError, type QuizSnapshot } from "../lib/quizWrite.js";
 
 export const quizRouter = Router();
 quizRouter.use(requireAuth);
@@ -22,6 +24,9 @@ const quizSchema = z.object({
   description: z.string().optional().nullable(),
   shuffle: z.boolean().optional().default(false),
   slides: z.array(slideSchema).default([]),
+  // Muharrir ochilganda olgan versiya — boshqa joyda (Claude/MCP) o'zgargan bo'lsa saqlash
+  // rad etiladi (409). Yubormagan eski klient vaqtincha tekshiruvsiz qabul qilinadi.
+  version: z.number().int().min(1).optional(),
 });
 
 type SlideInput = z.infer<typeof slideSchema>;
@@ -97,6 +102,9 @@ quizRouter.get("/:id", async (req: AuthedRequest, res) => {
       title: quiz.title,
       description: quiz.description,
       shuffle: quiz.shuffle,
+      version: quiz.version,
+      // Versiyalar tarixidan tiklash — faqat egasi va admin
+      canRestore: admin || own,
       // Tahrirlash huquqi: admin, egasi, yoki o'quv dasturdagi slayd uchun slaydchi (canCreate)
       mine: admin || own || (linked && me?.canCreate === true),
       // Butun slaydni o'chirish — faqat admin
@@ -191,7 +199,7 @@ quizRouter.put("/:id", requireCanCreate, async (req: AuthedRequest, res) => {
     res.status(404).json({ error: "Quiz topilmadi" });
     return;
   }
-  const { title, description, shuffle, slides } = parsed.data;
+  const { title, description, shuffle, slides, version } = parsed.data;
   if (!admin && !own) {
     const removed = target._count.slides - slides.length;
     const limit = maxRemovable(target._count.slides);
@@ -202,29 +210,106 @@ quizRouter.put("/:id", requireCanCreate, async (req: AuthedRequest, res) => {
       return;
     }
   }
-  // O'chirish + qayta yaratish bitta tranzaksiyada — o'rtada xato bo'lsa sahifalar yo'qolmaydi
-  const [, quiz] = await prisma.$transaction([
-    prisma.slide.deleteMany({ where: { quizId: target.id } }),
-    prisma.quiz.update({
-      where: { id: target.id },
-      data: {
-        title,
-        description: description ?? null,
-        shuffle,
-        slides: { create: buildSlideCreate(slides) },
+  if (version === undefined) console.warn(`[quiz ${target.id}] PUT version'siz keldi (eski klient) — konflikt tekshiruvisiz saqlandi`);
+  const actor = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { id: true, name: true } });
+  // Versiya tekshiruvi + oldingi holatni tarixga yozish + slaydlarni almashtirish — bitta tranzaksiyada
+  let newVersion: number;
+  try {
+    const w = await writeQuiz(
+      target.id,
+      { expectedVersion: version, source: "editor", actor: { id: req.teacherId!, name: actor?.name }, summary: "Muharrirda saqlandi" },
+      async (tx) => {
+        await tx.quiz.update({ where: { id: target.id }, data: { title, description: description ?? null, shuffle } });
+        await replaceSlides(tx, target.id, slides.map((s) => ({ ...s, data: s.data ?? {}, type: s.type ?? null, notes: s.notes ?? null })));
       },
-      include: { slides: { orderBy: { order: "asc" } } },
-    }),
-  ]);
+    );
+    newVersion = w.version;
+  } catch (e) {
+    if (e instanceof VersionConflictError) {
+      res.status(409).json({
+        error: "Bu quiz boshqa joyda (masalan Claude orqali) o'zgartirildi. Ishingiz shu sahifada turibdi — kerak bo'lsa nusxa olib, sahifani qayta yuklang.",
+        code: "VERSION_CONFLICT",
+        currentVersion: e.currentVersion,
+      });
+      return;
+    }
+    throw e;
+  }
+  const quiz = await prisma.quiz.findUniqueOrThrow({ where: { id: target.id }, include: { slides: { orderBy: { order: "asc" } } } });
   res.json({
     quiz: {
       id: quiz.id,
       title: quiz.title,
       description: quiz.description,
       shuffle: quiz.shuffle,
+      version: newVersion,
       slides: quiz.slides.map(parseSlide),
     },
   });
+});
+
+// ---- Versiyalar tarixi (oxirgi 20 ta) — egasi va admin ----
+async function canRestore(teacherId: string, quizId: string): Promise<boolean> {
+  const [admin, quiz] = await Promise.all([
+    isAdminUser(teacherId),
+    prisma.quiz.findUnique({ where: { id: quizId }, select: { teacherId: true } }),
+  ]);
+  return !!quiz && (admin || quiz.teacherId === teacherId);
+}
+
+quizRouter.get("/:id/revisions", async (req: AuthedRequest, res) => {
+  const id = String(req.params.id);
+  if (!(await canRestore(req.teacherId!, id))) {
+    res.status(404).json({ error: "Quiz topilmadi" });
+    return;
+  }
+  const revs = await prisma.quizRevision.findMany({ where: { quizId: id }, orderBy: { createdAt: "desc" } });
+  res.json({
+    revisions: revs.map((r) => {
+      const snap = r.snapshot as unknown as QuizSnapshot;
+      return {
+        id: r.id,
+        version: r.version,
+        source: r.source,
+        actorName: r.actorName,
+        summary: r.summary,
+        createdAt: r.createdAt,
+        title: snap?.title ?? "",
+        slideCount: Array.isArray(snap?.slides) ? snap.slides.length : 0,
+      };
+    }),
+  });
+});
+
+quizRouter.post("/:id/revisions/:revId/restore", requireCanCreate, async (req: AuthedRequest, res) => {
+  const id = String(req.params.id);
+  if (!(await canRestore(req.teacherId!, id))) {
+    res.status(403).json({ error: "Versiyani faqat quiz egasi yoki admin tiklay oladi" });
+    return;
+  }
+  const rev = await prisma.quizRevision.findFirst({ where: { id: String(req.params.revId), quizId: id } });
+  if (!rev) {
+    res.status(404).json({ error: "Versiya topilmadi" });
+    return;
+  }
+  const snap = rev.snapshot as unknown as QuizSnapshot;
+  const actor = await prisma.teacher.findUnique({ where: { id: req.teacherId }, select: { name: true } });
+  const w = await writeQuiz(
+    id,
+    { source: "restore", actor: { id: req.teacherId!, name: actor?.name }, summary: `${rev.version}-versiyaga qaytarildi` },
+    async (tx) => {
+      await tx.quiz.update({ where: { id }, data: { title: snap.title, description: snap.description ?? null, shuffle: !!snap.shuffle } });
+      await replaceSlides(tx, id, snap.slides ?? []);
+    },
+  );
+  auditNote(res, {
+    action: "quiz.revision.restore",
+    entity: "Quiz",
+    entityId: id,
+    summary: `"${snap.title}" quizi ${rev.version}-versiyaga qaytarildi`,
+    details: { revisionId: rev.id, fromVersion: rev.version, newVersion: w.version },
+  });
+  res.json({ ok: true, version: w.version });
 });
 
 // O'chirish — FAQAT admin. Slaydchi (canCreate) tahrirlay oladi, lekin o'chira olmaydi,

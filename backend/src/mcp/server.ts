@@ -7,6 +7,7 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { oauthProvider } from "./provider.js";
 import { mcpResourceUrl, resourceMetadataUrl } from "./security.js";
 import { registerReadTools } from "./tools/read.js";
+import { registerWriteTools } from "./tools/write.js";
 import type { McpContext } from "./context.js";
 
 // ---- MCP endpoint: Streamable HTTP, /mcp ----
@@ -15,12 +16,18 @@ import type { McpContext } from "./context.js";
 
 const INSTRUCTIONS =
   "Robbit Quiz (robbitquiz.uz) — Robbit Akademiyasining o'zbek tilidagi jonli quiz platformasi. " +
-  "Bu server ustozning akkaunti nomidan uning kutubxonasidagi quiz va slaydlarni ko'rsatadi. " +
+  "Bu server ustozning akkaunti nomidan uning kutubxonasidagi quiz va slaydlarni ko'rsatadi, " +
+  "ruxsat bo'lsa yangi quiz/slayd qo'shish va slaydlarni tahrirlashni taklif qiladi. " +
+  "Har bir yozuvchi amal ikki bosqichli: tool taklif va preview qaytaradi, foydalanuvchi aniq rozi bo'lgandagina " +
+  "confirm_action chaqiriladi. Slayd yoki quizni o'chirish imkoni yo'q — buni faqat platformaning o'zida qilish mumkin. " +
   "Foydalanuvchi bilan o'zbek tilida (lotin) gaplashing.";
 
-export function buildMcpServer(ctx: McpContext): McpServer {
-  const server = new McpServer({ name: "robbit-quiz", version: "1.0.0" }, { instructions: INSTRUCTIONS });
+export function buildMcpServer(ctx: McpContext, scopes: string[] = []): McpServer {
+  const server = new McpServer({ name: "robbit-quiz", version: "2.0.0" }, { instructions: INSTRUCTIONS });
   registerReadTools(server, ctx);
+  // Yozish ruxsati berilmagan ulanishda yozuvchi tool'lar ro'yxatda ham ko'rinmaydi
+  // (hozirgi huquq baribir har chaqiruvda guard() da qayta tekshiriladi)
+  if (scopes.includes("quiz:write")) registerWriteTools(server, ctx);
   return server;
 }
 
@@ -59,7 +66,7 @@ export function mcpRouter(): Router {
       res.status(401).json({ jsonrpc: "2.0", error: { code: -32001, message: "Avtorizatsiya talab qilinadi" }, id: null });
       return;
     }
-    const server = buildMcpServer(ctx);
+    const server = buildMcpServer(ctx, req.auth?.scopes ?? []);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => {
       void transport.close();

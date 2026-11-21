@@ -12,7 +12,7 @@ interface ScopeView {
   label: string;
 }
 interface ConsentInfo {
-  client: { name: string; redirectHost: string };
+  client: { name: string; redirectHost: string; localApp?: boolean };
   requested: ScopeView[];
   granted: ScopeView[];
   eligible: boolean;
@@ -68,6 +68,12 @@ export default function OAuthConsent() {
             <p style={{ marginTop: 0 }}>
               <b>{info.client.name}</b> sizning akkauntingiz (<b>{teacher.name}</b>) nomidan quyidagilarni bajarmoqchi:
             </p>
+            {info.client.localApp && (
+              <div className="error" style={{ marginBottom: 12 }}>
+                ⚠️ Bu — kompyuteringizdagi dastur (masalan Claude Code). Uning nomini dasturning o'zi yozadi.
+                Ulanishni hozir o'zingiz boshlagan bo'lsangizgina ruxsat bering.
+              </div>
+            )}
             <ul style={{ margin: "0 0 12px", paddingLeft: 20 }}>
               {info.requested.map((s) => {
                 const given = info.granted.some((g) => g.scope === s.scope);

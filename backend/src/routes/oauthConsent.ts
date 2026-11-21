@@ -4,7 +4,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../auth.js";
 import { auditNote } from "../lib/audit.js";
 import { CODE_TTL_MS, revokeGrant } from "../mcp/provider.js";
-import { randomToken, sha256 } from "../mcp/security.js";
+import { randomToken, sha256, isLoopbackRedirect } from "../mcp/security.js";
 import { SCOPES, SCOPE_LABELS, parseScopes, allowedScopes, loadScopeSubject, type Scope } from "../mcp/scopes.js";
 import { cancelActionById, expirePendingActions } from "../mcp/actions.js";
 
@@ -45,7 +45,12 @@ oauthConsentRouter.get("/consent", async (req: AuthedRequest, res) => {
   const allowed = allowedScopes(subject);
   const granted = requested.filter((s) => allowed.includes(s));
   res.json({
-    client: { name: client?.name ?? "Noma'lum ilova", redirectHost: redirectHost(r.redirectUri) },
+    client: {
+      name: client?.name ?? "Noma'lum ilova",
+      redirectHost: redirectHost(r.redirectUri),
+      // Kompyuterdagi dastur (Claude Code va h.k.) — nomini o'zi yozadi, tasdiqlanmagan
+      localApp: isLoopbackRedirect(r.redirectUri),
+    },
     requested: requested.map(scopeView),
     granted: granted.map(scopeView),
     eligible: granted.length > 0,

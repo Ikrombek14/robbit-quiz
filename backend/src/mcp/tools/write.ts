@@ -3,9 +3,14 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { slideInputShape, slideChangesShape, slideInputSchema, LIMITS, QTYPES } from "../../lib/slideValidate.js";
 import { itemOpSchema, typeExtraShape, MAX_ITEM_OPS } from "../../lib/slideItems.js";
 import { guard, ok, run, McpToolError, type McpContext } from "../context.js";
+import { CATALOGS } from "../../lib/lessons.js";
+import { config } from "../../config.js";
+import { createUploadToken, UPLOAD_MAX_FILES, UPLOAD_MAX_BYTES } from "../upload.js";
 import {
   proposeCreateQuiz,
   proposeAddSlide,
+  proposeAddSlides,
+  proposeAttach,
   proposeUpdateSlide,
   proposeEditItems,
   proposeChangeType,
@@ -61,7 +66,8 @@ export function registerWriteTools(server: McpServer, ctx: McpContext): void {
       title: "Slayd qo'shish (tasdiq bilan)",
       description:
         "Quizga bitta slayd qo'shishni TAKLIF qiladi. kind=QUESTION + type (SINGLE, MULTIPLE, TRUE_FALSE, DROPDOWN, POLL, OPEN, " +
-        "FILL_BLANK, MATCH, REORDER) yoki kind=CONTENT (title, body, imageUrl). position — 1 dan boshlab o'rin " +
+        "FILL_BLANK, MATCH, REORDER) yoki kind=CONTENT (title, body, imageUrl; yoki pageImageUrl — to'liq ekranli sahifa rasmi). " +
+        "position — 1 dan boshlab o'rin " +
         "(berilmasa — oxiriga). Qoidalar: SINGLE/DROPDOWN — aynan 1 ta to'g'ri, MULTIPLE — kamida 1 ta, POLL — to'g'ri javobsiz, " +
         "variantlar 2–8 ta; TRUE_FALSE — statementIsTrue; FILL_BLANK — matndagi har bir ___ uchun blanks'da javoblar; " +
         "MATCH — 2–10 juftlik; REORDER — 2–10 element to'g'ri tartibda. " +
@@ -190,6 +196,84 @@ export function registerWriteTools(server: McpServer, ctx: McpContext): void {
         const me = await guard(ctx, "quiz:write");
         limitProposals(ctx);
         return ok(await proposeReorder(ctx, me, args));
+      }),
+  );
+
+  server.registerTool(
+    "add_slides",
+    {
+      title: "Bir nechta slayd qo'shish (bitta tasdiq bilan)",
+      description:
+        `Quizga bir yo'la 1–${LIMITS.maxSlidesPerCreate} ta slayd qo'shishni TAKLIF qiladi — hammasi bitta preview va bitta ` +
+        "confirm_action bilan, atomar (bittasi xato bo'lsa hech biri qo'shilmaydi). Slayd formati add_slide'dagi bilan bir xil. " +
+        "position — birinchi slayd o'rni (1 dan; berilmasa — oxiriga), qolganlari ketma-ket. Dars uchun savollar to'plamini " +
+        "yoki NotebookLM sahifalarini (CONTENT + pageImageUrl) qo'shishda shuni ishlating. " +
+        READ_FIRST + " " + CONFIRM_RULE,
+      inputSchema: {
+        quizId: z.string().min(1).max(100),
+        quizVersion: z.number().int().min(1).describe("get_quiz'dagi version"),
+        position: z.number().int().min(1).max(LIMITS.maxSlidesPerQuiz + 1).optional(),
+        slides: z.array(slideInputSchema).min(1).max(LIMITS.maxSlidesPerCreate),
+      },
+      annotations: PROPOSE,
+    },
+    (args) =>
+      run(async () => {
+        const me = await guard(ctx, "quiz:write");
+        limitProposals(ctx);
+        return ok(await proposeAddSlides(ctx, me, args));
+      }),
+  );
+
+  server.registerTool(
+    "attach_quiz_to_lesson",
+    {
+      title: "Quizni darsga biriktirish (tasdiq bilan)",
+      description:
+        "Quizni (slaydlar to'plamini) list_lessons'dagi darsga biriktirishni TAKLIF qiladi. Faqat quizi YO'Q darsga — " +
+        "boshqa quiz biriktirilgan bo'lsa almashtirib bo'lmaydi (bu faqat platformada). Quiz o'zingiz tahrirlay oladigan bo'lishi kerak. " +
+        CONFIRM_RULE,
+      inputSchema: {
+        catalog: z.enum(CATALOGS).describe("list_lessons'dagi catalog"),
+        lessonId: z.string().min(1).max(100),
+        quizId: z.string().min(1).max(100),
+      },
+      annotations: PROPOSE,
+    },
+    (args) =>
+      run(async () => {
+        const me = await guard(ctx, "quiz:write");
+        limitProposals(ctx);
+        return ok(await proposeAttach(ctx, me, args));
+      }),
+  );
+
+  server.registerTool(
+    "create_image_upload",
+    {
+      title: "Rasm yuklash havolasi",
+      description:
+        "Kompyuterdagi rasmlarni (PNG/JPEG/WebP, har biri 15MB gacha) Robbit'ga yuklash uchun 30 daqiqalik havola beradi " +
+        `(ko'pi bilan ${UPLOAD_MAX_FILES} ta fayl). Har bir fayl alohida so'rov: curl -F "file=@slide-01.png" <uploadUrl> → ` +
+        "{ url: \"/uploads/...\" }. Shu url'ni slaydda imageUrl yoki pageImageUrl sifatida ishlating. " +
+        "Yuklashning o'zi hech qaysi quizni o'zgartirmaydi. Havolani boshqalarga bermang.",
+      inputSchema: {},
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    () =>
+      run(async () => {
+        await guard(ctx, "quiz:write");
+        if (writeRateLimited(`upload-link:${ctx.grantId}`, 10)) throw new McpToolError("Juda ko'p havola so'raldi. Bir daqiqadan keyin qayta urinib ko'ring.");
+        const { token, expiresAt } = createUploadToken(ctx);
+        const uploadUrl = `${config.mcp.issuerUrl}/mcp-upload/${token}`;
+        return ok({
+          uploadUrl,
+          expiresAt: expiresAt.toISOString(),
+          maxFiles: UPLOAD_MAX_FILES,
+          maxFileBytes: UPLOAD_MAX_BYTES,
+          field: "file",
+          example: `curl -sS -F "file=@slide-01.png" "${uploadUrl}"`,
+        });
       }),
   );
 

@@ -13,6 +13,7 @@ import {
   QuizNotFoundError,
 } from "../lib/quizWrite.js";
 import { applyItemOps, changeType, type ItemOp, type TypeExtra } from "../lib/slideItems.js";
+import { CATALOG_LABELS, findLesson, attachQuizIfUnchanged, type Catalog } from "../lib/lessons.js";
 import {
   TYPE_LABELS,
   type QType,
@@ -41,7 +42,15 @@ import { randomToken, sha256, maskToken } from "./security.js";
 export const ACTION_TTL_MS = 10 * 60 * 1000;
 export const MAX_PENDING = 20;
 
-export type ActionTool = "create_quiz" | "add_slide" | "update_slide" | "edit_slide_items" | "change_slide_type" | "reorder_slides";
+export type ActionTool =
+  | "create_quiz"
+  | "add_slide"
+  | "add_slides"
+  | "update_slide"
+  | "edit_slide_items"
+  | "change_slide_type"
+  | "reorder_slides"
+  | "attach_quiz_to_lesson";
 
 // Bitta slaydni o'zgartiradigan amallar: tasdiqda yangi holat saqlangan parametrlardan QAYTA
 // hisoblanadi (versiya o'zgarmagani uchun natija taklifdagi bilan aynan bir xil bo'ladi).
@@ -181,16 +190,7 @@ export async function proposeCreateQuiz(
     if (!f) throw new McpToolError("Papka topilmadi (list_folders bilan tekshiring).");
     folderName = f.name;
   }
-  const built = slidesIn.map((s, i) =>
-    wrapValidation(() => {
-      try {
-        return buildSlide(s);
-      } catch (e) {
-        if (e instanceof SlideValidationError) throw new SlideValidationError(e.errors.map((m) => `${i + 1}-slayd: ${m}`));
-        throw e;
-      }
-    }),
-  );
+  const built = numbered(slidesIn);
   const lines = [`Yangi quiz yaratiladi: «${title}»`, `Papka: ${folderName}`, `Slaydlar soni: ${built.length}`];
   built.forEach((s, i) => lines.push(`\n${i + 1}. ${describeSlide(s)}`));
   return savePending(ctx, {
@@ -226,6 +226,87 @@ export async function proposeAddSlide(
     preview: [`Quiz: «${quiz.title}»`, `Joyi: ${where}`, describeSlide(built)].join("\n"),
     diff: { add: { position: pos, slide: built } },
     warnings: w ? [w] : [],
+  });
+}
+
+function numbered(slidesIn: SlideInput[]): BuiltSlide[] {
+  return slidesIn.map((s, i) =>
+    wrapValidation(() => {
+      try {
+        return buildSlide(s);
+      } catch (e) {
+        if (e instanceof SlideValidationError) throw new SlideValidationError(e.errors.map((m) => `${i + 1}-slayd: ${m}`));
+        throw e;
+      }
+    }),
+  );
+}
+
+export async function proposeAddSlides(
+  ctx: McpContext,
+  me: McpUser,
+  args: { quizId: string; quizVersion: number; slides: SlideInput[]; position?: number },
+) {
+  const quiz = await editableQuiz(me, args.quizId, args.quizVersion);
+  if (args.slides.length === 0) throw new McpToolError("Kamida bitta slayd bering.");
+  if (args.slides.length > LIMITS.maxSlidesPerCreate) throw new McpToolError(`Bir yo'la ko'pi bilan ${LIMITS.maxSlidesPerCreate} ta slayd.`);
+  const n = quiz._count.slides;
+  if (n + args.slides.length > LIMITS.maxSlidesPerQuiz) {
+    throw new McpToolError(`Quizda ko'pi bilan ${LIMITS.maxSlidesPerQuiz} ta slayd bo'lishi mumkin (hozir ${n}).`);
+  }
+  const built = numbered(args.slides);
+  const pos = args.position === undefined ? n + 1 : Math.min(Math.max(args.position, 1), n + 1);
+  const last = pos + built.length - 1;
+  const where = pos === n + 1 ? `oxiriga (${pos}–${last}-o'rinlar)` : `${pos}–${last}-o'rinlarga (keyingi slaydlar suriladi)`;
+  const questions = built.filter((s) => s.kind === "QUESTION").length;
+  const lines = [
+    `Quiz: «${quiz.title}» (hozir ${n} ta slayd)`,
+    `Qo'shiladi: ${built.length} ta slayd (${built.length - questions} kontent, ${questions} savol) — ${where}`,
+  ];
+  built.forEach((s, i) => lines.push(`\n${pos + i}. ${describeSlide(s)}`));
+  const w = liveWarning(quiz.id);
+  return savePending(ctx, {
+    tool: "add_slides",
+    params: { quizId: quiz.id, position: pos, slides: built },
+    quizId: quiz.id,
+    quizVersion: quiz.version,
+    summary: `«${quiz.title}» quiziga ${built.length} ta slayd qo'shish (${pos}-o'rindan)`,
+    preview: lines.join("\n"),
+    diff: { add: { position: pos, count: built.length, questions } },
+    warnings: w ? [w] : [],
+  });
+}
+
+export async function proposeAttach(ctx: McpContext, me: McpUser, args: { catalog: Catalog; lessonId: string; quizId: string }) {
+  const lesson = await findLesson(args.catalog, args.lessonId);
+  if (!lesson) throw new McpToolError("Dars topilmadi (list_lessons bilan tekshiring).");
+  const access = await quizAccess(me.id, args.quizId);
+  if (!access?.view) throw new McpToolError("Quiz topilmadi yoki uni ko'rish huquqingiz yo'q.");
+  if (!access.edit) throw new McpToolError("Faqat o'zingiz tahrirlay oladigan quizni darsga biriktirish mumkin.");
+  const quiz = await prisma.quiz.findUnique({ where: { id: args.quizId }, select: { id: true, title: true, _count: { select: { slides: true } } } });
+  if (!quiz) throw new McpToolError("Quiz topilmadi.");
+  let expected: string | null = null;
+  if (lesson.quizId) {
+    if (lesson.quizId === quiz.id) throw new McpToolError("Bu quiz shu darsga allaqachon biriktirilgan.");
+    const cur = await prisma.quiz.findUnique({ where: { id: lesson.quizId }, select: { title: true } });
+    if (cur) {
+      throw new McpToolError(
+        `Bu darsga allaqachon «${cur.title}» biriktirilgan. Biriktirishni almashtirish faqat platformaning o'zida ` +
+          "(o'quv dastur sahifasi). Mavjud quizga slayd qo'shish uchun add_slides ishlating.",
+      );
+    }
+    expected = lesson.quizId; // biriktirilgan quiz o'chirilgan — dars amalda bo'sh
+  }
+  const label = `${CATALOG_LABELS[lesson.catalog]} → ${lesson.group} → «${lesson.title}»`;
+  return savePending(ctx, {
+    tool: "attach_quiz_to_lesson",
+    params: { catalog: lesson.catalog, lessonId: lesson.id, quizId: quiz.id, expected },
+    quizId: quiz.id,
+    quizVersion: null,
+    summary: `«${quiz.title}» quizini «${lesson.title}» darsiga biriktirish`,
+    preview: [`Dars: ${label}`, `Biriktiriladi: «${quiz.title}» (${quiz._count.slides} ta slayd)`, "Darsning boshqa ma'lumotlari o'zgarmaydi."].join("\n"),
+    diff: { attach: { catalog: lesson.catalog, lessonId: lesson.id, quizId: quiz.id } },
+    warnings: [],
   });
 }
 
@@ -486,6 +567,12 @@ export async function confirmAction(ctx: McpContext, me: McpUser, actionId: stri
       await localizeOrFail(slides);
       const q = await createQuizWithSlides(me.id, p.title, p.description ?? null, p.folderId ?? null, slides);
       result = { quizId: q.id, quizVersion: 1, slideCount: slides.length };
+    } else if (a.tool === "attach_quiz_to_lesson") {
+      const access = await quizAccess(me.id, p.quizId);
+      if (!access?.edit) throw new McpToolError("Bu quizni tahrirlash huquqingiz yo'q.");
+      const done = await attachQuizIfUnchanged(p.catalog as Catalog, p.lessonId, p.quizId, p.expected ?? null);
+      if (!done) throw new McpToolError("Dars topilmadi yoki unga shu orada boshqa quiz biriktirildi. list_lessons bilan qayta tekshiring.");
+      result = { catalog: p.catalog, lessonId: p.lessonId, quizId: p.quizId };
     } else {
       const access = await quizAccess(me.id, a.quizId!);
       if (!access?.edit) throw new McpToolError("Bu quizni tahrirlash huquqingiz yo'q.");
@@ -496,6 +583,15 @@ export async function confirmAction(ctx: McpContext, me: McpUser, actionId: stri
           insertSlide(tx, a.quizId!, slide, p.position),
         );
         result = { slideId: w.result.id, position: w.result.position, quizVersion: w.version };
+      } else if (a.tool === "add_slides") {
+        const slides = p.slides as BuiltSlide[];
+        await localizeOrFail(slides);
+        const w = await writeQuiz(a.quizId!, { expectedVersion: a.quizVersion!, source: "mcp", actor, summary: a.summary }, async (tx) => {
+          const ids: string[] = [];
+          for (let i = 0; i < slides.length; i++) ids.push((await insertSlide(tx, a.quizId!, slides[i], p.position + i)).id);
+          return ids;
+        });
+        result = { slideIds: w.result, firstPosition: p.position, quizVersion: w.version };
       } else if (a.tool === "reorder_slides") {
         const w = await writeQuiz(a.quizId!, { expectedVersion: a.quizVersion!, source: "mcp", actor, summary: a.summary }, (tx) =>
           reorderSlides(tx, a.quizId!, p.order as string[]),

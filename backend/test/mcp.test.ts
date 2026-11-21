@@ -68,9 +68,9 @@ describe("O'qish tool'lari", () => {
     const c = await connect(app, t.jwt);
     const client = await mcpClient(c.tokens!.access_token);
     const { tools } = await client.listTools();
-    const read = ["get_quiz", "get_slide", "list_folders", "list_quizzes"];
+    const read = ["get_quiz", "get_slide", "list_folders", "list_lessons", "list_quizzes"];
     expect(tools.map((x) => x.name).sort()).toEqual(
-      [...read, "add_slide", "cancel_action", "change_slide_type", "confirm_action", "create_quiz", "edit_slide_items", "reorder_slides", "update_slide"].sort(),
+      [...read, "add_slide", "add_slides", "attach_quiz_to_lesson", "cancel_action", "change_slide_type", "confirm_action", "create_image_upload", "create_quiz", "edit_slide_items", "reorder_slides", "update_slide"].sort(),
     );
     for (const tool of tools) {
       expect(tool.annotations?.readOnlyHint).toBe(read.includes(tool.name));
@@ -84,7 +84,7 @@ describe("O'qish tool'lari", () => {
     const c = await connect(app, t.jwt);
     const client = await mcpClient(c.tokens!.access_token);
     const { tools } = await client.listTools();
-    expect(tools.map((x) => x.name).sort()).toEqual(["get_quiz", "get_slide", "list_folders", "list_quizzes"]);
+    expect(tools.map((x) => x.name).sort()).toEqual(["get_quiz", "get_slide", "list_folders", "list_lessons", "list_quizzes"]);
     await client.close();
   });
 

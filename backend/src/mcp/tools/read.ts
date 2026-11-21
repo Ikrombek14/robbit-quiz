@@ -4,6 +4,7 @@ import { prisma } from "../../prisma.js";
 import { quizAccess } from "../../lib/quizAccess.js";
 import { parseSlide } from "../../lib/slides.js";
 import { listItems } from "../../lib/slideItems.js";
+import { CATALOGS, CATALOG_LABELS, loadLessons, slideStats } from "../../lib/lessons.js";
 import { guard, ok, run, McpToolError, type McpContext } from "../context.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -212,6 +213,60 @@ export function registerReadTools(server: McpServer, ctx: McpContext): void {
           data: slimData(p.data),
           ...(items ? { items, itemsNote: `itemId'lar faqat quizVersion=${q?.version} uchun amal qiladi` } : {}),
         });
+      }),
+  );
+
+  server.registerTool(
+    "list_lessons",
+    {
+      title: "Darslar ro'yxati",
+      description:
+        "Platformadagi darslar (o'quv dasturlar, workshoplar, qo'shimcha darslar) va ularga biriktirilgan quiz (slaydlar to'plami). " +
+        "Har darsda: catalog + lessonId (attach_quiz_to_lesson uchun), guruh (fan/yosh/yil yoki modul), nomi va quiz tarkibi — " +
+        "kontent slaydlar va savollar soni. missing='quiz' — quiz biriktirilmagan darslar; missing='questions' — quizi bor, " +
+        "lekin bitta ham savol (QUESTION slayd) yo'q darslar. query — dars nomi yoki guruhida qidirish.",
+      inputSchema: {
+        catalog: z.enum(CATALOGS).optional().describe("curriculum | new_curriculum | workshop | extra (standart: hammasi)"),
+        query: z.string().max(200).optional(),
+        missing: z.enum(["quiz", "questions"]).optional(),
+        limit: z.number().int().min(1).max(200).optional().describe("Standart: 100"),
+        offset: z.number().int().min(0).optional(),
+      },
+      annotations: READ_ONLY,
+    },
+    (args) =>
+      run(async () => {
+        await guard(ctx, "quiz:read");
+        let rows = await loadLessons(args.catalog);
+        const q = args.query?.trim().toLowerCase();
+        if (q) rows = rows.filter((l) => l.title.toLowerCase().includes(q) || l.group.toLowerCase().includes(q));
+        const quizIds = [...new Set(rows.map((l) => l.quizId).filter((x): x is string => !!x))];
+        const [stats, quizzes] = await Promise.all([
+          slideStats(quizIds),
+          prisma.quiz.findMany({ where: { id: { in: quizIds } }, select: { id: true, title: true } }),
+        ]);
+        const titles = new Map(quizzes.map((x) => [x.id, x.title]));
+        // Biriktirilgan quiz o'chirilgan bo'lsa — dars quizsiz hisoblanadi
+        const view = rows.map((l) => {
+          const has = l.quizId && titles.has(l.quizId);
+          const st = has ? (stats.get(l.quizId!) ?? { content: 0, questions: 0 }) : null;
+          return {
+            catalog: l.catalog,
+            catalogLabel: CATALOG_LABELS[l.catalog],
+            lessonId: l.id,
+            group: l.group,
+            title: l.title,
+            order: l.order,
+            quiz: has ? { id: l.quizId, title: titles.get(l.quizId!), contentSlides: st!.content, questionSlides: st!.questions } : null,
+          };
+        });
+        const filtered =
+          args.missing === "quiz" ? view.filter((l) => !l.quiz)
+            : args.missing === "questions" ? view.filter((l) => l.quiz && l.quiz.questionSlides === 0)
+              : view;
+        const offset = args.offset ?? 0;
+        const limit = args.limit ?? 100;
+        return ok({ total: filtered.length, offset, lessons: filtered.slice(offset, offset + limit) });
       }),
   );
 }

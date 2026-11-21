@@ -8,6 +8,7 @@ import { oauthProvider } from "./provider.js";
 import { mcpResourceUrl, resourceMetadataUrl } from "./security.js";
 import { registerReadTools } from "./tools/read.js";
 import { registerWriteTools } from "./tools/write.js";
+import { mcpUploadRouter } from "./upload.js";
 import type { McpContext } from "./context.js";
 
 // ---- MCP endpoint: Streamable HTTP, /mcp ----
@@ -20,6 +21,9 @@ const INSTRUCTIONS =
   "ruxsat bo'lsa yangi quiz/slayd qo'shish va slaydlarni tahrirlashni taklif qiladi. " +
   "Har bir yozuvchi amal ikki bosqichli: tool taklif va preview qaytaradi, foydalanuvchi aniq rozi bo'lgandagina " +
   "confirm_action chaqiriladi. Slayd yoki quizni o'chirish imkoni yo'q — buni faqat platformaning o'zida qilish mumkin. " +
+  "Darslar (o'quv dasturlar, workshoplar) list_lessons'da; darsga yangi quiz biriktirish — attach_quiz_to_lesson. " +
+  "Tayyor slayd rasmlarini (masalan NotebookLM/PDF sahifalari) create_image_upload havolasi bilan yuklab, " +
+  "add_slides'da pageImageUrl bilan to'liq ekranli sahifa slaydi qilib qo'shing. " +
   "Foydalanuvchi bilan o'zbek tilida (lotin) gaplashing.";
 
 export function buildMcpServer(ctx: McpContext, scopes: string[] = []): McpServer {
@@ -43,6 +47,8 @@ function contextFrom(req: AuthedReq): McpContext | null {
 
 export function mcpRouter(): Router {
   const router = Router();
+  // Imzolangan havola orqali rasm yuklash (token URL'da — bearer kerak emas)
+  router.use(mcpUploadRouter());
 
   const bearer = requireBearerAuth({
     verifier: oauthProvider,

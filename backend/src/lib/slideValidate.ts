@@ -91,6 +91,14 @@ export const slideInputShape = {
   title: z.string().max(LIMITS.text).optional().describe("Sarlavha (CONTENT)"),
   body: z.string().max(LIMITS.body).optional().describe("Asosiy matn (CONTENT)"),
   imageUrl: z.string().max(LIMITS.url).optional().describe("Rasm: https://... (ixtiyoriy)"),
+  pageImageUrl: z
+    .string()
+    .max(LIMITS.url)
+    .optional()
+    .describe(
+      "CONTENT: butun slaydni egallaydigan sahifa rasmi (16:9, masalan NotebookLM/PDF slaydi) — PDF import bilan bir xil format. " +
+        "/uploads/... (create_image_upload) yoki https://... . Bunda title faqat ro'yxatdagi nom (ekranda ko'rinmaydi), body/imageUrl berilmaydi",
+    ),
   options: z.array(optionIn).max(LIMITS.maxOptions).optional().describe("Variantlar: SINGLE/MULTIPLE/DROPDOWN/POLL"),
   statementIsTrue: z.boolean().optional().describe("TRUE_FALSE: savoldagi da'vo to'g'rimi"),
   answers: z.array(z.string().max(LIMITS.option)).max(LIMITS.maxAnswers).optional().describe("OPEN: qabul qilinadigan javoblar (bo'sh bo'lsa — ustoz o'zi baholaydigan yozma savol)"),
@@ -140,6 +148,14 @@ export function buildSlide(input: SlideInput): BuiltSlide {
       if (input[f] !== undefined) errs.push(`CONTENT slaydda "${f}" maydoni bo'lmaydi (title, body, imageUrl ishlating)`);
     }
     const title = cleanText(input.title, LIMITS.text);
+    if (input.pageImageUrl !== undefined) {
+      // Sahifa slaydi (PDF import formati): rasm butun kanvasni egallaydi, title — faqat nom
+      if (input.body !== undefined || input.imageUrl !== undefined) errs.push("pageImageUrl bilan body/imageUrl berilmaydi");
+      const page = checkImageUrl(input.pageImageUrl);
+      if (!page) errs.push("pageImageUrl bo'sh");
+      if (errs.length) throw new SlideValidationError(errs);
+      return { kind: "CONTENT", type: null, data: { title, body: "", imageUrl: page }, notes, timeLimit: input.timeLimit ?? 20, points: 0 };
+    }
     const body = cleanText(input.body, LIMITS.body);
     const img = input.imageUrl ? checkImageUrl(input.imageUrl) : null;
     if (!title && !body && !img) errs.push("Kontent slaydda kamida sarlavha, matn yoki rasm bo'lishi kerak");
@@ -150,6 +166,7 @@ export function buildSlide(input: SlideInput): BuiltSlide {
   const type = input.type;
   if (!type) throw new SlideValidationError(["Savol uchun type kerak: " + QTYPES.join(", ")]);
   if (input.title !== undefined || input.body !== undefined) errs.push("Savolda title/body bo'lmaydi — savol matni uchun text ishlating");
+  if (input.pageImageUrl !== undefined) errs.push("pageImageUrl faqat CONTENT slayd uchun (savolda imageUrl ishlating)");
   const data: any = { text: cleanText(input.text, LIMITS.text) };
   if (input.imageUrl) data.imageUrl = checkImageUrl(input.imageUrl);
 
@@ -464,6 +481,7 @@ export function applyChanges(current: BuiltSlide, changes: SlideChanges): { slid
 export function describeSlide(s: BuiltSlide): string {
   const d = s.data ?? {};
   if (s.kind === "CONTENT") {
+    if (!Array.isArray(d.elements) && d.imageUrl && !d.body) return `Sahifa slaydi (to'liq ekran rasm)${d.title ? `: ${d.title}` : ""}`;
     const texts = Array.isArray(d.elements)
       ? d.elements.filter((e: any) => e?.type === "text").map((e: any) => e.text)
       : [d.title, d.body].filter(Boolean);

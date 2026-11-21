@@ -34,6 +34,9 @@ export const config = {
       "https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback"
     )
       .split(",").map((s) => s.trim()).filter(Boolean),
+    // Kompyuterdagi ilovalar (Claude Code, slayd zavodi) uchun http://localhost|127.0.0.1:<port>
+    // qaytish manzili (RFC 8252 loopback). Prod'da faqat shu bayroq bilan.
+    allowLoopback: process.env.MCP_ALLOW_LOOPBACK === "true",
   },
   adminEmails: (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean),
   // Robbit ERP (admin.robbit.uz) integratsiyasi — server-to-server, faqat o'qish

@@ -37,18 +37,23 @@ export function resourceMetadataUrl(): string {
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/**
- * redirect_uri ruxsat etilganmi: MCP_ALLOWED_REDIRECTS ro'yxatida ANIQ mos kelishi kerak.
- * Faqat dev'da (NODE_ENV != production) — qo'shimcha localhost/127.0.0.1 (istalgan port),
- * MCP Inspector kabi lokal vositalar uchun.
- */
-export function isRedirectAllowed(uri: string): boolean {
-  if (config.mcp.allowedRedirects.includes(uri)) return true;
-  if (config.production) return false;
+/** Kompyuterdagi ilovaning qaytish manzilimi (http://localhost|127.0.0.1|[::1]:<port>/...). */
+export function isLoopbackRedirect(uri: string): boolean {
   try {
     const u = new URL(uri);
-    return (u.protocol === "http:" || u.protocol === "https:") && LOOPBACK.has(u.hostname) && !u.username && !u.password;
+    return u.protocol === "http:" && LOOPBACK.has(u.hostname) && !u.username && !u.password && !u.hash;
   } catch {
     return false;
   }
+}
+
+/**
+ * redirect_uri ruxsat etilganmi: MCP_ALLOWED_REDIRECTS ro'yxatida ANIQ mos kelishi kerak.
+ * Qo'shimcha: loopback (Claude Code, MCP Inspector kabi kompyuterdagi ilovalar) — dev'da doim,
+ * prod'da faqat MCP_ALLOW_LOOPBACK=true bo'lsa. Rozilik sahifasida bunday ilova alohida belgilanadi.
+ */
+export function isRedirectAllowed(uri: string): boolean {
+  if (config.mcp.allowedRedirects.includes(uri)) return true;
+  if (config.production && !config.mcp.allowLoopback) return false;
+  return isLoopbackRedirect(uri);
 }

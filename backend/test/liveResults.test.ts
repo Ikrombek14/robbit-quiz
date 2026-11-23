@@ -76,8 +76,13 @@ describe("Jonli dars — umumiy natijalar", () => {
     await tick();
     host.emit("host:next", { pin }); // 1: SINGLE
     await tick();
+    const aliGot = once<any>(ali, "answer:received");
+    const valiGot = once<any>(vali, "answer:received");
     ali.emit("player:answer", { pin, answer: 0 }); // to'g'ri
     vali.emit("player:answer", { pin, answer: 1 }); // xato
+    // O'quvchiga O'Z tanlovi qaytadi (to'g'ri javob emas)
+    expect(await aliGot).toMatchObject({ correct: true, answer: "A" });
+    expect(await valiGot).toMatchObject({ correct: false, answer: "B" });
     await tick();
     host.emit("host:next", { pin }); // 2: POLL
     await tick();

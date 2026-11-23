@@ -53,7 +53,8 @@ export default function Join() {
   const [phase, setPhase] = useState<Phase>("form");
   const [error, setError] = useState("");
   const [slide, setSlide] = useState<PublicSlide | null>(null);
-  const [result, setResult] = useState<{ correct: boolean; points: number; score: number } | null>(null);
+  // answer — o'quvchining o'z javobi (server matn ko'rinishida qaytaradi)
+  const [result, setResult] = useState<{ correct: boolean; points: number; score: number; answer?: string } | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [endsAt, setEndsAt] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -97,7 +98,7 @@ export default function Join() {
       }
     };
     const onPractice = (d: { endsAt: number; now?: number }) => setPracticeEndsAt(toLocalEnds(d.endsAt, d.now));
-    const onReceived = (r: { correct: boolean; points: number; score: number }) => {
+    const onReceived = (r: { correct: boolean; points: number; score: number; answer?: string }) => {
       setResult(r);
       setScore(r.score);
     };
@@ -666,11 +667,13 @@ export default function Join() {
             <>
               <h1>🗳️ Qabul qilindi</h1>
               <p className="muted">Ovozingiz hisobga olindi</p>
+              {result?.answer && <MyAnswer text={result.answer} type={slide?.type} />}
             </>
           ) : result ? (
             result.correct ? (
               <>
                 <h1>✅ To'g'ri!</h1>
+                {result.answer && <MyAnswer text={result.answer} type={slide?.type} correct />}
                 {result.points > 0 && <p style={{ fontSize: 24 }}>+{result.points} ball</p>}
                 <p style={{ fontSize: 18 }}>
                   Umumiy ball: <strong>{result.score}</strong>
@@ -679,6 +682,7 @@ export default function Join() {
             ) : (
               <>
                 <h1>❌ Xato</h1>
+                {result.answer && <MyAnswer text={result.answer} type={slide?.type} correct={false} />}
                 <p className="muted">Keyingisida omad!</p>
                 <p style={{ fontSize: 18 }}>
                   Umumiy ball: <strong>{result.score}</strong>
@@ -707,15 +711,22 @@ export default function Join() {
     return (
       <div className="center-screen">
         <div className="card card-narrow center">
-          {result ? (
+          {result && slide?.type === "POLL" ? (
+            <>
+              <h1>🗳️ Ovozingiz</h1>
+              {result.answer && <MyAnswer text={result.answer} type="POLL" />}
+            </>
+          ) : result ? (
             result.correct ? (
               <>
                 <h1>✅ To'g'ri!</h1>
+                {result.answer && <MyAnswer text={result.answer} type={slide?.type} correct />}
                 {result.points > 0 && <p style={{ fontSize: 22 }}>+{result.points} ball</p>}
               </>
             ) : (
               <>
                 <h1>❌ Xato</h1>
+                {result.answer && <MyAnswer text={result.answer} type={slide?.type} correct={false} />}
                 {results?.correctText && <p className="muted">To'g'ri: {results.correctText}</p>}
               </>
             )
@@ -766,6 +777,37 @@ export default function Join() {
   }
 
   return null;
+}
+
+/* O'quvchining O'Z javobi (to'g'ri javob emas) — to'g'ri/xatoligi rangi bilan */
+function MyAnswer({ text, type, correct }: { text: string; type?: string | null; correct?: boolean }) {
+  const written = type === "OPEN" || type === "FILL_BLANK";
+  const tone = correct === undefined ? "neutral" : correct ? "ok" : "bad";
+  const c = {
+    neutral: { bg: "var(--surface-2)", border: "var(--border)", icon: "🗳️" },
+    ok: { bg: "var(--success-soft)", border: "var(--success)", icon: "✅" },
+    bad: { bg: "var(--danger-soft)", border: "var(--danger)", icon: "❌" },
+  }[tone];
+  const shown = text.length > 300 ? `${text.slice(0, 299)}…` : text;
+  return (
+    <div
+      style={{
+        margin: "10px 0 12px",
+        padding: "10px 14px",
+        borderRadius: 12,
+        textAlign: "left",
+        background: c.bg,
+        border: `2px solid ${c.border}`,
+      }}
+    >
+      <div className="muted" style={{ fontSize: 13, marginBottom: 2 }}>
+        {written ? "Sizning javobingiz" : "Sizning tanlovingiz"}
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 18, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {c.icon} {shown}
+      </div>
+    </div>
+  );
 }
 
 function swap<T>(arr: T[], i: number, j: number): T[] {

@@ -1532,7 +1532,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     if (Array.isArray(data.answer)) data.answer.forEach((id) => tally(String(id)));
     else if (typeof data.answer === "string" || typeof data.answer === "number") tally(String(data.answer));
 
-    socket.emit("answer:received", { correct, points, score: player.score });
+    // answer — o'quvchining O'Z javobi matn ko'rinishida ("Sizning tanlovingiz"), to'g'ri javob emas
+    socket.emit("answer:received", { correct, points, score: player.score, answer: answerToText(s, data.answer).slice(0, 500) });
     const conn = connectedPlayers(game);
     const answeredList = conn.filter((p) => p.answeredCurrent);
     io.to(game.hostSocketId).emit("question:progress", {

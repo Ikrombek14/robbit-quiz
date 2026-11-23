@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import Shell from "../components/Shell";
+import { ResultsMatrix, TelegramSummary, computeResults } from "../components/SessionResults";
 
 interface TestDetail {
   index: number;
@@ -19,12 +20,14 @@ interface PlayerRow {
   correctCount: number;
   totalAnswered: number;
   details?: TestDetail[];
+  answers?: { answered: number[]; correct: number[] } | null;
 }
 interface QStat {
   index: number;
   text: string;
   correct: number;
   total: number;
+  type?: string | null;
 }
 interface Report {
   id: string;
@@ -61,9 +64,24 @@ export default function ReportDetail() {
           <p className="muted">Yuklanmoqda…</p>
         ) : (
           <>
+            <h2 style={{ margin: "0 0 4px" }}>{report.title}</h2>
             <p className="muted">{new Date(report.playedAt).toLocaleString()} · PIN: {report.pin}</p>
 
-            <h3>🏆 Reyting</h3>
+            {report.players.length > 0 && computeResults(report).hasMatrix && (
+              <>
+                <h3>📊 Umumiy natijalar</h3>
+                <ResultsMatrix report={report} />
+              </>
+            )}
+
+            {report.players.length > 0 && (
+              <>
+                <h3 style={{ marginTop: 24 }}>✈️ Telegram uchun matn</h3>
+                <TelegramSummary report={report} />
+              </>
+            )}
+
+            <h3 style={{ marginTop: 24 }}>🏆 Reyting (ballar)</h3>
             <ol className="leaderboard">
               {report.players.map((p, i) => (
                 <li key={i}>

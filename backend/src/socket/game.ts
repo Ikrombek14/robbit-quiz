@@ -87,6 +87,7 @@ interface QStat {
   text: string;
   correct: number;
   total: number;
+  type?: string | null; // savol turi (POLL — to'g'ri javobsiz, natija foiziga kirmaydi)
 }
 interface GameState {
   pin: string;
@@ -503,6 +504,8 @@ async function persistGame(game: GameState) {
     correctCount: p.correctCount,
     totalAnswered: p.totalAnswered,
     details: JSON.stringify(p.testDetails ?? []),
+    // Jonli rejim: qaysi savollarga javob berdi / to'g'ri topdi (umumiy natijalar jadvali)
+    answers: JSON.stringify({ answered: p.answeredIndices ?? [], correct: p.correctIndices ?? [] }),
   }));
   try {
     if (game.recordId) {
@@ -585,6 +588,7 @@ function showCurrent(game: GameState) {
         text: s.data?.text ?? `Savol ${game.currentIndex + 1}`,
         correct: 0,
         total: 0,
+        type: s.type ?? null,
       });
     }
     // Savol taymeri yoqilgan bo'lsagina avtomatik hisoblash/yopilish
@@ -1336,6 +1340,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       clearGameTimer(game);
       game.status = "ended";
       await persistGame(game);
+      // Faqat host'ga: hisobot id'si — "Umumiy natijalar" tugmasi uchun
+      if (game.recordId) socket.emit("game:report", { recordId: game.recordId });
       io.to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game) });
       // MUHIM: tugagan o'yinni xotiradan o'chiramiz (host:end kabi) — aks holda
       // "Yakunlash" bilan tugatilgan har o'yin games Map'da qolib xotira shishardi.
@@ -1353,6 +1359,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     clearGameTimer(game);
     game.status = "ended";
     await persistGame(game);
+    if (game.recordId) socket.emit("game:report", { recordId: game.recordId });
     io.to(game.pin).emit("game:ended", { leaderboard: finalLeaderboard(game) });
     removeGame(game, "ended");
   });

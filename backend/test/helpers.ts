@@ -37,7 +37,7 @@ export async function resetDb(): Promise<void> {
   const [{ db }] = await prisma.$queryRaw<{ db: string }[]>`SELECT current_database() AS db`;
   if (!db.endsWith("_test")) throw new Error(`Test bazasi emas: ${db}`);
   await prisma.$executeRawUnsafe(
-    `TRUNCATE "McpPendingAction","QuizRevision","OAuthToken","OAuthCode","OAuthGrant","OAuthAuthRequest","OAuthClient","Slide","Quiz","Folder","LessonPlan","NewCurriculumLesson","Workshop","ExtraLesson","AuditLog","Teacher" CASCADE`,
+    `TRUNCATE "McpPendingAction","QuizRevision","OAuthToken","OAuthCode","OAuthGrant","OAuthAuthRequest","OAuthClient","Slide","Quiz","Folder","LessonPlan","NewCurriculumLesson","Workshop","ExtraLesson","GameRecord","AuditLog","Teacher" CASCADE`,
   );
 }
 

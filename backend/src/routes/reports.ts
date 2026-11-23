@@ -53,9 +53,17 @@ reportRouter.get("/:id", async (req: AuthedRequest, res) => {
       players: game.players.map((p) => {
         let details: unknown = [];
         try {
-          details = JSON.parse((p as { details?: string }).details ?? "[]");
+          details = JSON.parse(p.details ?? "[]");
         } catch {
           details = [];
+        }
+        // Jonli rejim: savollar bo'yicha javoblar (eski hisobotlarda yo'q → null)
+        let answers: { answered: number[]; correct: number[] } | null = null;
+        try {
+          const a = JSON.parse(p.answers ?? "{}");
+          if (Array.isArray(a?.answered) && Array.isArray(a?.correct)) answers = { answered: a.answered, correct: a.correct };
+        } catch {
+          answers = null;
         }
         return {
           nickname: p.nickname,
@@ -63,6 +71,7 @@ reportRouter.get("/:id", async (req: AuthedRequest, res) => {
           correctCount: p.correctCount,
           totalAnswered: p.totalAnswered,
           details,
+          answers,
         };
       }),
     },

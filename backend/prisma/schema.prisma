@@ -195,6 +195,7 @@ model GamePlayerRecord {
   correctCount  Int        @default(0)
   totalAnswered Int        @default(0)
   details       String     @default("[]") // TEST rejimi: har savol bo'yicha JSON [{index,text,answer,correct,timeMs,correctAns}]
+  answers       String     @default("{}") // JONLI rejim: {"answered":[slayd indekslari],"correct":[...]} — umumiy natijalar jadvali
 
   @@index([gameId])
 }

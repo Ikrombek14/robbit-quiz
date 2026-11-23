@@ -130,6 +130,8 @@ export default function Host() {
   const [progress, setProgress] = useState({ answered: 0, total: 0 });
   const [answeredNames, setAnsweredNames] = useState<string[]>([]);
   const [results, setResults] = useState<Results | null>(null);
+  // Yakunda saqlangan hisobot id'si (faqat host'ga keladi) — "Umumiy natijalar" tugmasi
+  const [reportId, setReportId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [canRestart, setCanRestart] = useState(false); // dars yopilib qolgan — "Qayta boshlash" tugmasi
 
@@ -351,6 +353,7 @@ export default function Host() {
       lastPracTick.current = 0;
       pracEndPlayed.current = false;
     };
+    const onReport = (d: { recordId: string }) => setReportId(d.recordId);
     const onEnded = (d: { leaderboard: LeaderRow[] }) => {
       setResults({ leaderboard: d.leaderboard });
       setEndsAt(0);
@@ -374,6 +377,7 @@ export default function Host() {
     socket.on("timer:update", onTimer);
     socket.on("slide:results", onResults);
     socket.on("game:ended", onEnded);
+    socket.on("game:report", onReport);
     socket.on("host:flag", onFlag);
     socket.on("practice:timer", onPractice);
     return () => {
@@ -384,6 +388,7 @@ export default function Host() {
       socket.off("timer:update", onTimer);
       socket.off("slide:results", onResults);
       socket.off("game:ended", onEnded);
+      socket.off("game:report", onReport);
       socket.off("host:flag", onFlag);
       socket.off("test:progress", onTestProg);
       socket.off("practice:timer", onPractice);
@@ -1178,6 +1183,7 @@ export default function Host() {
         anonymous={settings.anonymous}
         serious={settings.serious}
         onBack={() => navigate(-1)}
+        onResults={reportId ? () => navigate(`/sessions/${reportId}`) : undefined}
       />
     );
 
@@ -1478,13 +1484,23 @@ function Podium({
   anonymous,
   serious,
   onBack,
+  onResults,
 }: {
   rows: LeaderRow[];
   anonymous?: boolean;
   serious?: boolean;
   onBack: () => void;
+  onResults?: () => void; // hisobot saqlangan bo'lsa — sessiya sahifasidagi umumiy natijalar
 }) {
   const nm = (i: number, name: string) => (anonymous ? `O'quvchi ${i + 1}` : name);
+  const actions = (
+    <div className="start-bar" style={{ width: "100%", gap: 10 }}>
+      {onResults && (
+        <button className="btn btn-lg" onClick={onResults}>📊 Umumiy natijalar</button>
+      )}
+      <button className={onResults ? "btn btn-lg btn-ghost" : "btn btn-lg"} onClick={onBack}>Panelga qaytish</button>
+    </div>
+  );
 
   // Jiddiy rejim — gamifikatsiyasiz oddiy ro'yxat
   if (serious)
@@ -1502,9 +1518,7 @@ function Podium({
           ))}
           {rows.length === 0 && <li><span>Natija yo'q</span></li>}
         </ol>
-        <div className="start-bar" style={{ width: "100%" }}>
-          <button className="btn btn-lg" onClick={onBack}>Panelga qaytish</button>
-        </div>
+        {actions}
       </div>
     );
 
@@ -1548,9 +1562,7 @@ function Podium({
         </ol>
       )}
 
-      <div className="start-bar" style={{ width: "100%" }}>
-        <button className="btn btn-lg" onClick={onBack}>Panelga qaytish</button>
-      </div>
+      {actions}
     </div>
   );
 }

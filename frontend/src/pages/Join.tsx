@@ -54,6 +54,8 @@ export default function Join() {
   const [error, setError] = useState("");
   const [slide, setSlide] = useState<PublicSlide | null>(null);
   // answer — o'quvchining o'z javobi (server matn ko'rinishida qaytaradi)
+  // O'quvchi tanlagan variant(lar) — ekrandagi harfi bilan ("B) Toshkent"), o'zi aniqlaydi
+  const [myPick, setMyPick] = useState("");
   const [result, setResult] = useState<{ correct: boolean; points: number; score: number; answer?: string } | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [endsAt, setEndsAt] = useState(0);
@@ -86,6 +88,7 @@ export default function Join() {
     const onSlide = (s: PublicSlide) => {
       setSlide(s);
       setResult(null);
+      setMyPick("");
       setResults(null);
       setEndsAt(toLocalEnds(s.endsAt, s.now));
       setPracticeEndsAt(0); // yangi slaydda amaliyot taymeri tugaydi
@@ -314,6 +317,20 @@ export default function Join() {
   }
 
   function submit(answer: unknown) {
+    // Variantli savol: tanlangan variant(lar)ni ekrandagi harfi bilan eslab qolamiz
+    const opts = slide?.options ?? [];
+    if (opts.length > 0) {
+      const ids = (Array.isArray(answer) ? answer : [answer]).map(String);
+      setMyPick(
+        ids
+          .map((id) => {
+            const i = opts.findIndex((o) => o.id === id);
+            return i < 0 ? "" : `${String.fromCharCode(65 + i)}) ${opts[i].text || "(rasm)"}`;
+          })
+          .filter(Boolean)
+          .join(", "),
+      );
+    }
     getSocket().emit("player:answer", { pin, answer });
     setPhase("answered");
   }
@@ -667,13 +684,13 @@ export default function Join() {
             <>
               <h1>🗳️ Qabul qilindi</h1>
               <p className="muted">Ovozingiz hisobga olindi</p>
-              {result?.answer && <MyAnswer text={result.answer} type={slide?.type} />}
+              {(myPick || result?.answer) && <MyAnswer text={myPick || result!.answer!} type={slide?.type} />}
             </>
           ) : result ? (
             result.correct ? (
               <>
                 <h1>✅ To'g'ri!</h1>
-                {result.answer && <MyAnswer text={result.answer} type={slide?.type} correct />}
+                {(myPick || result.answer) && <MyAnswer text={myPick || result.answer!} type={slide?.type} correct />}
                 {result.points > 0 && <p style={{ fontSize: 24 }}>+{result.points} ball</p>}
                 <p style={{ fontSize: 18 }}>
                   Umumiy ball: <strong>{result.score}</strong>
@@ -682,7 +699,7 @@ export default function Join() {
             ) : (
               <>
                 <h1>❌ Xato</h1>
-                {result.answer && <MyAnswer text={result.answer} type={slide?.type} correct={false} />}
+                {(myPick || result.answer) && <MyAnswer text={myPick || result.answer!} type={slide?.type} correct={false} />}
                 <p className="muted">Keyingisida omad!</p>
                 <p style={{ fontSize: 18 }}>
                   Umumiy ball: <strong>{result.score}</strong>
@@ -690,7 +707,10 @@ export default function Join() {
               </>
             )
           ) : (
-            <h2>⏳ Javob qabul qilindi</h2>
+            <>
+              <h2>⏳ Javob qabul qilindi</h2>
+              {myPick && <MyAnswer text={myPick} type={slide?.type} />}
+            </>
           )}
           <p className="muted" style={{ marginTop: 8 }}>Keyingi savolni kuting…</p>
           {/* Kutish zerikarli bo'lmasin — qiziqarli fakt (har 8 soniyada almashadi) */}
@@ -714,19 +734,19 @@ export default function Join() {
           {result && slide?.type === "POLL" ? (
             <>
               <h1>🗳️ Ovozingiz</h1>
-              {result.answer && <MyAnswer text={result.answer} type="POLL" />}
+              {(myPick || result.answer) && <MyAnswer text={myPick || result.answer!} type="POLL" />}
             </>
           ) : result ? (
             result.correct ? (
               <>
                 <h1>✅ To'g'ri!</h1>
-                {result.answer && <MyAnswer text={result.answer} type={slide?.type} correct />}
+                {(myPick || result.answer) && <MyAnswer text={myPick || result.answer!} type={slide?.type} correct />}
                 {result.points > 0 && <p style={{ fontSize: 22 }}>+{result.points} ball</p>}
               </>
             ) : (
               <>
                 <h1>❌ Xato</h1>
-                {result.answer && <MyAnswer text={result.answer} type={slide?.type} correct={false} />}
+                {(myPick || result.answer) && <MyAnswer text={myPick || result.answer!} type={slide?.type} correct={false} />}
                 {results?.correctText && <p className="muted">To'g'ri: {results.correctText}</p>}
               </>
             )

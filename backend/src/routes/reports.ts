@@ -51,6 +51,8 @@ reportRouter.get("/:id", async (req: AuthedRequest, res) => {
       playedAt: game.playedAt,
       totalSlides: game.totalSlides,
       groupName: game.groupName,
+      // Baholash funksiyasidan oldingi darslarda baho yo'q (grades = "{}")
+      hasGrades: game.players.some((p) => (p.grades ?? "{}").trim() !== "{}"),
       questionStats,
       players: game.players.map((p) => {
         let details: unknown = [];

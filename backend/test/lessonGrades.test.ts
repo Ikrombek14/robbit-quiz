@@ -151,4 +151,17 @@ describe("Jonli dars — baholash", () => {
     expect(JSON.stringify(pr.body)).not.toContain("Ali");
     expect((await request(app).get(`/api/public/parent/notatoken`)).status).toBe(404);
   });
+
+  it("baholashdan oldingi darslar (grades = {}) reytingga kirmaydi", async () => {
+    const t = await makeTeacher();
+    const g = await prisma.gameRecord.create({
+      data: { teacherId: t.id, quizId: "q", title: "Eski", pin: "1", players: { create: [{ nickname: "A", score: 10 }] } },
+    });
+    const auth = { Authorization: `Bearer ${t.jwt}` };
+    expect((await request(app).get(`/api/reports/${g.id}`).set(auth)).body.report.hasGrades).toBe(false);
+    const month = new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 7);
+    const m = await request(app).get(`/api/grades/monthly?month=${month}`).set(auth);
+    expect(m.body.students).toEqual([]);
+    expect(m.body.lessons).toEqual([]);
+  });
 });

@@ -42,6 +42,7 @@ interface Report {
   playedAt: string;
   totalSlides: number;
   groupName: string | null;
+  hasGrades?: boolean;
   questionStats: QStat[];
   players: PlayerRow[];
 }
@@ -73,7 +74,7 @@ export default function ReportDetail() {
             <h2 style={{ margin: "0 0 4px" }}>{report.title}</h2>
             <p className="muted">{new Date(report.playedAt).toLocaleString()} · PIN: {report.pin}</p>
 
-            {report.players.length > 0 && (
+            {report.players.length > 0 && report.hasGrades && (
               <>
                 <h3>⭐ Dars baholari</h3>
                 <LessonGradesTable reportId={report.id} players={report.players} groupName={report.groupName} />

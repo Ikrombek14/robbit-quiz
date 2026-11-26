@@ -39,6 +39,13 @@ export async function monthlyStats(teacherId: string, month: string, group: stri
     orderBy: { playedAt: "asc" },
     include: { players: { select: { nickname: true, grades: true } } },
   });
+  // Baholash funksiyasidan oldingi darslarda grades = "{}" — ular reytingga kirmaydi
+  // (aks holda davomat/odob standart 100 bo'lib, soxta 100% chiqadi)
+  const graded = (raw: string) => !!raw && raw.trim() !== "{}";
+  for (let i = games.length - 1; i >= 0; i--) {
+    games[i].players = games[i].players.filter((p) => graded(p.grades));
+    if (!games[i].players.length) games.splice(i, 1);
+  }
   const lessons: LessonRef[] = games.map((g) => ({ id: g.id, title: g.title, playedAt: g.playedAt }));
 
   const map = new Map<string, { nickname: string; byGame: Map<string, Scores> }>();

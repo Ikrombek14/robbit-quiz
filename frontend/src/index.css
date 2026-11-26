@@ -1854,7 +1854,8 @@ img, svg, video { max-width: 100%; height: auto; }
 
 /* ===== Dars baholash paneli (Host ekranining har sahifasida) ===== */
 .grades-fab {
-  position: fixed; right: 16px; bottom: 16px; z-index: 900;
+  /* O'ng chet, vertikal o'rtada: pastki panel (Keyingi/Oldingi) va yuqori tugmalarni to'smaydi */
+  position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 900;
   display: inline-flex; align-items: center; gap: 8px;
   min-height: 56px; padding: 0 20px; border-radius: 999px; border: none; cursor: pointer;
   background: var(--primary); color: var(--on-primary, #fff); font-weight: 800; font-size: 16px;

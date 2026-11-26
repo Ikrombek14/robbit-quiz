@@ -156,7 +156,7 @@ export default function MonthlyGrades() {
                 </thead>
                 <tbody>
                   {students.map((s, i) => (
-                    <tr key={s.key} className={i >= students.length - lag ? "lagging" : ""}>
+                    <tr key={s.key} className={i >= students.length - lag && s.place > 1 ? "lagging" : ""}>
                       <td style={{ fontWeight: 600 }}>{s.nickname}</td>
                       <td style={{ fontWeight: 800 }}>{s.place}</td>
                       <td style={{ fontWeight: 800, color: pctColor(s.pct) }}>{s.pct}%</td>

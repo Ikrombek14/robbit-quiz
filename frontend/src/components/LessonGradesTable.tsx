@@ -128,7 +128,7 @@ export default function LessonGradesTable({
             <tbody>
               {rows.map((p, i) => (
                 <Fragment key={p.id}>
-                  <tr className={i >= rows.length - lag ? "lagging" : ""}>
+                  <tr className={i >= rows.length - lag && p.place > 1 ? "lagging" : ""}>
                     <td style={{ fontWeight: 600 }}>{p.nickname}</td>
                     {COLS.map((c) => (
                       <td key={c.key}>

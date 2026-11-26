@@ -14,6 +14,8 @@ import PlayShared from "./pages/PlayShared";
 import HostShare from "./pages/HostShare";
 import Reports from "./pages/Reports";
 import ReportDetail from "./pages/ReportDetail";
+import MonthlyGrades from "./pages/MonthlyGrades";
+import ParentView from "./pages/ParentView";
 import Curriculum from "./pages/Curriculum";
 import Workshops from "./pages/Workshops";
 import Practice from "./pages/Practice";
@@ -114,6 +116,7 @@ export default function App() {
       <Route path="/join" element={<Join />} />
       <Route path="/s/:id" element={<PlayShared />} />
       <Route path="/h/:id" element={<HostShare />} />
+      <Route path="/ota-ona/:token" element={<ParentView />} />
       <Route path="/admin" element={<AdminLogin />} />
       <Route path="/login" element={<AdminLogin />} />
       <Route path="/register" element={<Register />} />
@@ -129,6 +132,7 @@ export default function App() {
       <Route path="/host/:quizId" element={<Protected panel><Host /></Protected>} />
       <Route path="/sessions" element={<Protected><Reports /></Protected>} />
       <Route path="/sessions/:id" element={<Protected><ReportDetail /></Protected>} />
+      <Route path="/grades" element={<Protected><MonthlyGrades /></Protected>} />
       <Route path="/curriculum" element={<Protected><Curriculum /></Protected>} />
       <Route path="/workshops" element={<Protected panel><Workshops /></Protected>} />
       <Route path="/practice" element={<Protected panel><Practice /></Protected>} />

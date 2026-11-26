@@ -41,6 +41,7 @@ const NAV: NavItem[] = [
   { key: "stats", label: "Statistika", icon: "leaderboard", path: "/stats", mobileHide: false, show: canStaff },
   { key: "tier-application", label: "Toifa oshirish", icon: "military_tech", path: "/tier-application", mobileHide: true, show: canApproved },
   { key: "sessions", label: "Sessiyalar", icon: "play_circle", path: "/sessions", mobileHide: true, show: canApproved },
+  { key: "grades", label: "Oylik reyting", icon: "star", path: "/grades", mobileHide: true, show: canApproved },
   { key: "guide", label: "Yo'riqnoma", icon: "description", path: "/guide", mobileHide: false, show: canPanel },
   { key: "teachers", label: "O'qituvchilar", icon: "group", path: "/teachers", mobileHide: true, show: canStaff },
   { key: "users", label: "Foydalanuvchilar", icon: "manage_accounts", path: "/users", mobileHide: true, show: isAdmin },

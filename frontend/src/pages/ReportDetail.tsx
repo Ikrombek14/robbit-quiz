@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import Shell from "../components/Shell";
 import { ResultsMatrix, TelegramSummary, computeResults } from "../components/SessionResults";
+import LessonGradesTable from "../components/LessonGradesTable";
+import type { Grades, Scores } from "../components/GradesPanel";
 
 interface TestDetail {
   index: number;
@@ -15,7 +17,10 @@ interface TestDetail {
   section?: string; // test | yozma | amaliy
 }
 interface PlayerRow {
+  id: string;
   nickname: string;
+  grades: Grades;
+  scores: Scores;
   score: number;
   correctCount: number;
   totalAnswered: number;
@@ -36,6 +41,7 @@ interface Report {
   mode?: string;
   playedAt: string;
   totalSlides: number;
+  groupName: string | null;
   questionStats: QStat[];
   players: PlayerRow[];
 }
@@ -66,6 +72,13 @@ export default function ReportDetail() {
           <>
             <h2 style={{ margin: "0 0 4px" }}>{report.title}</h2>
             <p className="muted">{new Date(report.playedAt).toLocaleString()} · PIN: {report.pin}</p>
+
+            {report.players.length > 0 && (
+              <>
+                <h3>⭐ Dars baholari</h3>
+                <LessonGradesTable reportId={report.id} players={report.players} groupName={report.groupName} />
+              </>
+            )}
 
             {report.players.length > 0 && computeResults(report).hasMatrix && (
               <>

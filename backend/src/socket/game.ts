@@ -4,6 +4,7 @@ import path from "path";
 import { prisma } from "../prisma.js";
 import { verifyToken } from "../auth.js";
 import { config } from "../config.js";
+import { type Grades, emptyGrades, parseGrades, computeScores } from "../services/grades.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -43,6 +44,11 @@ interface GamePlayer {
   // TEST rejimi: shu o'quvchiga tushgan savollar (slayd indekslari, tasodifiy tanlov va
   // tartib). Bo'sh = hamma uchun umumiy game.questionIndices (eski xulq).
   testOrder?: number[];
+  // Dars baholari (davomat/uy vazifasi/amaliyot/odob) — ustoz belgilaydi. Eski snapshot'larda yo'q.
+  grades?: Grades;
+  // JONLI rejim: savol indeksi → shu savol uchun quiz bali (max 100). To'g'ri javob
+  // tezlikka qarab 50–100, xato 0.
+  quizPts?: Record<string, number>;
 }
 interface TestDetail {
   index: number; // savol tartib raqami (test ichida)
@@ -114,6 +120,8 @@ interface GameState {
   settings: GameSettings;
   banned: Set<string>; // kick qilingan o'quvchilar (nickKey) — qayta kira olmasin
   examSections: boolean; // imtihon rejimi (bo'limlardan tasodifiy tanlov) shu host uchun ruxsat etilganmi
+  // Baholashdagi oxirgi o'zgarishlar (bekor qilish uchun) — faqat xotirada, restart'da yo'qoladi
+  gradeUndo?: { playerId: string; prev: Grades }[];
 }
 
 const games = new Map<string, GameState>();
@@ -493,6 +501,32 @@ function checkTestCorrect(s: LoadedSlide, answer: any): boolean {
 // Natijani hisobotga yozadi. Bir o'yin BIR NECHA marta saqlanishi mumkin (host uzoq
 // uzilganda oraliq saqlash, keyin dars davom etib yakuniy saqlash) — shunda mavjud
 // yozuv YANGILANADI (recordId), dublikat hisobot paydo bo'lmaydi.
+// O'quvchining dars baholari + quiz bali (har savolga max 100).
+// JONLI: faqat ko'rsatilgan (stats'ga tushgan) va POLL bo'lmagan savollar hisobga olinadi.
+// TEST: shu o'quvchiga tushgan savollar soni × 100, to'g'ri javob = 100.
+function gradesOf(game: GameState, p: GamePlayer): Grades {
+  const g = parseGrades(p.grades ?? emptyGrades());
+  if (game.mode === "TEST") {
+    const n = playerQuestions(game, p).length;
+    g.quizMax = n * 100;
+    g.quizSum = Math.min(p.correctCount, n) * 100;
+  } else {
+    const shown = [...game.stats.values()].filter((q) => q.type !== "POLL").map((q) => String(q.index));
+    g.quizMax = shown.length * 100;
+    g.quizSum = shown.reduce((a, i) => a + (p.quizPts?.[i] ?? 0), 0);
+  }
+  return g;
+}
+
+// Host'dagi baholash paneli uchun ro'yxat: barcha o'quvchilar (uzilganlar ham — kech
+// kelgan/chiqib ketgan bola ham baholanadi), ballar bilan.
+function gradeRows(game: GameState) {
+  return [...game.players.values()].map((p) => {
+    const g = gradesOf(game, p);
+    return { id: p.playerId, nickname: p.nickname, avatar: p.avatar, connected: p.connected, grades: g, scores: computeScores(g) };
+  });
+}
+
 async function persistGame(game: GameState) {
   if (game.saved) return;
   game.saved = true;
@@ -506,6 +540,7 @@ async function persistGame(game: GameState) {
     details: JSON.stringify(p.testDetails ?? []),
     // Jonli rejim: qaysi savollarga javob berdi / to'g'ri topdi (umumiy natijalar jadvali)
     answers: JSON.stringify({ answered: p.answeredIndices ?? [], correct: p.correctIndices ?? [] }),
+    grades: JSON.stringify(gradesOf(game, p)),
   }));
   try {
     if (game.recordId) {
@@ -1423,6 +1458,63 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     if (game.mode === "TEST") emitTestProgress(game);
   });
 
+  // ---- Dars baholari (davomat, uy vazifasi, amaliyot, odob) ----
+  // Ustoz istalgan slaydda (lobby'da ham) panelni ochadi; har amal javobida yangi ro'yxat qaytadi.
+  socket.on("host:grades", (data: { pin: string }, cb?: (r: unknown) => void) => {
+    const game = games.get(data?.pin);
+    if (!game || game.hostSocketId !== socket.id) return cb?.({ ok: false });
+    cb?.({ ok: true, rows: gradeRows(game), canUndo: (game.gradeUndo?.length ?? 0) > 0 });
+  });
+
+  socket.on(
+    "host:grade",
+    (
+      data: { pin: string; playerId: string; action: string; value?: unknown; reason?: string },
+      cb?: (r: unknown) => void,
+    ) => {
+      const game = games.get(data?.pin);
+      if (!game || game.hostSocketId !== socket.id) return cb?.({ ok: false });
+      const p = game.players.get(data?.playerId);
+      if (!p) return cb?.({ ok: false, error: "O'quvchi topilmadi" });
+      const g = parseGrades(p.grades ?? emptyGrades());
+      const prev = parseGrades(JSON.parse(JSON.stringify(g)));
+      const v = data.value;
+      switch (data.action) {
+        case "late": // kechikdi: −10
+          g.late += 1;
+          break;
+        case "homework": // true | false | null (belgini olib tashlash)
+          g.homework = v === true ? true : v === false ? false : null;
+          break;
+        case "practice1":
+        case "practice2": {
+          const n = v === null || v === "" ? null : Number(v);
+          if (n !== null && !Number.isFinite(n)) return cb?.({ ok: false, error: "Noto'g'ri ball" });
+          g[data.action] = n === null ? null : Math.max(0, Math.min(100, Math.round(n)));
+          break;
+        }
+        case "behavior": // odobsizlik: −10
+          g.behavior.push({ reason: String(data.reason ?? "").slice(0, 80), at: Date.now() });
+          break;
+        default:
+          return cb?.({ ok: false, error: "Noma'lum amal" });
+      }
+      p.grades = g;
+      game.gradeUndo = [...(game.gradeUndo ?? []), { playerId: p.playerId, prev }].slice(-50);
+      cb?.({ ok: true, rows: gradeRows(game), canUndo: true });
+    },
+  );
+
+  // Oxirgi baholash amalini bekor qilish (xato bosilgan bo'lsa)
+  socket.on("host:gradeUndo", (data: { pin: string }, cb?: (r: unknown) => void) => {
+    const game = games.get(data?.pin);
+    if (!game || game.hostSocketId !== socket.id) return cb?.({ ok: false });
+    const last = game.gradeUndo?.pop();
+    const p = last && game.players.get(last.playerId);
+    if (p && last) p.grades = last.prev;
+    cb?.({ ok: true, rows: gradeRows(game), canUndo: (game.gradeUndo?.length ?? 0) > 0 });
+  });
+
   socket.on("host:reveal", (data: { pin: string }) => {
     const game = games.get(data?.pin);
     if (!game || game.hostSocketId !== socket.id) return;
@@ -1518,6 +1610,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     player.currentCorrect = correct;
     player.lastGain = points;
     player.score += points;
+    // Quiz bahosi: har savolga max 100 (faqat to'g'ri javob; POLL hisobga kirmaydi)
+    if (s.type !== "POLL") {
+      player.quizPts = player.quizPts ?? {};
+      player.quizPts[String(idx)] = correct ? Math.min(100, Math.round((points / MAX_POINTS) * 100)) : 0;
+    }
     player.totalAnswered += 1;
     if (correct) player.correctCount += 1;
 

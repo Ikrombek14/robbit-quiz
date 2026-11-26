@@ -18,6 +18,7 @@ import { excelRouter } from "./routes/excel.js";
 import { importRouter } from "./routes/import.js";
 import { uploadRouter, UPLOADS_DIR } from "./routes/upload.js";
 import { reportRouter } from "./routes/reports.js";
+import { gradesRouter, parentRouter } from "./routes/grades.js";
 import { publicRouter } from "./routes/public.js";
 import { curriculumRouter } from "./routes/curriculum.js";
 import { workshopsRouter } from "./routes/workshops.js";
@@ -158,6 +159,8 @@ app.use("/api/excel", excelRouter);
 app.use("/api/import", importRouter);
 app.use("/api/upload", uploadRouter);
 app.use("/api/reports", reportRouter);
+app.use("/api/grades", gradesRouter);
+app.use("/api/public/parent", parentRouter); // ota-ona sahifasi (ochiq, imzolangan token)
 app.use("/api/public", publicRouter);
 app.use("/api/curriculum", curriculumRouter);
 app.use("/api/workshops", workshopsRouter);

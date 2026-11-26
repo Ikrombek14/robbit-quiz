@@ -6,6 +6,7 @@ import { api, getToken } from "../api";
 import type { LeaderRow, QType, Slide, SlideData } from "../types";
 import { slideTitle, TYPE_LABELS } from "../slides";
 import SlideScene from "../components/SlideScene";
+import GradesPanel from "../components/GradesPanel";
 import { unlockAudio, startMusic, stopMusic, playTick, playTimeUp } from "../sound";
 
 type Phase = "connecting" | "lobby" | "active" | "reveal" | "ended";
@@ -116,13 +117,27 @@ function AutoFitText({ text, className }: { text: string; className: string }) {
   );
 }
 
+// Baholash paneli har sahifada (lobby, slaydlar, test monitori) ko'rinsin — ichki
+// komponentning ko'p `return` lari o'rniga shu o'ram bitta joyda qo'shadi.
 export default function Host() {
+  const [live, setLive] = useState<{ pin: string; phase: Phase }>({ pin: "", phase: "connecting" });
+  const showGrades = !!live.pin && (live.phase === "lobby" || live.phase === "active" || live.phase === "reveal");
+  return (
+    <>
+      <HostInner onLive={setLive} />
+      {showGrades && <GradesPanel pin={live.pin} />}
+    </>
+  );
+}
+
+function HostInner({ onLive }: { onLive: (v: { pin: string; phase: Phase }) => void }) {
   const { quizId } = useParams();
   const navigate = useNavigate();
   const created = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("connecting");
   const [pin, setPin] = useState("");
+  useEffect(() => onLive({ pin, phase }), [pin, phase, onLive]);
   const [title, setTitle] = useState("");
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [typingRows, setTypingRows] = useState<TypingBoardRow[]>([]); // lobby typing reytingi

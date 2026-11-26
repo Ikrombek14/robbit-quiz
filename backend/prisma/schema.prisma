@@ -180,6 +180,7 @@ model GameRecord {
   totalSlides   Int                @default(0)
   questionStats String             @default("[]") // JSON: [{index,text,correct,total}]
   playedAt      DateTime           @default(now())
+  groupName     String?            // guruh nomi (oylik reyting guruh ichida hisoblanadi) — ustoz sessiya sahifasida belgilaydi
   players       GamePlayerRecord[]
 
   @@index([teacherId, playedAt])
@@ -196,6 +197,7 @@ model GamePlayerRecord {
   totalAnswered Int        @default(0)
   details       String     @default("[]") // TEST rejimi: har savol bo'yicha JSON [{index,text,answer,correct,timeMs,correctAns}]
   answers       String     @default("{}") // JONLI rejim: {"answered":[slayd indekslari],"correct":[...]} — umumiy natijalar jadvali
+  grades        String     @default("{}") // dars baholari JSON (services/grades.ts Grades): davomat, uy vazifasi, quiz, amaliyot, odob
 
   @@index([gameId])
 }

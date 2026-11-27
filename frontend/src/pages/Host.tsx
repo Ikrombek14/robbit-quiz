@@ -7,6 +7,7 @@ import type { LeaderRow, QType, Slide, SlideData } from "../types";
 import { slideTitle, TYPE_LABELS } from "../slides";
 import SlideScene from "../components/SlideScene";
 import GradesPanel from "../components/GradesPanel";
+import { ImproveLessonModal } from "../components/LessonNotes";
 import { unlockAudio, startMusic, stopMusic, playTick, playTimeUp } from "../sound";
 
 type Phase = "connecting" | "lobby" | "active" | "reveal" | "ended";
@@ -147,6 +148,7 @@ function HostInner({ onLive }: { onLive: (v: { pin: string; phase: Phase }) => v
   const [results, setResults] = useState<Results | null>(null);
   // Yakunda saqlangan hisobot id'si (faqat host'ga keladi) — "Umumiy natijalar" tugmasi
   const [reportId, setReportId] = useState<string | null>(null);
+  const [improveOpen, setImproveOpen] = useState(false); // "Darsni qanday yaxshilash mumkin?" oynasi
   const [error, setError] = useState("");
   const [canRestart, setCanRestart] = useState(false); // dars yopilib qolgan — "Qayta boshlash" tugmasi
 
@@ -1199,6 +1201,12 @@ function HostInner({ onLive }: { onLive: (v: { pin: string; phase: Phase }) => v
         serious={settings.serious}
         onBack={() => navigate(-1)}
         onResults={reportId ? () => navigate(`/sessions/${reportId}`) : undefined}
+        onImprove={() => setImproveOpen(true)}
+        improveModal={
+          improveOpen && quizId ? (
+            <ImproveLessonModal quizId={quizId} gameId={reportId} onClose={() => setImproveOpen(false)} />
+          ) : null
+        }
       />
     );
 
@@ -1500,20 +1508,28 @@ function Podium({
   serious,
   onBack,
   onResults,
+  onImprove,
+  improveModal,
 }: {
   rows: LeaderRow[];
   anonymous?: boolean;
   serious?: boolean;
   onBack: () => void;
   onResults?: () => void; // hisobot saqlangan bo'lsa — sessiya sahifasidagi umumiy natijalar
+  onImprove?: () => void; // "Darsni qanday yaxshilash mumkin?" — fikr dars izohlariga tushadi
+  improveModal?: React.ReactNode;
 }) {
   const nm = (i: number, name: string) => (anonymous ? `O'quvchi ${i + 1}` : name);
   const actions = (
-    <div className="start-bar" style={{ width: "100%", gap: 10 }}>
+    <div className="start-bar" style={{ width: "100%", gap: 10, flexWrap: "wrap" }}>
       {onResults && (
         <button className="btn btn-lg" onClick={onResults}>📊 Umumiy natijalar</button>
       )}
+      {onImprove && (
+        <button className="btn btn-lg btn-ghost" onClick={onImprove}>💡 Darsni qanday yaxshilash mumkin?</button>
+      )}
       <button className={onResults ? "btn btn-lg btn-ghost" : "btn btn-lg"} onClick={onBack}>Panelga qaytish</button>
+      {improveModal}
     </div>
   );
 

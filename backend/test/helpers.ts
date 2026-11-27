@@ -11,6 +11,7 @@ import { oauthRouter } from "../src/mcp/oauthRoutes.js";
 import { mcpRouter } from "../src/mcp/server.js";
 import { oauthConsentRouter } from "../src/routes/oauthConsent.js";
 import { quizRouter } from "../src/routes/quizzes.js";
+import { lessonNotesRouter } from "../src/routes/lessonNotes.js";
 
 // index.ts bilan bir xil tartibda yig'ilgan ilova (listen/scheduler'siz)
 export function buildApp() {
@@ -22,6 +23,7 @@ export function buildApp() {
   app.use(mcpRouter());
   app.use("/api", hwBlockGuard);
   app.use("/api/oauth", oauthConsentRouter);
+  app.use("/api/quizzes", lessonNotesRouter);
   app.use("/api/quizzes", quizRouter);
   return app;
 }
@@ -37,7 +39,7 @@ export async function resetDb(): Promise<void> {
   const [{ db }] = await prisma.$queryRaw<{ db: string }[]>`SELECT current_database() AS db`;
   if (!db.endsWith("_test")) throw new Error(`Test bazasi emas: ${db}`);
   await prisma.$executeRawUnsafe(
-    `TRUNCATE "McpPendingAction","QuizRevision","OAuthToken","OAuthCode","OAuthGrant","OAuthAuthRequest","OAuthClient","Slide","Quiz","Folder","LessonPlan","NewCurriculumLesson","Workshop","ExtraLesson","GameRecord","AuditLog","Teacher" CASCADE`,
+    `TRUNCATE "McpPendingAction","QuizRevision","OAuthToken","OAuthCode","OAuthGrant","OAuthAuthRequest","OAuthClient","Slide","Quiz","Folder","LessonPlan","NewCurriculumLesson","Workshop","ExtraLesson","GameRecord","LessonComment","LessonText","AuditLog","Teacher" CASCADE`,
   );
 }
 

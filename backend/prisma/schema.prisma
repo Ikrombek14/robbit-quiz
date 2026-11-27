@@ -142,6 +142,8 @@ model Quiz {
   version     Int      @default(1)
   slides      Slide[]
   revisions   QuizRevision[]
+  lessonText  LessonText?
+  comments    LessonComment[]
 
   @@index([teacherId])
   @@index([createdAt])
@@ -442,4 +444,33 @@ model McpPendingAction {
 
   @@index([teacherId, status])
   @@index([expiresAt])
+}
+
+// Dars matni — darsni ko'rish sahifasi ostida. Faqat admin va slayd tahrirlash huquqi
+// borlar yozadi; bo'sh bo'lsa sahifada umuman ko'rinmaydi. Quiz versiyasiga bog'liq EMAS
+// (slaydlarni saqlash bilan to'qnashmaydi).
+model LessonText {
+  quizId        String   @id
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  text          String
+  updatedById   String?
+  updatedByName String?
+  updatedAt     DateTime @updatedAt
+}
+
+// Darsga izohlar: darsni ko'rish sahifasidan (VIEW) yoki dars yakunidagi
+// "Darsni qanday yaxshilash mumkin?" oynasidan (AFTER_LESSON). Muallif ismi yozilgan
+// paytdagi holatda saqlanadi (akkaunt keyin o'zgarsa ham izoh tarixi buzilmaydi).
+model LessonComment {
+  id         String   @id @default(cuid())
+  quizId     String
+  quiz       Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  authorId   String
+  authorName String
+  text       String
+  source     String   @default("VIEW") // VIEW | AFTER_LESSON
+  gameId     String?  // AFTER_LESSON: qaysi dars sessiyasidan keyin (GameRecord.id)
+  createdAt  DateTime @default(now())
+
+  @@index([quizId, createdAt])
 }

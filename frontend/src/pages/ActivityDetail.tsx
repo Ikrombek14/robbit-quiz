@@ -7,6 +7,7 @@ import Preview from "./Preview";
 import { SlideView } from "./Preview";
 import SlideScene from "../components/SlideScene";
 import PdfSlide from "../components/PdfSlide";
+import LessonNotes from "../components/LessonNotes";
 import { slideTitle, TYPE_LABELS } from "../slides";
 import type { QType, Quiz, Slide } from "../types";
 
@@ -248,6 +249,9 @@ export default function ActivityDetail() {
               </div>
             </div>
           )}
+
+          {/* Dars matni (bo'sh bo'lsa ko'rinmaydi) va izohlar */}
+          <LessonNotes quizId={quiz.id} />
         </>
       )}
 

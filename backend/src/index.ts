@@ -12,6 +12,7 @@ import { prisma } from "./prisma.js";
 import { registerGameHandlers, initGamePersistence, saveGameSnapshot } from "./socket/game.js";
 import { authRouter } from "./routes/auth.js";
 import { quizRouter } from "./routes/quizzes.js";
+import { lessonNotesRouter } from "./routes/lessonNotes.js";
 import { folderRouter } from "./routes/folders.js";
 import { pdfRouter } from "./routes/pdf.js";
 import { excelRouter } from "./routes/excel.js";
@@ -152,6 +153,7 @@ if (config.mcp.enabled) {
 app.use("/api", hwBlockGuard);
 if (config.mcp.enabled) app.use("/api/oauth", oauthConsentRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/quizzes", lessonNotesRouter); // dars matni va izohlar (/:id/notes, /:id/comments)
 app.use("/api/quizzes", quizRouter);
 app.use("/api/folders", folderRouter);
 app.use("/api/pdf", pdfRouter);

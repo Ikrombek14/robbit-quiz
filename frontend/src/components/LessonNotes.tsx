@@ -1,5 +1,25 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import DOMPurify from "dompurify";
 import { api } from "../api";
+
+// Quill og'ir — faqat "Tahrirlash" ochilganda yuklanadi
+const RichEditor = lazy(() => import("./RichEditor"));
+
+/** Dars matni HTML'ini ko'rsatishdan oldin brauzerda ham tozalaymiz (server bilan ikki qavat himoya). */
+function safeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ["p", "br", "h1", "h2", "h3", "strong", "b", "em", "i", "u", "s", "blockquote", "pre", "code", "ol", "ul", "li", "a", "span"],
+    ALLOWED_ATTR: ["href", "target", "rel", "class", "data-list"],
+    ALLOWED_URI_REGEXP: /^(https?:|mailto:)/i,
+  });
+}
+
+/** Ko'rinadigan matn bormi (faqat bo'sh teglar emas). */
+function hasVisibleText(html: string): boolean {
+  const d = document.createElement("div");
+  d.innerHTML = safeHtml(html);
+  return (d.textContent ?? "").replace(/\u00a0/g, " ").trim().length > 0;
+}
 
 // ---- Darsni ko'rish sahifasi ostidagi "Dars matni" va "Izohlar" bloklari ----
 // Dars matni bo'sh bo'lsa: oddiy ustozga umuman ko'rinmaydi, tahrirlash huquqi borlarga
@@ -22,7 +42,7 @@ interface Notes {
 }
 
 export const COMMENT_MAX = 2000;
-const TEXT_MAX = 20000;
+const TEXT_MAX = 60000; // HTML uzunligi (serverdagi chegara bilan bir xil)
 
 function fmt(iso: string): string {
   const d = new Date(iso);
@@ -108,7 +128,7 @@ export default function LessonNotes({ quizId }: { quizId: string }) {
     }
   }
 
-  const hasText = notes.lessonText.trim().length > 0;
+  const hasText = hasVisibleText(notes.lessonText);
 
   return (
     <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 16 }}>
@@ -118,21 +138,16 @@ export default function LessonNotes({ quizId }: { quizId: string }) {
       {editing ? (
         <div className="card">
           <h3 style={{ marginTop: 0 }}>📖 Dars matni</h3>
-          <textarea
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={12}
-            maxLength={TEXT_MAX}
-            placeholder="Dars rejasi, tushuntirish matni, ustoz uchun eslatmalar…"
-          />
+          <Suspense fallback={<p className="muted">Tahrirlagich yuklanmoqda…</p>}>
+            <RichEditor value={draft} onChange={setDraft} placeholder="Dars rejasi, tushuntirish matni, ustoz uchun eslatmalar…" />
+          </Suspense>
           <div className="between" style={{ marginTop: 8, flexWrap: "wrap", gap: 8 }}>
-            <span className="muted text-sm">
-              {draft.length} / {TEXT_MAX} · Matnni o'chirib saqlasangiz, bo'lim yashirinadi
+            <span className={draft.length > TEXT_MAX ? "error text-sm" : "muted text-sm"}>
+              {draft.length > TEXT_MAX ? "Matn juda uzun — qisqartiring" : "Matnni o'chirib saqlasangiz, bo'lim yashirinadi"}
             </span>
             <div className="row" style={{ gap: 8 }}>
               <button className="btn btn-ghost" disabled={savingText} onClick={() => setEditing(false)}>Bekor qilish</button>
-              <button className="btn" disabled={savingText} onClick={saveText}>{savingText ? "Saqlanmoqda…" : "Saqlash"}</button>
+              <button className="btn" disabled={savingText || draft.length > TEXT_MAX} onClick={saveText}>{savingText ? "Saqlanmoqda…" : "Saqlash"}</button>
             </div>
           </div>
         </div>
@@ -144,9 +159,7 @@ export default function LessonNotes({ quizId }: { quizId: string }) {
               <button className="btn btn-ghost" onClick={() => { setDraft(notes.lessonText); setEditing(true); }}>✏️ Tahrirlash</button>
             )}
           </div>
-          <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6, marginTop: 12 }}>
-            <Linkified text={notes.lessonText} />
-          </div>
+          <div className="lesson-rich" style={{ marginTop: 12 }} dangerouslySetInnerHTML={{ __html: safeHtml(notes.lessonText) }} />
           {notes.lessonTextUpdatedAt && (
             <p className="muted text-sm" style={{ margin: "12px 0 0" }}>
               Oxirgi o'zgarish: {fmt(notes.lessonTextUpdatedAt)}{notes.lessonTextUpdatedBy ? ` · ${notes.lessonTextUpdatedBy}` : ""}

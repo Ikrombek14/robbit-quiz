@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { quizAccess } from "../lib/quizAccess.js";
+import { sanitizeLessonHtml, looksLikeHtml, plainToHtml } from "../lib/richText.js";
 
 // ---- Dars matni va darsga izohlar (darsni ko'rish sahifasi: /activity/:id) ----
 // Dars = quiz (slaydlar to'plami). Huquqlar:
@@ -15,7 +16,8 @@ import { quizAccess } from "../lib/quizAccess.js";
 export const lessonNotesRouter = Router();
 lessonNotesRouter.use(requireAuth);
 
-export const LESSON_TEXT_MAX = 20_000;
+// Dars matni — formatlangan HTML (Quill), tozalangandan keyingi uzunlik
+export const LESSON_TEXT_MAX = 60_000;
 export const COMMENT_MAX = 2_000;
 
 const commentLimiter = rateLimit({
@@ -53,7 +55,8 @@ lessonNotesRouter.get("/:id/notes", async (req: AuthedRequest, res) => {
     me(req.teacherId!),
   ]);
   res.json({
-    lessonText: lt?.text ?? "",
+    // Har doim HTML: eski oddiy matn yozuvlari paragraflarga aylantiriladi
+    lessonText: lt ? (looksLikeHtml(lt.text) ? lt.text : plainToHtml(lt.text)) : "",
     lessonTextUpdatedAt: lt?.updatedAt ?? null,
     lessonTextUpdatedBy: lt?.updatedByName ?? null,
     canEditText: access.edit,
@@ -69,7 +72,7 @@ lessonNotesRouter.get("/:id/notes", async (req: AuthedRequest, res) => {
 });
 
 // Dars matnini yozish/yangilash (bo'sh matn — o'chiradi, bo'lim yana yashirinadi)
-const textSchema = z.object({ text: z.string().max(LESSON_TEXT_MAX + 1000) });
+const textSchema = z.object({ text: z.string().max(LESSON_TEXT_MAX * 2) });
 lessonNotesRouter.put("/:id/lesson-text", async (req: AuthedRequest, res) => {
   const parsed = textSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -86,7 +89,12 @@ lessonNotesRouter.put("/:id/lesson-text", async (req: AuthedRequest, res) => {
     res.status(403).json({ error: "Dars matnini faqat admin va slayd tahrirlash huquqi borlar yoza oladi" });
     return;
   }
-  const text = clean(parsed.data.text, LESSON_TEXT_MAX);
+  // Quill HTML — ruxsat etilmagan teg/atributlar (script, on*, javascript:) olib tashlanadi
+  const text = sanitizeLessonHtml(parsed.data.text);
+  if (text.length > LESSON_TEXT_MAX) {
+    res.status(400).json({ error: "Dars matni juda uzun. Qisqartiring yoki bir necha qismga bo'ling." });
+    return;
+  }
   if (!text) {
     await prisma.lessonText.deleteMany({ where: { quizId } });
     res.json({ lessonText: "", lessonTextUpdatedAt: null, lessonTextUpdatedBy: null });

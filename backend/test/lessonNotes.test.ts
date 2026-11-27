@@ -35,11 +35,12 @@ describe("Dars matni", () => {
 
     const ok = await request(app).put(`/api/quizzes/${quiz.id}/lesson-text`).set(auth(slaydchi.jwt)).send({ text: "  1. Kirish\n2. Misol  " });
     expect(ok.status).toBe(200);
-    expect(ok.body.lessonText).toBe("1. Kirish\n2. Misol");
+    // Oddiy matn (teglarsiz) paragraflarga aylanadi
+    expect(ok.body.lessonText).toBe("<p>1. Kirish</p><p>2. Misol</p>");
     expect(ok.body.lessonTextUpdatedBy).toBe(slaydchi.name);
 
     const seen = await request(app).get(`/api/quizzes/${quiz.id}/notes`).set(auth(ustoz.jwt));
-    expect(seen.body.lessonText).toBe("1. Kirish\n2. Misol");
+    expect(seen.body.lessonText).toBe("<p>1. Kirish</p><p>2. Misol</p>");
 
     // Bo'sh matn — o'chiriladi, bo'lim yana yashirinadi
     await request(app).put(`/api/quizzes/${quiz.id}/lesson-text`).set(auth(slaydchi.jwt)).send({ text: "   " });
@@ -58,6 +59,33 @@ describe("Dars matni", () => {
     const other = await makeTeacher({ canCreate: true });
     expect((await request(app).get(`/api/quizzes/${priv.id}/notes`).set(auth(other.jwt))).status).toBe(404);
     expect((await request(app).put(`/api/quizzes/${priv.id}/lesson-text`).set(auth(other.jwt)).send({ text: "x" })).status).toBe(404);
+  });
+});
+
+describe("Dars matni — formatlash va xavfsizlik", () => {
+  it("Quill formatlari saqlanadi, xavfli kod olib tashlanadi", async () => {
+    const { owner, quiz } = await linkedLesson();
+    const html =
+      "<h1>Mavzu</h1><p><strong>Qalin</strong> <em>qiya</em> <u>tagi</u> <s>chiziq</s></p>" +
+      '<ol><li data-list="bullet" class="ql-indent-1">Band</li></ol><blockquote>Iqtibos</blockquote>' +
+      '<p><a href="https://robbit.uz">havola</a> <a href="javascript:alert(1)">yomon</a></p>' +
+      '<p onclick="alert(1)" style="color:red" class="evil ql-align-center">x</p><script>alert(1)</script><img src=x onerror=alert(1)>';
+    const r = await request(app).put(`/api/quizzes/${quiz.id}/lesson-text`).set(auth(owner.jwt)).send({ text: html });
+    expect(r.status).toBe(200);
+    const out: string = r.body.lessonText;
+    for (const keep of ["<h1>Mavzu</h1>", "<strong>Qalin</strong>", "<em>qiya</em>", "<u>tagi</u>", "<s>chiziq</s>", 'data-list="bullet"', "ql-indent-1", "<blockquote>Iqtibos</blockquote>", 'href="https://robbit.uz"', 'rel="noopener noreferrer"', 'class="ql-align-center"']) {
+      expect(out).toContain(keep);
+    }
+    for (const bad of ["<script", "onclick", "onerror", "<img", "javascript:", "style=", "evil"]) {
+      expect(out).not.toContain(bad);
+    }
+  });
+
+  it("faqat bo'sh teglar — o'chirilgan hisoblanadi", async () => {
+    const { owner, quiz } = await linkedLesson();
+    await request(app).put(`/api/quizzes/${quiz.id}/lesson-text`).set(auth(owner.jwt)).send({ text: "<p>Bor</p>" });
+    await request(app).put(`/api/quizzes/${quiz.id}/lesson-text`).set(auth(owner.jwt)).send({ text: "<p><br></p><p>&nbsp;</p>" });
+    expect(await prisma.lessonText.count()).toBe(0);
   });
 });
 

@@ -1892,3 +1892,47 @@ img, svg, video { max-width: 100%; height: auto; }
 .grades-table td:first-child, .grades-table th:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); z-index: 1; }
 .grades-table tr.lagging td { background: var(--danger-soft); }
 .grades-table tr.lagging td:first-child { background: var(--danger-soft); }
+
+/* ---- Dars matni: formatlangan ko'rinish (Quill semantik HTML) ---- */
+.lesson-rich { line-height: 1.65; word-break: break-word; color: var(--ink); }
+.lesson-rich > :first-child { margin-top: 0; }
+.lesson-rich > :last-child { margin-bottom: 0; }
+.lesson-rich p { margin: 0 0 0.6em; }
+.lesson-rich h1 { font-size: 1.6em; margin: 0.8em 0 0.4em; }
+.lesson-rich h2 { font-size: 1.3em; margin: 0.8em 0 0.4em; }
+.lesson-rich ul, .lesson-rich ol { margin: 0 0 0.6em; padding-left: 1.6em; }
+.lesson-rich li { margin: 0.15em 0; }
+.lesson-rich blockquote { margin: 0.6em 0; padding: 4px 14px; border-left: 4px solid var(--border); color: var(--muted); }
+.lesson-rich pre { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size: 0.92em; }
+.lesson-rich code { font-family: ui-monospace, Consolas, monospace; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
+.lesson-rich pre code { background: none; padding: 0; }
+.lesson-rich a { color: var(--accent); text-decoration: underline; }
+.lesson-rich .ql-size-small { font-size: 0.8em; }
+.lesson-rich .ql-size-large { font-size: 1.4em; }
+.lesson-rich .ql-size-huge { font-size: 2em; }
+.lesson-rich .ql-font-serif { font-family: Georgia, "Times New Roman", serif; }
+.lesson-rich .ql-font-monospace { font-family: ui-monospace, Consolas, monospace; }
+.lesson-rich .ql-align-center { text-align: center; }
+.lesson-rich .ql-align-right { text-align: right; }
+.lesson-rich .ql-align-justify { text-align: justify; }
+.lesson-rich .ql-indent-1 { padding-left: 2em; } .lesson-rich .ql-indent-2 { padding-left: 4em; }
+.lesson-rich .ql-indent-3 { padding-left: 6em; } .lesson-rich .ql-indent-4 { padding-left: 8em; }
+
+/* ---- Dars matni tahrirlagichi (Quill snow) — platforma ranglari va tungi rejim ---- */
+.rich-editor .ql-toolbar.ql-snow { border-color: var(--border); border-radius: 10px 10px 0 0; background: var(--surface); flex-wrap: wrap; }
+.rich-editor .ql-container.ql-snow { border-color: var(--border); border-radius: 0 0 10px 10px; background: var(--surface); font-family: inherit; font-size: 15px; }
+.rich-editor .ql-editor { min-height: 240px; max-height: 60vh; overflow-y: auto; color: var(--ink); }
+.rich-editor .ql-editor.ql-blank::before { color: var(--muted); font-style: normal; }
+.rich-editor .ql-snow .ql-stroke { stroke: var(--ink); }
+.rich-editor .ql-snow .ql-fill, .rich-editor .ql-snow .ql-stroke.ql-fill { fill: var(--ink); }
+.rich-editor .ql-snow .ql-picker { color: var(--ink); }
+.rich-editor .ql-snow .ql-picker-options { background: var(--surface); border-color: var(--border) !important; }
+.rich-editor .ql-snow button:hover .ql-stroke, .rich-editor .ql-snow button.ql-active .ql-stroke,
+.rich-editor .ql-snow .ql-picker-label:hover .ql-stroke { stroke: var(--primary-strong); }
+.rich-editor .ql-snow button:hover .ql-fill, .rich-editor .ql-snow button.ql-active .ql-fill { fill: var(--primary-strong); }
+.rich-editor .ql-snow button.ql-active, .rich-editor .ql-snow .ql-picker-label.ql-active,
+.rich-editor .ql-snow .ql-picker-item.ql-selected { color: var(--primary-strong); }
+.rich-editor .ql-snow .ql-tooltip { background: var(--surface); color: var(--ink); border-color: var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 5; }
+.rich-editor .ql-snow .ql-tooltip input[type="text"] { background: var(--surface-2); color: var(--ink); border-color: var(--border); }
+.rich-editor .ql-snow .ql-editor pre.ql-syntax, .rich-editor .ql-snow .ql-editor .ql-code-block-container { background: var(--surface-2); color: var(--ink); }
+.rich-editor .ql-snow .ql-editor blockquote { border-left-color: var(--border); }

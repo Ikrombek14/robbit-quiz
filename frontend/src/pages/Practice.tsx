@@ -4,6 +4,9 @@ import { useAuth } from "../auth";
 import Shell from "../components/Shell";
 import type { PracticeTask, PracticeResource } from "../types";
 
+// "Amaliyot dasturi" tugmasi ochadigan sayt
+const PRACTICE_URL = "https://amaliyot.robbitonline.uz/";
+
 // Ustozlik amaliyoti vazifalari — kategoriya bo'yicha guruhlanadi (Scratch, Python...).
 // Har vazifada: Bajariladigan topshiriqlar (matn + video) va Kerakli resurslar (havolalar).
 
@@ -161,11 +164,16 @@ export default function Practice() {
   return (
     <Shell>
       <div style={{ maxWidth: 820, margin: "0 auto" }}>
-        <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: 28, marginBottom: 4 }}>Amaliyot dasturi</h1>
-          <p className="muted" style={{ margin: 0, fontSize: 15 }}>
-            Ustozlik amaliyoti uchun bajariladigan topshiriqlar va kerakli resurslar
-          </p>
+        <div className="between" style={{ marginBottom: 20, gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div>
+            <h1 style={{ fontSize: 28, marginBottom: 4 }}>Amaliyot dasturi</h1>
+            <p className="muted" style={{ margin: 0, fontSize: 15 }}>
+              Ustozlik amaliyoti uchun bajariladigan topshiriqlar va kerakli resurslar
+            </p>
+          </div>
+          <a className="btn" href={PRACTICE_URL} target="_blank" rel="noopener noreferrer">
+            Amaliyot dasturi
+          </a>
         </div>
 
         {loading ? (
